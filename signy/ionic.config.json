@@ -1,0 +1,7 @@
+{
+  "name": "signy",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular-standalone"
+}
