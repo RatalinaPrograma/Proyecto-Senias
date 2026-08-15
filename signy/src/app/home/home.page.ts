@@ -1,91 +1,30 @@
 import { Component } from '@angular/core';
-import {
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonItem,
-  IonInput,
-  IonButton,
-  IonAlert,
-} from '@ionic/angular/standalone';
-import { FormsModule } from '@angular/forms';
-import { SupabaseService } from '../services/supabase';
+import { CommonModule } from '@angular/common';
+import { IonicModule } from '@ionic/angular';
+
+interface NivelMock {
+  numero_nivel: number;
+  nombre: string;
+  descripcion: string;
+  estado: 'completado' | 'actual' | 'bloqueado';
+}
 
 @Component({
   selector: 'app-home',
-  templateUrl: 'home.page.html',
-  styleUrls: ['home.page.scss'],
   standalone: true,
-  imports: [
-    IonHeader,
-    IonToolbar,
-    IonTitle,
-    IonContent,
-    IonItem,
-    IonInput,
-    IonButton,
-    IonAlert,
-    FormsModule,
-  ],
+  imports: [CommonModule, IonicModule],
+  templateUrl: './home.page.html',
 })
 export class HomePage {
-  email = '';
-  password = '';
+  racha = 5;
+  xp = 320;
+  vidas = 4;
 
-  // Para mostrar alertas
-  isAlertOpen = false;
-  alertHeader = '';
-  alertMessage = '';
-  alertButtons = ['OK'];
-
-  constructor(private readonly supabase: SupabaseService) {}
-
-  async handleLogin() {
-    if (!this.email || !this.password) {
-      this.showAlert('Error', 'Por favor, ingresa tu correo y contraseña.');
-      return;
-    }
-
-    try {
-      const { data, error } =
-        await this.supabase.supabase.auth.signInWithPassword({
-          email: this.email,
-          password: this.password,
-        });
-
-      if (error) throw error;
-
-      this.showAlert('Éxito', `¡Bienvenido! Sesión iniciada para ${data.user?.email}`);
-    } catch (error: any) {
-      this.showAlert('Error de inicio de sesión', error.message);
-    }
-  }
-
-  async handleRegister() {
-    if (!this.email || !this.password) {
-      this.showAlert('Error', 'Por favor, ingresa un correo y contraseña para registrarte.');
-      return;
-    }
-
-    try {
-      const { data, error } = await this.supabase.supabase.auth.signUp({
-        email: this.email,
-        password: this.password,
-      });
-
-      if (error) throw error;
-
-      this.showAlert('Registro exitoso', 'Se ha enviado un correo de confirmación. Por favor, revisa tu bandeja de entrada.');
-    } catch (error: any) {
-      this.showAlert('Error en el registro', error.message);
-    }
-  }
-
-  // Helper para mostrar alertas
-  showAlert(header: string, message: string) {
-    this.alertHeader = header;
-    this.alertMessage = message;
-    this.isAlertOpen = true;
-  }
+  niveles: NivelMock[] = [
+    { numero_nivel: 1, nombre: 'Saludos', descripcion: 'Saluda y preséntate', estado: 'completado' },
+    { numero_nivel: 2, nombre: 'Familia', descripcion: 'Nombra a tu familia', estado: 'completado' },
+    { numero_nivel: 3, nombre: 'Números', descripcion: 'Del 1 al 20', estado: 'actual' },
+    { numero_nivel: 4, nombre: 'Colores', descripcion: 'Colores básicos', estado: 'bloqueado' },
+    { numero_nivel: 5, nombre: 'Comida', descripcion: 'Pide y ofrece comida', estado: 'bloqueado' },
+  ];
 }

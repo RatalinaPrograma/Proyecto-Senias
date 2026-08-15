@@ -1,33 +1,54 @@
-<ion-header [translucent]="true">
-  <ion-toolbar>
-    <ion-title>
-      Signy - Login
-    </ion-title>
-  </ion-toolbar>
-</ion-header>
+<ion-content [fullscreen]="true" class="signy-content">
+  <div class="hud">
+    <div class="hud-greeting">
+      <h1>¡Hola de nuevo!</h1>
+      <p>Sigamos aprendiendo LSCh</p>
+    </div>
 
-<ion-content [fullscreen]="true">
-  <div id="container">
-    <strong>¡Bienvenido!</strong>
-    <p>Inicia sesión para continuar</p>
+    <div class="hud-stats">
+      <div class="stat-pill">
+        <ion-icon name="flame"></ion-icon>
+        <span>{{ racha }}</span>
+      </div>
+      <div class="stat-pill">
+        <ion-icon name="star"></ion-icon>
+        <span>{{ xp }}</span>
+      </div>
+      <div class="stat-pill">
+        <ion-icon name="heart"></ion-icon>
+        <span>{{ vidas }}</span>
+      </div>
+    </div>
+  </div>
 
-    <ion-item>
-      <ion-input label="Correo electrónico" label-placement="floating" type="email" [(ngModel)]="email"></ion-input>
-    </ion-item>
+  <div class="path">
+    <ng-container *ngFor="let nivel of niveles; let i = index; let last = last">
+      <div class="path-row" [class.align-left]="i % 2 === 0" [class.align-right]="i % 2 !== 0">
+        <button
+          class="node"
+          [class.node-completado]="nivel.estado === 'completado'"
+          [class.node-actual]="nivel.estado === 'actual'"
+          [class.node-bloqueado]="nivel.estado === 'bloqueado'"
+          [disabled]="nivel.estado === 'bloqueado'">
 
-    <ion-item>
-      <ion-input label="Contraseña" label-placement="floating" type="password" [(ngModel)]="password"></ion-input>
-    </ion-item>
+          <ion-icon *ngIf="nivel.estado === 'completado'" name="checkmark"></ion-icon>
+          <ion-icon *ngIf="nivel.estado === 'bloqueado'" name="lock-closed"></ion-icon>
+          <span *ngIf="nivel.estado === 'actual'">{{ nivel.numero_nivel }}</span>
 
-    <ion-button expand="block" (click)="handleLogin()" class="ion-margin-top">
-      Iniciar Sesión
-    </ion-button>
+          <span class="node-ring" *ngIf="nivel.estado === 'actual'"></span>
+        </button>
 
-    <ion-button expand="block" (click)="handleRegister()" color="secondary" class="ion-margin-top">
-      Registrarse
-    </ion-button>
+        <div class="node-label" [class.label-right]="i % 2 === 0" [class.label-left]="i % 2 !== 0">
+          <p class="node-title">{{ nivel.nombre }}</p>
+          <p class="node-desc">{{ nivel.descripcion }}</p>
+        </div>
+      </div>
 
-    <!-- Componente de alerta que se mostrará cuando sea necesario -->
-    <ion-alert [isOpen]="isAlertOpen" [header]="alertHeader" [message]="alertMessage" [buttons]="alertButtons" (didDismiss)="isAlertOpen = false"></ion-alert>
+      <div class="trail" *ngIf="!last">
+        <ion-icon name="paw" class="trail-paw"></ion-icon>
+        <ion-icon name="paw" class="trail-paw"></ion-icon>
+        <ion-icon name="paw" class="trail-paw"></ion-icon>
+      </div>
+    </ng-container>
   </div>
 </ion-content>
