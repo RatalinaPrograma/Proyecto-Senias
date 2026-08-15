@@ -1,0 +1,39 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Crear cuenta</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <ion-item>
+    <ion-label position="floating">Nombre completo</ion-label>
+    <ion-input [(ngModel)]="fullName" type="text"></ion-input>
+  </ion-item>
+
+  <ion-item>
+    <ion-label position="floating">Email</ion-label>
+    <ion-input [(ngModel)]="email" type="email"></ion-input>
+  </ion-item>
+
+  <ion-item>
+    <ion-label position="floating">Contraseña</ion-label>
+    <ion-input [(ngModel)]="password" type="password"></ion-input>
+  </ion-item>
+
+  <ion-text color="danger" *ngIf="errorMsg">
+    <p>{{ errorMsg }}</p>
+  </ion-text>
+
+  <ion-text color="success" *ngIf="exito">
+    <p>¡Cuenta creada! Revisa tu correo para confirmar (si tienes esa opción activada en Supabase), o inicia sesión directamente.</p>
+  </ion-text>
+
+  <ion-button expand="block" (click)="registrar()" [disabled]="cargando" class="ion-margin-top">
+    <ion-spinner *ngIf="cargando" name="dots"></ion-spinner>
+    <span *ngIf="!cargando">Registrarse</span>
+  </ion-button>
+
+  <ion-button expand="block" fill="clear" (click)="irALogin()">
+    ¿Ya tienes cuenta? Inicia sesión
+  </ion-button>
+</ion-content>
