@@ -1,54 +1,95 @@
 <ion-content [fullscreen]="true" class="signy-content">
   <div class="hud">
-    <div class="hud-greeting">
-      <h1>¡Hola de nuevo!</h1>
-      <p>Sigamos aprendiendo LSCh</p>
+    <div class="hud-brand">
+      <div class="fox-badge">
+        <ion-icon name="paw"></ion-icon>
+      </div>
+      <div class="hud-greeting">
+        <h1>¡Hola de nuevo!</h1>
+        <p>Sigamos aprendiendo LSCh</p>
+      </div>
     </div>
 
-    <div class="hud-stats">
-      <div class="stat-pill">
-        <ion-icon name="flame"></ion-icon>
-        <span>{{ racha }}</span>
+    <div class="hud-right">
+      <div class="hud-stats">
+        <div class="stat-pill stat-fire">
+          <ion-icon name="flame"></ion-icon>
+          <span>{{ racha }}</span>
+        </div>
+        <div class="stat-pill stat-star">
+          <ion-icon name="star"></ion-icon>
+          <span>{{ xp }}</span>
+        </div>
+        <div class="stat-pill stat-heart">
+          <ion-icon name="heart"></ion-icon>
+          <span>{{ vidas }}</span>
+        </div>
       </div>
-      <div class="stat-pill">
-        <ion-icon name="star"></ion-icon>
-        <span>{{ xp }}</span>
-      </div>
-      <div class="stat-pill">
-        <ion-icon name="heart"></ion-icon>
-        <span>{{ vidas }}</span>
-      </div>
+      <button class="logout-btn" (click)="cerrarSesion()" aria-label="Cerrar sesión">
+        <ion-icon name="log-out-outline"></ion-icon>
+      </button>
     </div>
   </div>
 
-  <div class="path">
-    <ng-container *ngFor="let nivel of niveles; let i = index; let last = last">
-      <div class="path-row" [class.align-left]="i % 2 === 0" [class.align-right]="i % 2 !== 0">
-        <button
-          class="node"
-          [class.node-completado]="nivel.estado === 'completado'"
-          [class.node-actual]="nivel.estado === 'actual'"
-          [class.node-bloqueado]="nivel.estado === 'bloqueado'"
-          [disabled]="nivel.estado === 'bloqueado'">
+  <div class="overall-progress">
+    <div class="overall-track">
+      <div class="overall-fill" [style.width.%]="(nivelesCompletados / totalNiveles) * 100"></div>
+    </div>
+    <span>{{ nivelesCompletados }} / {{ totalNiveles }} lecciones</span>
+  </div>
 
-          <ion-icon *ngIf="nivel.estado === 'completado'" name="checkmark"></ion-icon>
-          <ion-icon *ngIf="nivel.estado === 'bloqueado'" name="lock-closed"></ion-icon>
-          <span *ngIf="nivel.estado === 'actual'">{{ nivel.numero_nivel }}</span>
+  <ng-container *ngFor="let unidad of unidades">
+    <div class="unit-banner" [style.background]="unidad.color" [style.boxShadow]="'0 4px 0 ' + unidad.colorOscuro">
+      <div>
+        <p class="unit-tag">{{ unidad.etiqueta }}</p>
+        <h2 class="unit-title">{{ unidad.titulo }}</h2>
+        <p class="unit-desc">{{ unidad.descripcion }}</p>
+      </div>
+      <div class="unit-icon">
+        <ion-icon name="paw"></ion-icon>
+      </div>
+    </div>
 
-          <span class="node-ring" *ngIf="nivel.estado === 'actual'"></span>
-        </button>
+    <div class="path">
+      <ng-container *ngFor="let nivel of unidad.niveles; let i = index; let last = last">
+        <div class="path-row" [class.align-left]="i % 2 === 0" [class.align-right]="i % 2 !== 0">
+          <button
+            class="node"
+            [class.node-completado]="nivel.estado === 'completado'"
+            [class.node-actual]="nivel.estado === 'actual'"
+            [class.node-bloqueado]="nivel.estado === 'bloqueado'"
+            [style.background]="nivel.estado === 'bloqueado' ? null : unidad.color"
+            [style.boxShadow]="nivel.estado === 'bloqueado' ? null : '0 5px 0 ' + unidad.colorOscuro"
+            [disabled]="nivel.estado === 'bloqueado'">
 
-        <div class="node-label" [class.label-right]="i % 2 === 0" [class.label-left]="i % 2 !== 0">
-          <p class="node-title">{{ nivel.nombre }}</p>
-          <p class="node-desc">{{ nivel.descripcion }}</p>
+            <span class="node-badge" *ngIf="nivel.estado === 'actual'">EMPEZAR</span>
+
+            <ion-icon *ngIf="nivel.estado === 'completado'" name="checkmark"></ion-icon>
+            <ion-icon *ngIf="nivel.estado === 'bloqueado'" name="lock-closed"></ion-icon>
+            <span *ngIf="nivel.estado === 'actual'" class="node-number">{{ nivel.numero }}</span>
+
+            <span class="node-ring" *ngIf="nivel.estado === 'actual'" [style.borderColor]="unidad.color"></span>
+          </button>
+
+          <div class="node-label" [class.label-right]="i % 2 === 0" [class.label-left]="i % 2 !== 0">
+            <p class="node-title">{{ nivel.nombre }}</p>
+            <p class="node-desc">{{ nivel.descripcion }}</p>
+          </div>
         </div>
-      </div>
 
-      <div class="trail" *ngIf="!last">
-        <ion-icon name="paw" class="trail-paw"></ion-icon>
-        <ion-icon name="paw" class="trail-paw"></ion-icon>
-        <ion-icon name="paw" class="trail-paw"></ion-icon>
-      </div>
-    </ng-container>
+        <div class="trail" *ngIf="!last">
+          <ion-icon name="paw" class="trail-paw"></ion-icon>
+          <ion-icon name="paw" class="trail-paw"></ion-icon>
+          <ion-icon name="paw" class="trail-paw"></ion-icon>
+        </div>
+      </ng-container>
+    </div>
+  </ng-container>
+
+  <div class="footer-mascot">
+    <div class="fox-badge fox-badge-lg">
+      <ion-icon name="paw"></ion-icon>
+    </div>
+    <p>Contenido de referencia — validar señas finales con la comunidad sorda chilena.</p>
   </div>
 </ion-content>

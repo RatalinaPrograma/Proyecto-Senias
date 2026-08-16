@@ -14,11 +14,11 @@
   text-align: center;
   margin-bottom: 32px;
 
-  .auth-paw {
-    font-size: 32px;
-    color: var(--signy-fox);
-    margin-bottom: 8px;
-    transform: rotate(-15deg);
+  .auth-mascot {
+    width: 80px; /* Ajustable según el peso visual necesario */
+    height: auto;
+    margin-bottom: 12px;
+    object-fit: contain;
   }
 
   h1 {

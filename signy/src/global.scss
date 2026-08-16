@@ -35,17 +35,32 @@
 /* @import "@ionic/angular/css/palettes/dark.always.css"; */
 /* @import "@ionic/angular/css/palettes/dark.class.css"; */
 @import '@ionic/angular/css/palettes/dark.system.css';
-@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700&family=Manrope:wght@400;600;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Manrope:wght@400;600;700;800&display=swap');
 
 
 :root {
-  --signy-ink: #211736;
-  --signy-card: #2C2049;
-  --signy-fox: #FF8C42;
-  --signy-fox-deep: #E06B1F;
-  --signy-mint: #4ECDA8;
-  --signy-locked: #4A3F68;
-  --signy-cream: #F7F1E8;
-  --signy-muted: #A79BC7;
-  --signy-error: #FF6B6B;
+  /* Fondo y superficies (azul marino de marca) */
+  --signy-ink: #12213B;
+  --signy-ink-deep: #0A1526;
+  --signy-card: #1B2E4E;
+  --signy-card-hover: #223A63;
+
+  /* Naranjo Signy (zorro / acciones primarias) */
+  --signy-fox: #F2701A;
+  --signy-fox-deep: #C6560E;
+  --signy-fox-light: #FF9A52;
+
+  /* Teal (acento del corazón / globo de diálogo) */
+  --signy-mint: #2CA6A4;
+  --signy-mint-deep: #1F8482;
+
+  --signy-locked: #2C3E60;
+  --signy-cream: #F7F5F0;
+  --signy-muted: #93A3C4;
+  --signy-error: #E14F3D;
+  --signy-success: #2CA6A4;
+
+  --signy-radius: 18px;
+  --signy-shadow-fox: 0 4px 0 var(--signy-fox-deep);
+  --signy-shadow-card: 0 10px 30px rgba(10, 21, 38, 0.35);
 }
