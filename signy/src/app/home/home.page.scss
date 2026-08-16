@@ -3,7 +3,7 @@
 }
 
 .hud {
-  padding: 24px 20px 8px;
+  padding: calc(24px + env(safe-area-inset-top)) 20px 8px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;

@@ -1,45 +1,82 @@
-<ion-content class="ion-padding">
-  <ion-input
-    label="Nombre completo"
-    labelPlacement="floating"
-    fill="outline"
-    [(ngModel)]="fullName"
-    type="text"
-    class="ion-margin-bottom">
-  </ion-input>
+<ion-content [fullscreen]="true" class="signy-content">
+  <div class="auth-wrap">
+    <div class="auth-header">
+      <ion-icon name="paw" class="auth-paw"></ion-icon>
+      <h1>Únete a Signy</h1>
+      <p>Crea tu cuenta y empieza a aprender LSCh</p>
+    </div>
 
-  <ion-input
-    label="Email"
-    labelPlacement="floating"
-    fill="outline"
-    [(ngModel)]="email"
-    type="email"
-    class="ion-margin-bottom">
-  </ion-input>
+    <form [formGroup]="form" (ngSubmit)="registrar()" autocomplete="off" class="auth-form">
 
-  <ion-input
-    label="Contraseña"
-    labelPlacement="floating"
-    fill="outline"
-    [(ngModel)]="password"
-    type="password"
-    class="ion-margin-bottom">
-  </ion-input>
+      <ion-input
+        label="Nombre completo"
+        labelPlacement="floating"
+        fill="outline"
+        type="text"
+        formControlName="fullName"
+        class="signy-input">
+      </ion-input>
+      <ion-text class="field-error" *ngIf="fullName?.invalid && fullName?.touched">
+        <p *ngIf="fullName?.errors?.['required']">El nombre es obligatorio</p>
+        <p *ngIf="fullName?.errors?.['minlength']">Debe tener al menos 2 caracteres</p>
+      </ion-text>
 
-  <ion-text color="danger" *ngIf="errorMsg">
-    <p>{{ errorMsg }}</p>
-  </ion-text>
+      <ion-input
+        label="Email"
+        labelPlacement="floating"
+        fill="outline"
+        type="email"
+        formControlName="email"
+        class="signy-input">
+      </ion-input>
+      <ion-text class="field-error" *ngIf="email?.invalid && email?.touched">
+        <p *ngIf="email?.errors?.['required']">El email es obligatorio</p>
+        <p *ngIf="email?.errors?.['email']">Ingresa un email válido</p>
+      </ion-text>
 
-  <ion-text color="success" *ngIf="exito">
-    <p>¡Cuenta creada! Revisa tu correo para confirmar (si tienes esa opción activada en Supabase), o inicia sesión directamente.</p>
-  </ion-text>
+      <ion-input
+        label="Contraseña"
+        labelPlacement="floating"
+        fill="outline"
+        type="password"
+        formControlName="password"
+        class="signy-input">
+      </ion-input>
+      <ion-text class="field-error" *ngIf="password?.invalid && password?.touched">
+        <p *ngIf="password?.errors?.['required']">La contraseña es obligatoria</p>
+        <p *ngIf="password?.errors?.['minlength']">Debe tener al menos 8 caracteres</p>
+        <p *ngIf="password?.errors?.['sinMayuscula']">Debe incluir al menos una mayúscula</p>
+        <p *ngIf="password?.errors?.['sinNumero']">Debe incluir al menos un número</p>
+      </ion-text>
 
-  <ion-button expand="block" (click)="registrar()" [disabled]="cargando" class="ion-margin-top">
-    <ion-spinner *ngIf="cargando" name="dots"></ion-spinner>
-    <span *ngIf="!cargando">Registrarse</span>
-  </ion-button>
+      <ion-input
+        label="Confirmar contraseña"
+        labelPlacement="floating"
+        fill="outline"
+        type="password"
+        formControlName="confirmPassword"
+        class="signy-input">
+      </ion-input>
+      <ion-text class="field-error" *ngIf="confirmPassword?.touched && form.errors?.['passwordsNoCoinciden']">
+        <p>Las contraseñas no coinciden</p>
+      </ion-text>
 
-  <ion-button expand="block" fill="clear" (click)="irALogin()">
-    ¿Ya tienes cuenta? Inicia sesión
-  </ion-button>
+      <ion-text class="form-error" *ngIf="errorMsg">
+        <p>{{ errorMsg }}</p>
+      </ion-text>
+
+      <ion-text class="form-success" *ngIf="exito">
+        <p>¡Cuenta creada! Ya puedes iniciar sesión.</p>
+      </ion-text>
+
+      <ion-button expand="block" type="submit" [disabled]="cargando" class="btn-fox">
+        <ion-spinner *ngIf="cargando" name="dots"></ion-spinner>
+        <span *ngIf="!cargando">Registrarse</span>
+      </ion-button>
+
+      <ion-button expand="block" fill="clear" type="button" (click)="irALogin()" class="btn-link">
+        ¿Ya tienes cuenta? &nbsp;<strong>Inicia sesión</strong>
+      </ion-button>
+    </form>
+  </div>
 </ion-content>

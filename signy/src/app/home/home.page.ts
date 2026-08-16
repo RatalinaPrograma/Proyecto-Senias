@@ -1,6 +1,10 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IonicModule } from '@ionic/angular';
+import { addIcons } from 'ionicons';
+import { flame, star, heart, checkmark, lockClosed, paw } from 'ionicons/icons';
+
+addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw });
 
 interface NivelMock {
   numero_nivel: number;
@@ -14,6 +18,7 @@ interface NivelMock {
   standalone: true,
   imports: [CommonModule, IonicModule],
   templateUrl: './home.page.html',
+  styleUrls: ['./home.page.scss'],
 })
 export class HomePage {
   racha = 5;
