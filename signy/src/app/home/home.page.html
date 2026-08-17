@@ -1,4 +1,5 @@
 <ion-content [fullscreen]="true" class="signy-content">
+
   <div class="hud">
     <div class="hud-brand">
       <div class="fox-badge">
@@ -31,65 +32,79 @@
     </div>
   </div>
 
-  <div class="overall-progress">
-    <div class="overall-track">
-      <div class="overall-fill" [style.width.%]="(nivelesCompletados / totalNiveles) * 100"></div>
-    </div>
-    <span>{{ nivelesCompletados }} / {{ totalNiveles }} lecciones</span>
+  <div *ngIf="cargando" class="ion-text-center ion-padding">
+    <ion-spinner></ion-spinner>
   </div>
 
-  <ng-container *ngFor="let unidad of unidades">
-    <div class="unit-banner" [style.background]="unidad.color" [style.boxShadow]="'0 4px 0 ' + unidad.colorOscuro">
-      <div>
-        <p class="unit-tag">{{ unidad.etiqueta }}</p>
-        <h2 class="unit-title">{{ unidad.titulo }}</h2>
-        <p class="unit-desc">{{ unidad.descripcion }}</p>
+  <div *ngIf="!cargando && errorCarga" class="ion-text-center ion-padding">
+    <p>No pudimos cargar tus niveles. Intenta de nuevo.</p>
+    <ion-button (click)="cargarDatos()">Reintentar</ion-button>
+  </div>
+
+  <ng-container *ngIf="!cargando && !errorCarga">
+
+    <div class="overall-progress">
+      <div class="overall-track">
+        <div class="overall-fill" [style.width.%]="(subnivelesCompletados / totalSubniveles) * 100"></div>
       </div>
-      <div class="unit-icon">
+      <span>{{ subnivelesCompletados }} / {{ totalSubniveles }} lecciones</span>
+    </div>
+
+    <ng-container *ngFor="let nivel of niveles">
+      <div class="unit-banner" [style.background]="nivel.color" [style.boxShadow]="'0 4px 0 ' + nivel.colorOscuro">
+        <div>
+          <p class="unit-tag">{{ nivel.etiqueta }}</p>
+          <h2 class="unit-title">{{ nivel.titulo }}</h2>
+          <p class="unit-desc">{{ nivel.descripcion }}</p>
+        </div>
+        <div class="unit-icon">
+          <ion-icon [name]="nivel.icono"></ion-icon>
+        </div>
+      </div>
+
+      <div class="path">
+        <ng-container *ngFor="let subnivel of nivel.subniveles; let i = index; let last = last">
+          <div class="path-row" [class.align-left]="i % 2 === 0" [class.align-right]="i % 2 !== 0">
+            <button
+              class="node"
+              [class.node-completado]="subnivel.estado === 'completado'"
+              [class.node-actual]="subnivel.estado === 'actual'"
+              [class.node-bloqueado]="subnivel.estado === 'bloqueado'"
+              [style.background]="subnivel.estado === 'bloqueado' ? null : nivel.color"
+              [style.boxShadow]="subnivel.estado === 'bloqueado' ? null : '0 5px 0 ' + nivel.colorOscuro"
+              [disabled]="subnivel.estado === 'bloqueado'">
+
+              <span class="node-badge" *ngIf="subnivel.estado === 'actual'">EMPEZAR</span>
+
+              <ion-icon *ngIf="subnivel.estado === 'completado'" name="checkmark"></ion-icon>
+              <ion-icon *ngIf="subnivel.estado === 'bloqueado'" name="lock-closed"></ion-icon>
+              <span *ngIf="subnivel.estado === 'actual'" class="node-number">{{ subnivel.numero }}</span>
+
+              <span class="node-ring" *ngIf="subnivel.estado === 'actual'" [style.borderColor]="nivel.color"></span>
+            </button>
+
+            <div class="node-label" [class.label-right]="i % 2 === 0" [class.label-left]="i % 2 !== 0">
+              <p class="node-title">{{ subnivel.nombre }}</p>
+              <p class="node-desc">{{ subnivel.descripcion }}</p>
+            </div>
+          </div>
+
+          <div class="trail" *ngIf="!last">
+            <ion-icon name="paw" class="trail-paw"></ion-icon>
+            <ion-icon name="paw" class="trail-paw"></ion-icon>
+            <ion-icon name="paw" class="trail-paw"></ion-icon>
+          </div>
+        </ng-container>
+      </div>
+    </ng-container>
+
+    <div class="footer-mascot">
+      <div class="fox-badge fox-badge-lg">
         <ion-icon name="paw"></ion-icon>
       </div>
+      <p>Contenido de referencia — validar señas finales con la comunidad sorda chilena.</p>
     </div>
 
-    <div class="path">
-      <ng-container *ngFor="let nivel of unidad.niveles; let i = index; let last = last">
-        <div class="path-row" [class.align-left]="i % 2 === 0" [class.align-right]="i % 2 !== 0">
-          <button
-            class="node"
-            [class.node-completado]="nivel.estado === 'completado'"
-            [class.node-actual]="nivel.estado === 'actual'"
-            [class.node-bloqueado]="nivel.estado === 'bloqueado'"
-            [style.background]="nivel.estado === 'bloqueado' ? null : unidad.color"
-            [style.boxShadow]="nivel.estado === 'bloqueado' ? null : '0 5px 0 ' + unidad.colorOscuro"
-            [disabled]="nivel.estado === 'bloqueado'">
-
-            <span class="node-badge" *ngIf="nivel.estado === 'actual'">EMPEZAR</span>
-
-            <ion-icon *ngIf="nivel.estado === 'completado'" name="checkmark"></ion-icon>
-            <ion-icon *ngIf="nivel.estado === 'bloqueado'" name="lock-closed"></ion-icon>
-            <span *ngIf="nivel.estado === 'actual'" class="node-number">{{ nivel.numero }}</span>
-
-            <span class="node-ring" *ngIf="nivel.estado === 'actual'" [style.borderColor]="unidad.color"></span>
-          </button>
-
-          <div class="node-label" [class.label-right]="i % 2 === 0" [class.label-left]="i % 2 !== 0">
-            <p class="node-title">{{ nivel.nombre }}</p>
-            <p class="node-desc">{{ nivel.descripcion }}</p>
-          </div>
-        </div>
-
-        <div class="trail" *ngIf="!last">
-          <ion-icon name="paw" class="trail-paw"></ion-icon>
-          <ion-icon name="paw" class="trail-paw"></ion-icon>
-          <ion-icon name="paw" class="trail-paw"></ion-icon>
-        </div>
-      </ng-container>
-    </div>
   </ng-container>
 
-  <div class="footer-mascot">
-    <div class="fox-badge fox-badge-lg">
-      <ion-icon name="paw"></ion-icon>
-    </div>
-    <p>Contenido de referencia — validar señas finales con la comunidad sorda chilena.</p>
-  </div>
 </ion-content>

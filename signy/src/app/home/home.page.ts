@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
@@ -8,21 +8,22 @@ import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline } from 'i
 
 addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw, 'log-out-outline': logOutOutline });
 
-interface Nivel {
+interface Subnivel {
   numero: number;
   nombre: string;
   descripcion: string;
   estado: 'completado' | 'actual' | 'bloqueado';
 }
 
-interface Unidad {
+interface Nivel {
   id: number;
   titulo: string;
   etiqueta: string;
   descripcion: string;
   color: string;
   colorOscuro: string;
-  niveles: Nivel[];
+  icono: string;
+  subniveles: Subnivel[];
 }
 
 @Component({
@@ -32,78 +33,100 @@ interface Unidad {
   templateUrl: './home.page.html',
   styleUrls: ['./home.page.scss'],
 })
-export class HomePage {
-  racha = 5;
-  xp = 320;
-  vidas = 4;
-
-  unidades: Unidad[] = [
-    {
-      id: 1,
-      titulo: 'Abecedario',
-      etiqueta: 'Dactilología LSCh',
-      descripcion: 'Deletrea con las manos',
-      color: 'var(--signy-fox)',
-      colorOscuro: 'var(--signy-fox-deep)',
-      niveles: [
-        { numero: 1, nombre: 'A - D', descripcion: 'Primeras letras', estado: 'completado' },
-        { numero: 2, nombre: 'E - H', descripcion: 'Sigue el abecedario', estado: 'completado' },
-        { numero: 3, nombre: 'I - L', descripcion: 'A mitad de camino', estado: 'actual' },
-        { numero: 4, nombre: 'LL - Ñ', descripcion: 'Letras propias del español', estado: 'bloqueado' },
-      ],
-    },
-    {
-      id: 2,
-      titulo: 'Vocabulario básico',
-      etiqueta: 'Saludos y cortesía',
-      descripcion: 'Lo esencial para partir',
-      color: 'var(--signy-mint)',
-      colorOscuro: 'var(--signy-mint-deep)',
-      niveles: [
-        { numero: 1, nombre: 'Hola y chao', descripcion: 'Saludos básicos', estado: 'bloqueado' },
-        { numero: 2, nombre: '¿Cómo estás?', descripcion: 'Responde cómo te sientes', estado: 'bloqueado' },
-        { numero: 3, nombre: 'Cortesía', descripcion: 'Por favor, gracias, perdón', estado: 'bloqueado' },
-      ],
-    },
-    {
-      id: 3,
-      titulo: 'Familia',
-      etiqueta: 'Personas cercanas',
-      descripcion: 'Habla de tu gente',
-      color: '#F2A93B',
-      colorOscuro: '#C6841F',
-      niveles: [
-        { numero: 1, nombre: 'Papás', descripcion: 'Mamá y papá', estado: 'bloqueado' },
-        { numero: 2, nombre: 'Hermanos', descripcion: 'Familia y casa', estado: 'bloqueado' },
-        { numero: 3, nombre: 'Abuelos', descripcion: 'Tíos y abuelos', estado: 'bloqueado' },
-      ],
-    },
-    {
-      id: 4,
-      titulo: 'Preguntas frecuentes',
-      etiqueta: 'Para conversar',
-      descripcion: 'Pregunta sin quedarte callado',
-      color: 'var(--signy-error)',
-      colorOscuro: '#8F2E22',
-      niveles: [
-        { numero: 1, nombre: 'Sobre ti', descripcion: '¿Cómo te llamas?', estado: 'bloqueado' },
-        { numero: 2, nombre: 'Día a día', descripcion: '¿Qué hora es?', estado: 'bloqueado' },
-      ],
-    },
-  ];
+export class HomePage implements OnInit {
+  racha = 0;
+  xp = 0;
+  vidas = 0;
+  niveles: Nivel[] = [];
+  cargando = true;
+  errorCarga = false;
 
   constructor(
     private supabaseService: SupabaseService,
     private router: Router
   ) {}
 
-  get totalNiveles(): number {
-    return this.unidades.reduce((acc, u) => acc + u.niveles.length, 0);
+  async ngOnInit() {
+    await this.cargarDatos();
   }
 
-  get nivelesCompletados(): number {
-    return this.unidades.reduce(
-      (acc, u) => acc + u.niveles.filter(n => n.estado === 'completado').length,
+  async cargarDatos() {
+    this.cargando = true;
+    this.errorCarga = false;
+
+    try {
+      const user = await this.supabaseService.getCurrentUser();
+      if (!user) {
+        this.router.navigate(['/auth/login']);
+        return;
+      }
+
+      const [{ niveles, progresoNivel, progresoSubnivel }, stats] = await Promise.all([
+        this.supabaseService.obtenerUnidadesConProgreso(user.id),
+        this.supabaseService.obtenerStats(user.id),
+      ]);
+
+      this.racha = stats?.racha_actual ?? 0;
+      this.xp = stats?.puntos_experiencia ?? 0;
+      this.vidas = stats?.vidas ?? 0;
+
+      const mapaAccesoNivel = new Map(progresoNivel.map((p: any) => [p.nivel_id, p]));
+      const mapaCompletadoSub = new Map(progresoSubnivel.map((p: any) => [p.subnivel_id, p.completado]));
+
+      this.niveles = niveles.map((n: any) => {
+        const nivelDesbloqueado = mapaAccesoNivel.get(n.id)?.acceso ?? (n.numero_nivel === 1);
+
+        let yaHuboActual = false;
+
+        const subnivelesMapeados: Subnivel[] = (n.subniveles ?? []).map((s: any) => {
+          const completado = mapaCompletadoSub.get(s.id) ?? false;
+          let estado: Subnivel['estado'];
+
+          if (!nivelDesbloqueado) {
+            estado = 'bloqueado';
+          } else if (completado) {
+            estado = 'completado';
+          } else if (!yaHuboActual) {
+            estado = 'actual';
+            yaHuboActual = true;
+          } else {
+            estado = 'bloqueado';
+          }
+
+          return {
+            numero: s.numero_subnivel,
+            nombre: s.nombre,
+            descripcion: s.descripcion,
+            estado,
+          };
+        });
+
+        return {
+          id: n.id,
+          titulo: n.nombre,
+          etiqueta: n.etiqueta ?? '',
+          descripcion: n.descripcion ?? '',
+          color: n.color ?? '#D97B3F',
+          colorOscuro: n.color_oscuro ?? '#A8562A',
+          icono: n.icono ?? 'paw',
+          subniveles: subnivelesMapeados,
+        };
+      });
+    } catch (e) {
+      console.error('Hombre no poder cargar datos de home', e);
+      this.errorCarga = true;
+    } finally {
+      this.cargando = false;
+    }
+  }
+
+  get totalSubniveles(): number {
+    return this.niveles.reduce((acc, n) => acc + n.subniveles.length, 0);
+  }
+
+  get subnivelesCompletados(): number {
+    return this.niveles.reduce(
+      (acc, n) => acc + n.subniveles.filter(s => s.estado === 'completado').length,
       0
     );
   }
