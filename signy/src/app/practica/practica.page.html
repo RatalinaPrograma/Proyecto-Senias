@@ -1,0 +1,55 @@
+<ion-content [fullscreen]="true" class="signy-content">
+
+  <div *ngIf="fase === 'cargando'" class="ion-text-center ion-padding">
+    <ion-spinner></ion-spinner>
+  </div>
+
+  <!-- FASE ESTUDIO -->
+  <div *ngIf="fase === 'estudio'" class="ion-padding ion-text-center">
+    <p>{{ indiceEstudio + 1 }} / {{ senas.length }}</p>
+
+    <img *ngIf="senaEstudioActual.video_url" [src]="senaEstudioActual.video_url" [alt]="senaEstudioActual.palabra" style="max-width: 250px; border-radius: 16px;" />
+
+    <h2>{{ senaEstudioActual.palabra }}</h2>
+    <p>{{ senaEstudioActual.descripcion }}</p>
+
+    <ion-button expand="block" (click)="siguienteEnEstudio()">
+      {{ esUltimaEnEstudio ? 'Empezar quiz' : 'Siguiente' }}
+    </ion-button>
+  </div>
+
+  <!-- FASE QUIZ -->
+  <div *ngIf="fase === 'quiz'" class="ion-padding ion-text-center">
+    <p>Pregunta {{ indicePregunta + 1 }} / {{ preguntas.length }}</p>
+
+    <img *ngIf="preguntaActual.senaCorrecta.video_url" [src]="preguntaActual.senaCorrecta.video_url" [alt]="preguntaActual.senaCorrecta.palabra" style="max-width: 250px; border-radius: 16px;" />
+
+    <h3>¿Qué seña es esta?</h3>
+
+    <ion-list>
+      <ion-item
+        *ngFor="let opcion of preguntaActual.opciones"
+        button
+        [disabled]="mostrarFeedback"
+        (click)="elegirOpcion(opcion)"
+        [color]="mostrarFeedback && opcion === preguntaActual.senaCorrecta.palabra ? 'success' :
+                 (mostrarFeedback && opcion === opcionSeleccionada ? 'danger' : undefined)">
+        {{ opcion }}
+      </ion-item>
+    </ion-list>
+
+    <ion-button *ngIf="mostrarFeedback" expand="block" (click)="siguientePregunta()">
+      Continuar
+    </ion-button>
+  </div>
+
+  <!-- FASE RESULTADO -->
+  <div *ngIf="fase === 'resultado'" class="ion-padding ion-text-center">
+    <h2>{{ aprobado ? '¡Lección completada!' : 'Casi lo logras' }}</h2>
+    <p>{{ aciertos }} / {{ preguntas.length }} correctas ({{ porcentajeFinal }}%)</p>
+    <p *ngIf="!aprobado">Necesitas 70% para aprobar. ¡Inténtalo de nuevo!</p>
+
+    <ion-button expand="block" (click)="volverAlHome()">Volver al inicio</ion-button>
+  </div>
+
+</ion-content>

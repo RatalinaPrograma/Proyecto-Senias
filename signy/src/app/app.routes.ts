@@ -21,5 +21,13 @@ export const routes: Routes = [
     path: 'home',
     canActivate: [authGuard],
     loadComponent: () => import('./home/home.page').then(m => m.HomePage)
-  }
+  },
+  {
+    path: 'practica',
+    loadComponent: () => import('./practica/practica.page').then(m => m.PracticaPage)
+  },
+  {
+    path: 'practica/:subnivelId',
+    loadComponent: () => import('./practica/practica.page').then(m => m.PracticaPage),
+  },
 ];

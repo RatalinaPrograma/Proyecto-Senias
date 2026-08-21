@@ -9,6 +9,7 @@ import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline } from 'i
 addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw, 'log-out-outline': logOutOutline });
 
 interface Subnivel {
+  id: number;
   numero: number;
   nombre: string;
   descripcion: string;
@@ -44,7 +45,7 @@ export class HomePage implements OnInit {
   constructor(
     private supabaseService: SupabaseService,
     private router: Router
-  ) {}
+  ) { }
 
   async ngOnInit() {
     await this.cargarDatos();
@@ -94,6 +95,7 @@ export class HomePage implements OnInit {
           }
 
           return {
+            id: s.id,
             numero: s.numero_subnivel,
             nombre: s.nombre,
             descripcion: s.descripcion,
@@ -113,7 +115,7 @@ export class HomePage implements OnInit {
         };
       });
     } catch (e) {
-      console.error('Hombre no poder cargar datos de home', e);
+      console.error('No se pueden cargar datos de home', e);
       this.errorCarga = true;
     } finally {
       this.cargando = false;
@@ -135,4 +137,10 @@ export class HomePage implements OnInit {
     await this.supabaseService.signOut();
     this.router.navigate(['/auth/login']);
   }
+
+  irAPracticar(subnivel: Subnivel) {
+    if (subnivel.estado === 'bloqueado') return;
+    this.router.navigate(['/practica', subnivel.id]);
+  }
+
 }

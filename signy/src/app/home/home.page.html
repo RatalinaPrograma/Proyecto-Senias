@@ -72,7 +72,8 @@
               [class.node-bloqueado]="subnivel.estado === 'bloqueado'"
               [style.background]="subnivel.estado === 'bloqueado' ? null : nivel.color"
               [style.boxShadow]="subnivel.estado === 'bloqueado' ? null : '0 5px 0 ' + nivel.colorOscuro"
-              [disabled]="subnivel.estado === 'bloqueado'">
+              [disabled]="subnivel.estado === 'bloqueado'"
+              (click)="irAPracticar(subnivel)">
 
               <span class="node-badge" *ngIf="subnivel.estado === 'actual'">EMPEZAR</span>
 
