@@ -1,0 +1,122 @@
+.signy-content {
+  --background: var(--signy-ink);
+}
+
+.skip-btn {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  right: 16px;
+  z-index: 10;
+  background: transparent;
+  border: none;
+  color: var(--signy-muted);
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.onboarding-wrap {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: calc(56px + env(safe-area-inset-top)) 28px calc(24px + env(safe-area-inset-bottom));
+}
+
+.slide-image-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+.slide-image {
+  width: 220px;
+  height: 220px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.35));
+  animation: float-in 0.4s ease;
+}
+
+@keyframes float-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide-image { animation: none; }
+}
+
+.slide-text {
+  text-align: center;
+  margin-bottom: 28px;
+
+  h1 {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 25px;
+    color: var(--signy-cream);
+    margin: 0 0 10px;
+  }
+
+  p {
+    font-family: 'Manrope', sans-serif;
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: var(--signy-muted);
+    margin: 0;
+    padding: 0 6px;
+  }
+}
+
+.dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--signy-locked);
+  border: none;
+  padding: 0;
+  transition: all 0.25s ease;
+
+  &.active {
+    width: 22px;
+    background: var(--signy-fox);
+  }
+}
+
+.nav-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.spacer {
+  width: 64px;
+}
+
+.btn-back {
+  --color: var(--signy-muted);
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.btn-fox {
+  --background: var(--signy-fox);
+  --background-activated: var(--signy-fox-deep);
+  --color: #4A2100;
+  --border-radius: 14px;
+  --box-shadow: none;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  height: 52px;
+  flex: 1;
+}

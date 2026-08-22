@@ -1,0 +1,39 @@
+<ion-content [fullscreen]="true" class="signy-content">
+  <button class="skip-btn" *ngIf="!esUltimo" (click)="saltar()">Saltar</button>
+
+  <div class="onboarding-wrap">
+    <div class="slide-image-wrap">
+      <img [src]="slides[paso].imagen" [alt]="slides[paso].titulo" class="slide-image" />
+    </div>
+
+    <div class="slide-text">
+      <h1>{{ slides[paso].titulo }}</h1>
+      <p>{{ slides[paso].texto }}</p>
+    </div>
+
+    <div class="dots">
+      <button
+        *ngFor="let s of slides; let i = index"
+        class="dot"
+        [class.active]="i === paso"
+        (click)="irAPaso(i)"
+        [attr.aria-label]="'Ir al paso ' + (i + 1)">
+      </button>
+    </div>
+
+    <div class="nav-row">
+      <ion-button
+        fill="clear"
+        class="btn-back"
+        *ngIf="paso > 0"
+        (click)="anterior()">
+        Atrás
+      </ion-button>
+      <div class="spacer" *ngIf="paso === 0"></div>
+
+      <ion-button expand="block" class="btn-fox" (click)="siguiente()">
+        {{ esUltimo ? 'Crear cuenta' : 'Siguiente' }}
+      </ion-button>
+    </div>
+  </div>
+</ion-content>

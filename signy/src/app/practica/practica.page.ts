@@ -3,6 +3,24 @@ import { CommonModule } from '@angular/common';
 import { IonicModule } from '@ionic/angular';
 import { ActivatedRoute, Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
+import { addIcons } from 'ionicons';
+import {
+  arrowBack,
+  checkmarkCircle,
+  closeCircle,
+  trophy,
+  sadOutline,
+  paw,
+} from 'ionicons/icons';
+
+addIcons({
+  'arrow-back': arrowBack,
+  'checkmark-circle': checkmarkCircle,
+  'close-circle': closeCircle,
+  trophy,
+  'sad-outline': sadOutline,
+  paw,
+});
 
 interface Sena {
   id: number;
@@ -25,7 +43,7 @@ interface Pregunta {
 })
 export class PracticaPage implements OnInit {
   subnivelId!: number;
-  fase: 'cargando' | 'estudio' | 'quiz' | 'resultado' = 'cargando';
+  fase: 'cargando' | 'estudio' | 'quiz' | 'resultado' | 'vacio' = 'cargando';
 
   senas: Sena[] = [];
   indiceEstudio = 0;
@@ -60,6 +78,12 @@ export class PracticaPage implements OnInit {
 
   async cargarSenas() {
     this.senas = await this.supabaseService.obtenerSenasDeSubnivel(this.subnivelId);
+
+    if (!this.senas || this.senas.length === 0) {
+      this.fase = 'vacio';
+      return;
+    }
+
     this.fase = 'estudio';
     this.indiceEstudio = 0;
   }
@@ -70,6 +94,16 @@ export class PracticaPage implements OnInit {
 
   get esUltimaEnEstudio(): boolean {
     return this.indiceEstudio === this.senas.length - 1;
+  }
+
+  get progresoEstudio(): number {
+    if (!this.senas.length) return 0;
+    return ((this.indiceEstudio + 1) / this.senas.length) * 100;
+  }
+
+  get progresoQuiz(): number {
+    if (!this.preguntas.length) return 0;
+    return ((this.indicePregunta + 1) / this.preguntas.length) * 100;
   }
 
   siguienteEnEstudio() {
@@ -154,5 +188,10 @@ export class PracticaPage implements OnInit {
 
   volverAlHome() {
     this.router.navigate(['/home']);
+  }
+
+  reintentar() {
+    this.fase = 'cargando';
+    this.iniciarQuiz();
   }
 }
