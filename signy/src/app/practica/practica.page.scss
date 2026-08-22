@@ -1,0 +1,288 @@
+.signy-content {
+  --background: var(--signy-ink);
+}
+
+.loading-wrap {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+// ------- HUD superior (volver + progreso) -------
+.practica-hud {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(16px + env(safe-area-inset-top)) 20px 8px;
+}
+
+.icon-btn {
+  background: var(--signy-card);
+  border: none;
+  color: var(--signy-cream);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 18px;
+}
+
+.hud-track {
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--signy-locked);
+  overflow: hidden;
+}
+
+.hud-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--signy-fox), var(--signy-fox-light));
+  transition: width 0.3s ease;
+
+  &-quiz {
+    background: linear-gradient(90deg, var(--signy-mint-deep), var(--signy-mint));
+  }
+}
+
+.hud-count {
+  font-family: 'Manrope', sans-serif;
+  font-weight: 800;
+  font-size: 12px;
+  color: var(--signy-muted);
+  white-space: nowrap;
+}
+
+.practica-body {
+  padding: 8px 20px calc(24px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+// ------- Tarjeta de flashcard / pregunta -------
+.flash-card {
+  background: var(--signy-card);
+  border-radius: var(--signy-radius);
+  padding: 24px 20px;
+  text-align: center;
+  box-shadow: var(--signy-shadow-card);
+}
+
+.flash-media {
+  width: 100%;
+  max-width: 240px;
+  aspect-ratio: 1 / 1;
+  margin: 0 auto 18px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--signy-ink-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &-empty {
+    ion-icon {
+      font-size: 48px;
+      color: var(--signy-fox);
+      transform: rotate(-12deg);
+    }
+  }
+}
+
+.flash-word {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 26px;
+  color: var(--signy-cream);
+  margin: 0;
+  text-transform: capitalize;
+}
+
+.flash-desc {
+  font-family: 'Manrope', sans-serif;
+  font-size: 14px;
+  color: var(--signy-muted);
+  margin: 8px 0 0;
+}
+
+.quiz-question {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--signy-cream);
+  margin: 4px 0 0;
+}
+
+// ------- Opciones del quiz -------
+.opt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.opt-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: var(--signy-card);
+  border: 2px solid transparent;
+  border-radius: 14px;
+  padding: 14px 18px;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--signy-cream);
+  text-transform: capitalize;
+  transition: border-color 0.15s ease, background 0.15s ease;
+
+  ion-icon {
+    font-size: 20px;
+  }
+
+  &:not(:disabled):active {
+    border-color: var(--signy-fox);
+  }
+
+  &.opt-correct {
+    background: rgba(44, 166, 164, 0.18);
+    border-color: var(--signy-mint);
+    color: var(--signy-mint);
+
+    ion-icon { color: var(--signy-mint); }
+  }
+
+  &.opt-incorrect {
+    background: rgba(225, 79, 61, 0.18);
+    border-color: var(--signy-error);
+    color: var(--signy-error);
+
+    ion-icon { color: var(--signy-error); }
+  }
+
+  &:disabled {
+    opacity: 1;
+  }
+}
+
+.feedback-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 13.5px;
+
+  ion-icon { font-size: 20px; flex-shrink: 0; }
+
+  &.feedback-ok {
+    background: rgba(44, 166, 164, 0.15);
+    color: var(--signy-mint);
+  }
+
+  &.feedback-bad {
+    background: rgba(225, 79, 61, 0.15);
+    color: var(--signy-error);
+  }
+}
+
+// ------- Botón primario compartido -------
+.btn-fox {
+  --background: var(--signy-fox);
+  --background-activated: var(--signy-fox-deep);
+  --color: #4A2100;
+  --border-radius: 14px;
+  --box-shadow: none;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  height: 52px;
+}
+
+// ------- Pantalla de resultado -------
+.resultado-wrap {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px calc(24px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
+  gap: 6px;
+}
+
+.resultado-badge {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+
+  ion-icon { font-size: 46px; }
+
+  &.badge-ok {
+    background: linear-gradient(155deg, var(--signy-mint), var(--signy-mint-deep));
+    box-shadow: 0 5px 0 var(--signy-mint-deep);
+    ion-icon { color: #08322F; }
+  }
+
+  &.badge-bad {
+    background: linear-gradient(155deg, var(--signy-fox-light), var(--signy-fox-deep));
+    box-shadow: 0 5px 0 var(--signy-fox-deep);
+    ion-icon { color: #4A2100; }
+  }
+}
+
+.resultado-title {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 24px;
+  color: var(--signy-cream);
+  margin: 0;
+}
+
+.resultado-score {
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--signy-muted);
+  margin: 4px 0 0;
+}
+
+.resultado-hint {
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  color: var(--signy-error);
+  margin: 2px 0 20px;
+}
+
+.resultado-wrap ion-button {
+  width: 100%;
+  max-width: 320px;
+  margin-top: 12px;
+}
+
+.btn-secundario {
+  --color: var(--signy-muted);
+  --border-color: var(--signy-locked);
+  --border-radius: 14px;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+}

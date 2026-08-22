@@ -1,0 +1,449 @@
+.signy-content {
+  --background: var(--signy-ink);
+}
+
+.lesson-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(16px + env(safe-area-inset-top)) 16px 8px;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--signy-muted);
+  font-size: 22px;
+  line-height: 0;
+}
+
+.phase-track {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+}
+
+.phase-dot {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--signy-locked);
+
+  &.active {
+    background: var(--signy-fox);
+  }
+}
+
+.quiz-progress {
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--signy-locked);
+  overflow: hidden;
+}
+
+.quiz-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.hearts {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--signy-error);
+
+  ion-icon { font-size: 16px; }
+}
+
+.phase-body {
+  padding: 12px 20px 24px;
+}
+
+.eyebrow {
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--signy-muted);
+  margin: 0 0 10px;
+}
+
+.eyebrow-repaso {
+  color: var(--signy-fox);
+}
+
+.btn-fox {
+  --background: var(--signy-fox);
+  --background-activated: var(--signy-fox-deep);
+  --color: #4A2100;
+  --border-radius: 14px;
+  --box-shadow: none;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  height: 50px;
+  margin-top: 16px;
+}
+
+/* ---------- Flashcards ---------- */
+.flash-card {
+  width: 100%;
+  border: none;
+  border-radius: 22px;
+  padding: 56px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.flash-icon-wrap {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.real-media {
+  width: 140px;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 18px;
+}
+
+.flash-word {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 26px;
+  color: #fff;
+  text-align: center;
+  padding: 0 12px;
+}
+
+.flash-hint {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 14px;
+}
+
+/* ---------- Match ---------- */
+.match-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.match-tile {
+  border-radius: 16px;
+  border: 2px solid var(--signy-locked);
+  background: var(--signy-card);
+  padding: 16px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--signy-cream);
+
+  &.selected { border-color: var(--signy-fox); background: var(--signy-card-hover); }
+  &.wrong { border-color: var(--signy-error); background: rgba(225, 79, 61, 0.15); }
+  &.matched { border-color: var(--signy-mint); opacity: 0.5; }
+}
+
+/* ---------- Quiz ---------- */
+.quiz-card {
+  border-radius: 22px;
+  padding: 32px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.quiz-icon-wrap {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.quiz-hint {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 10px;
+}
+
+.quiz-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.quiz-option {
+  border-radius: 16px;
+  border: 2px solid var(--signy-locked);
+  background: var(--signy-card);
+  padding: 16px 10px;
+  text-align: left;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--signy-cream);
+
+  &.ok { border-color: var(--signy-mint); background: rgba(44, 166, 164, 0.15); color: var(--signy-mint); }
+  &.bad { border-color: var(--signy-error); background: rgba(225, 79, 61, 0.15); color: var(--signy-error); }
+}
+
+.feedback-bar {
+  position: sticky;
+  bottom: 0;
+}
+
+.feedback-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px calc(18px + env(safe-area-inset-bottom));
+
+  &.ok { background: #1E3B34; }
+  &.bad { background: #3B2422; }
+}
+
+.feedback-text {
+  strong {
+    font-family: 'Baloo 2', sans-serif;
+    font-size: 17px;
+    color: var(--signy-cream);
+  }
+  p {
+    font-family: 'Manrope', sans-serif;
+    font-size: 12.5px;
+    color: var(--signy-muted);
+    margin: 2px 0 0;
+  }
+}
+
+.btn-continue {
+  --border-radius: 14px;
+  --box-shadow: none;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+
+  &.ok { --background: var(--signy-mint); --color: #06251F; }
+  &.bad { --background: var(--signy-error); --color: #3B0E0A; }
+}
+
+/* ---------- Cámara ---------- */
+.cam-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  background: var(--signy-ink-deep);
+  border-radius: 22px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cam-idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px;
+
+  h3 {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 19px;
+    color: var(--signy-cream);
+    margin: 12px 0 0;
+  }
+}
+
+.cam-word {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 24px;
+  margin: 2px 0 0;
+}
+
+.cam-sub {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  color: var(--signy-muted);
+  margin: 4px 0 0;
+}
+
+.cam-emoji { font-size: 32px; }
+
+.skip-link {
+  background: transparent;
+  border: none;
+  color: var(--signy-muted);
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 12.5px;
+  margin-top: 10px;
+}
+
+.cam-msg {
+  font-family: 'Manrope', sans-serif;
+  color: var(--signy-cream);
+  font-size: 13px;
+}
+
+.cam-video-wrap {
+  position: absolute;
+  inset: 0;
+
+  &.hidden { display: none; }
+}
+
+.cam-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.cam-oval {
+  position: absolute;
+  inset: 30px;
+  border-radius: 50%;
+  border: 3px dashed rgba(255, 255, 255, 0.7);
+  margin: auto;
+  width: 62%;
+  height: 42%;
+  top: 0; bottom: 0; left: 0; right: 0;
+
+  &.recording { border-color: var(--signy-error); }
+}
+
+.cam-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  span {
+    font-family: 'Baloo 2', sans-serif;
+    font-size: 64px;
+    color: #fff;
+  }
+}
+
+.cam-rec-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  color: #fff;
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--signy-error);
+  }
+}
+
+.cam-result-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+
+  ion-button { --border-radius: 14px; }
+}
+
+.cam-footnote {
+  font-family: 'Manrope', sans-serif;
+  font-size: 11px;
+  color: var(--signy-muted);
+  text-align: center;
+  margin-top: 12px;
+}
+
+.hidden { display: none; }
+
+/* ---------- Estados vacíos (sin vidas / completa) ---------- */
+.empty-state {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 28px;
+
+  .sad-fox, .happy-fox {
+    width: 96px;
+    height: 96px;
+    object-fit: contain;
+    border-radius: 50%;
+  }
+
+  h2 {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 24px;
+    color: var(--signy-cream);
+    margin: 14px 0 0;
+  }
+
+  p {
+    font-family: 'Manrope', sans-serif;
+    font-size: 13.5px;
+    color: var(--signy-muted);
+    margin: 6px 0 0;
+  }
+
+  ion-button { width: 100%; margin-top: 24px; }
+}
+
+.complete-stats {
+  display: flex;
+  gap: 12px;
+  margin-top: 22px;
+  width: 100%;
+}
+
+.complete-stat {
+  flex: 1;
+  background: var(--signy-card);
+  border-radius: 16px;
+  padding: 16px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+
+  strong {
+    font-family: 'Baloo 2', sans-serif;
+    font-size: 22px;
+    color: var(--signy-mint);
+  }
+
+  span {
+    font-family: 'Manrope', sans-serif;
+    font-size: 10.5px;
+    color: var(--signy-muted);
+  }
+}
