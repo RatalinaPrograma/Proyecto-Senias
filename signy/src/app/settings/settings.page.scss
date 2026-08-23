@@ -1,0 +1,207 @@
+.signy-content {
+  --background: var(--signy-ink);
+}
+
+.settings-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(16px + env(safe-area-inset-top)) 20px 8px;
+
+  h1 {
+    flex: 1;
+    text-align: center;
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--signy-cream);
+    margin: 0;
+  }
+}
+
+.spacer { width: 38px; }
+
+.icon-btn {
+  background: var(--signy-card);
+  border: none;
+  color: var(--signy-cream);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.settings-body {
+  padding: 4px 20px calc(32px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.card-section {
+  background: var(--signy-card);
+  border-radius: var(--signy-radius);
+  padding: 20px;
+
+  h2 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--signy-cream);
+    margin: 0 0 14px;
+
+    ion-icon { color: var(--signy-mint); font-size: 18px; }
+  }
+}
+
+.card-danger {
+  border: 1px solid rgba(225, 79, 61, 0.35);
+}
+
+.section-hint {
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  color: var(--signy-muted);
+  line-height: 1.5;
+  margin: 0 0 12px;
+
+  code {
+    display: inline-block;
+    margin-top: 6px;
+    background: var(--signy-ink-deep);
+    padding: 6px 10px;
+    border-radius: 8px;
+    color: var(--signy-cream);
+    font-size: 12.5px;
+    letter-spacing: 1px;
+    word-break: break-all;
+  }
+}
+
+.avatar-edit {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.avatar-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--signy-ink-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+
+  img { width: 100%; height: 100%; object-fit: cover; }
+  ion-icon { font-size: 28px; color: var(--signy-fox); }
+}
+
+.avatar-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--signy-ink-deep);
+  color: var(--signy-cream);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+
+  ion-icon { font-size: 16px; color: var(--signy-mint); }
+}
+
+.signy-input {
+  --background: var(--signy-ink-deep);
+  --color: var(--signy-cream);
+  --placeholder-color: var(--signy-muted);
+  --border-color: var(--signy-locked);
+  --border-radius: 14px;
+  --padding-start: 16px;
+  --padding-end: 16px;
+  --highlight-color-focused: var(--signy-fox);
+  font-family: 'Manrope', sans-serif;
+  margin-bottom: 12px;
+}
+
+.field-error, .form-error, .form-success {
+  p {
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    margin: -6px 0 12px;
+  }
+}
+
+.field-error p, .form-error p {
+  color: var(--signy-error);
+}
+
+.form-success p {
+  color: var(--signy-mint);
+  font-weight: 700;
+}
+
+.btn-fox {
+  --background: var(--signy-fox);
+  --background-activated: var(--signy-fox-deep);
+  --color: #4A2100;
+  --border-radius: 14px;
+  --box-shadow: none;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  height: 50px;
+}
+
+.btn-outline-danger {
+  --color: var(--signy-error);
+  --border-color: var(--signy-error);
+  --border-radius: 14px;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  height: 46px;
+}
+
+.btn-danger {
+  --background: var(--signy-error);
+  --background-activated: #C33F2F;
+  --color: #fff;
+  --border-radius: 14px;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  height: 48px;
+}
+
+.btn-link {
+  --color: var(--signy-muted);
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+}
+
+.qr-wrap {
+  display: flex;
+  justify-content: center;
+  background: #fff;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
+
+  img { width: 160px; height: 160px; }
+}
+
+.confirm-delete {
+  margin-top: 6px;
+}

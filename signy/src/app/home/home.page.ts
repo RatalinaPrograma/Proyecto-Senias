@@ -1,31 +1,14 @@
-import { Component, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
+import { ContenidoService } from '../services/contenido';
+import { NivelConEstado, SubnivelConEstado, UserStats } from '../data/db-types';
 import { addIcons } from 'ionicons';
-import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline } from 'ionicons/icons';
+import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline, refresh } from 'ionicons/icons';
 
-addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw, 'log-out-outline': logOutOutline });
-
-interface Subnivel {
-  id: number;
-  numero: number;
-  nombre: string;
-  descripcion: string;
-  estado: 'completado' | 'actual' | 'bloqueado';
-}
-
-interface Nivel {
-  id: number;
-  titulo: string;
-  etiqueta: string;
-  descripcion: string;
-  color: string;
-  colorOscuro: string;
-  icono: string;
-  subniveles: Subnivel[];
-}
+addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw, 'log-out-outline': logOutOutline, refresh });
 
 @Component({
   selector: 'app-home',
@@ -34,93 +17,51 @@ interface Nivel {
   templateUrl: './home.page.html',
   styleUrls: ['./home.page.scss'],
 })
-export class HomePage implements OnInit {
-  racha = 0;
-  xp = 0;
-  vidas = 0;
-  niveles: Nivel[] = [];
+export class HomePage {
   cargando = true;
-  errorCarga = false;
+  error = '';
+
+  niveles: NivelConEstado[] = [];
+  stats: UserStats | null = null;
+  avatarUrl: string | null = null;
 
   constructor(
     private supabaseService: SupabaseService,
+    private contenidoService: ContenidoService,
     private router: Router
-  ) { }
+  ) {}
 
-  async ngOnInit() {
-    await this.cargarDatos();
+  // Se recalcula cada vez que vuelves a Home (ej. después de terminar una lección)
+  async ionViewWillEnter() {
+    await this.cargarTodo();
   }
 
-  async cargarDatos() {
+  async cargarTodo() {
     this.cargando = true;
-    this.errorCarga = false;
-
+    this.error = '';
     try {
-      const user = await this.supabaseService.getCurrentUser();
-      if (!user) {
-        this.router.navigate(['/auth/login']);
-        return;
-      }
+      const { data: userData } = await this.supabaseService.getUser();
+      if (!userData?.user) return;
 
-      const [{ niveles, progresoNivel, progresoSubnivel }, stats] = await Promise.all([
-        this.supabaseService.obtenerUnidadesConProgreso(user.id),
-        this.supabaseService.obtenerStats(user.id),
+      const [niveles, stats, { data: perfil }] = await Promise.all([
+        this.contenidoService.obtenerMapaDeAprendizaje(userData.user.id),
+        this.contenidoService.getMisStats(userData.user.id),
+        this.supabaseService.getProfile(userData.user.id),
       ]);
-
-      this.racha = stats?.racha_actual ?? 0;
-      this.xp = stats?.puntos_experiencia ?? 0;
-      this.vidas = stats?.vidas ?? 0;
-
-      const mapaAccesoNivel = new Map(progresoNivel.map((p: any) => [p.nivel_id, p]));
-      const mapaCompletadoSub = new Map(progresoSubnivel.map((p: any) => [p.subnivel_id, p.completado]));
-
-      this.niveles = niveles.map((n: any) => {
-        const nivelDesbloqueado = mapaAccesoNivel.get(n.id)?.acceso ?? (n.numero_nivel === 1);
-
-        let yaHuboActual = false;
-
-        const subnivelesMapeados: Subnivel[] = (n.subniveles ?? []).map((s: any) => {
-          const completado = mapaCompletadoSub.get(s.id) ?? false;
-          let estado: Subnivel['estado'];
-
-          if (!nivelDesbloqueado) {
-            estado = 'bloqueado';
-          } else if (completado) {
-            estado = 'completado';
-          } else if (!yaHuboActual) {
-            estado = 'actual';
-            yaHuboActual = true;
-          } else {
-            estado = 'bloqueado';
-          }
-
-          return {
-            id: s.id,
-            numero: s.numero_subnivel,
-            nombre: s.nombre,
-            descripcion: s.descripcion,
-            estado,
-          };
-        });
-
-        return {
-          id: n.id,
-          titulo: n.nombre,
-          etiqueta: n.etiqueta ?? '',
-          descripcion: n.descripcion ?? '',
-          color: n.color ?? '#D97B3F',
-          colorOscuro: n.color_oscuro ?? '#A8562A',
-          icono: n.icono ?? 'paw',
-          subniveles: subnivelesMapeados,
-        };
-      });
-    } catch (e) {
-      console.error('No se pueden cargar datos de home', e);
-      this.errorCarga = true;
+      this.niveles = niveles;
+      this.stats = stats;
+      this.avatarUrl = perfil?.avatar_url ?? null;
+    } catch (e: any) {
+      this.error = 'No se pudo cargar tu progreso. Revisa tu conexión.';
+      console.error(e);
     } finally {
       this.cargando = false;
     }
   }
+
+  get racha(): number { return this.stats?.racha_actual ?? 0; }
+  get xp(): number { return this.stats?.puntos_experiencia ?? 0; }
+  get vidas(): number { return this.stats?.vidas ?? 5; }
 
   get totalSubniveles(): number {
     return this.niveles.reduce((acc, n) => acc + n.subniveles.length, 0);
@@ -133,14 +74,17 @@ export class HomePage implements OnInit {
     );
   }
 
+  abrirLeccion(subnivel: SubnivelConEstado) {
+    if (subnivel.estado === 'bloqueado') return;
+    this.router.navigate(['/lesson', subnivel.id]);
+  }
+
+  irAPerfil() {
+    this.router.navigate(['/profile']);
+  }
+
   async cerrarSesion() {
     await this.supabaseService.signOut();
     this.router.navigate(['/auth/login']);
   }
-
-  irAPracticar(subnivel: Subnivel) {
-    if (subnivel.estado === 'bloqueado') return;
-    this.router.navigate(['/practica', subnivel.id]);
-  }
-
 }

@@ -1,55 +1,121 @@
 <ion-content [fullscreen]="true" class="signy-content">
 
-  <div *ngIf="fase === 'cargando'" class="ion-text-center ion-padding">
-    <ion-spinner></ion-spinner>
+  <div *ngIf="fase === 'cargando'" class="loading-wrap">
+    <ion-spinner name="dots"></ion-spinner>
+  </div>
+
+  <!-- FASE VACIO: subnivel sin señas cargadas todavía -->
+  <div *ngIf="fase === 'vacio'" class="resultado-wrap">
+    <div class="resultado-badge badge-bad">
+      <ion-icon name="paw"></ion-icon>
+    </div>
+    <h2 class="resultado-title">Aún no hay contenido</h2>
+    <p class="resultado-score">Esta lección todavía no tiene señas cargadas.</p>
+    <ion-button expand="block" class="btn-fox" (click)="volverAlHome()">Volver al inicio</ion-button>
   </div>
 
   <!-- FASE ESTUDIO -->
-  <div *ngIf="fase === 'estudio'" class="ion-padding ion-text-center">
-    <p>{{ indiceEstudio + 1 }} / {{ senas.length }}</p>
+  <ng-container *ngIf="fase === 'estudio'">
+    <div class="practica-hud">
+      <button class="icon-btn" (click)="volverAlHome()" aria-label="Volver">
+        <ion-icon name="arrow-back"></ion-icon>
+      </button>
+      <div class="hud-track">
+        <div class="hud-fill" [style.width.%]="progresoEstudio"></div>
+      </div>
+      <span class="hud-count">{{ indiceEstudio + 1 }}/{{ senas.length }}</span>
+    </div>
 
-    <img *ngIf="senaEstudioActual.video_url" [src]="senaEstudioActual.video_url" [alt]="senaEstudioActual.palabra" style="max-width: 250px; border-radius: 16px;" />
+    <div class="practica-body">
+      <div class="flash-card">
+        <div class="flash-media" *ngIf="senaEstudioActual.video_url">
+          <img [src]="senaEstudioActual.video_url" [alt]="senaEstudioActual.palabra" />
+        </div>
+        <div class="flash-media flash-media-empty" *ngIf="!senaEstudioActual.video_url">
+          <ion-icon name="paw"></ion-icon>
+        </div>
 
-    <h2>{{ senaEstudioActual.palabra }}</h2>
-    <p>{{ senaEstudioActual.descripcion }}</p>
+        <h2 class="flash-word">{{ senaEstudioActual.palabra }}</h2>
+        <p class="flash-desc">{{ senaEstudioActual.descripcion }}</p>
+      </div>
 
-    <ion-button expand="block" (click)="siguienteEnEstudio()">
-      {{ esUltimaEnEstudio ? 'Empezar quiz' : 'Siguiente' }}
-    </ion-button>
-  </div>
+      <ion-button expand="block" class="btn-fox" (click)="siguienteEnEstudio()">
+        {{ esUltimaEnEstudio ? 'Empezar quiz' : 'Siguiente' }}
+      </ion-button>
+    </div>
+  </ng-container>
 
   <!-- FASE QUIZ -->
-  <div *ngIf="fase === 'quiz'" class="ion-padding ion-text-center">
-    <p>Pregunta {{ indicePregunta + 1 }} / {{ preguntas.length }}</p>
+  <ng-container *ngIf="fase === 'quiz'">
+    <div class="practica-hud">
+      <button class="icon-btn" (click)="volverAlHome()" aria-label="Salir">
+        <ion-icon name="arrow-back"></ion-icon>
+      </button>
+      <div class="hud-track">
+        <div class="hud-fill hud-fill-quiz" [style.width.%]="progresoQuiz"></div>
+      </div>
+      <span class="hud-count">{{ indicePregunta + 1 }}/{{ preguntas.length }}</span>
+    </div>
 
-    <img *ngIf="preguntaActual.senaCorrecta.video_url" [src]="preguntaActual.senaCorrecta.video_url" [alt]="preguntaActual.senaCorrecta.palabra" style="max-width: 250px; border-radius: 16px;" />
+    <div class="practica-body">
+      <div class="flash-card flash-card-quiz">
+        <div class="flash-media" *ngIf="preguntaActual.senaCorrecta.video_url">
+          <img [src]="preguntaActual.senaCorrecta.video_url" [alt]="preguntaActual.senaCorrecta.palabra" />
+        </div>
+        <div class="flash-media flash-media-empty" *ngIf="!preguntaActual.senaCorrecta.video_url">
+          <ion-icon name="paw"></ion-icon>
+        </div>
 
-    <h3>¿Qué seña es esta?</h3>
+        <h3 class="quiz-question">¿Qué seña es esta?</h3>
+      </div>
 
-    <ion-list>
-      <ion-item
-        *ngFor="let opcion of preguntaActual.opciones"
-        button
-        [disabled]="mostrarFeedback"
-        (click)="elegirOpcion(opcion)"
-        [color]="mostrarFeedback && opcion === preguntaActual.senaCorrecta.palabra ? 'success' :
-                 (mostrarFeedback && opcion === opcionSeleccionada ? 'danger' : undefined)">
-        {{ opcion }}
-      </ion-item>
-    </ion-list>
+      <div class="opt-list">
+        <button
+          class="opt-btn"
+          *ngFor="let opcion of preguntaActual.opciones"
+          [disabled]="mostrarFeedback"
+          (click)="elegirOpcion(opcion)"
+          [class.opt-correct]="mostrarFeedback && opcion === preguntaActual.senaCorrecta.palabra"
+          [class.opt-incorrect]="mostrarFeedback && opcion === opcionSeleccionada && !respuestaCorrecta">
 
-    <ion-button *ngIf="mostrarFeedback" expand="block" (click)="siguientePregunta()">
-      Continuar
-    </ion-button>
-  </div>
+          <span>{{ opcion }}</span>
+
+          <ion-icon
+            *ngIf="mostrarFeedback && opcion === preguntaActual.senaCorrecta.palabra"
+            name="checkmark-circle">
+          </ion-icon>
+          <ion-icon
+            *ngIf="mostrarFeedback && opcion === opcionSeleccionada && !respuestaCorrecta"
+            name="close-circle">
+          </ion-icon>
+        </button>
+      </div>
+
+      <div class="feedback-banner" *ngIf="mostrarFeedback" [class.feedback-ok]="respuestaCorrecta" [class.feedback-bad]="!respuestaCorrecta">
+        <ion-icon [name]="respuestaCorrecta ? 'checkmark-circle' : 'close-circle'"></ion-icon>
+        <span>{{ respuestaCorrecta ? '¡Correcto!' : 'No era esa, ¡sigue intentando!' }}</span>
+      </div>
+
+      <ion-button *ngIf="mostrarFeedback" expand="block" class="btn-fox" (click)="siguientePregunta()">
+        Continuar
+      </ion-button>
+    </div>
+  </ng-container>
 
   <!-- FASE RESULTADO -->
-  <div *ngIf="fase === 'resultado'" class="ion-padding ion-text-center">
-    <h2>{{ aprobado ? '¡Lección completada!' : 'Casi lo logras' }}</h2>
-    <p>{{ aciertos }} / {{ preguntas.length }} correctas ({{ porcentajeFinal }}%)</p>
-    <p *ngIf="!aprobado">Necesitas 70% para aprobar. ¡Inténtalo de nuevo!</p>
+  <div *ngIf="fase === 'resultado'" class="resultado-wrap">
+    <div class="resultado-badge" [class.badge-ok]="aprobado" [class.badge-bad]="!aprobado">
+      <ion-icon [name]="aprobado ? 'trophy' : 'sad-outline'"></ion-icon>
+    </div>
 
-    <ion-button expand="block" (click)="volverAlHome()">Volver al inicio</ion-button>
+    <h2 class="resultado-title">{{ aprobado ? '¡Lección completada!' : 'Casi lo logras' }}</h2>
+    <p class="resultado-score">{{ aciertos }} / {{ preguntas.length }} correctas · {{ porcentajeFinal }}%</p>
+    <p class="resultado-hint" *ngIf="!aprobado">Necesitas 70% para aprobar. ¡Inténtalo de nuevo!</p>
+
+    <ion-button *ngIf="!aprobado" expand="block" class="btn-fox" (click)="reintentar()">Reintentar</ion-button>
+
+    <ion-button *ngIf="aprobado" expand="block" class="btn-fox" (click)="volverAlHome()">Volver al inicio</ion-button>
+    <ion-button *ngIf="!aprobado" expand="block" fill="outline" class="btn-secundario" (click)="volverAlHome()">Volver al inicio</ion-button>
   </div>
 
 </ion-content>

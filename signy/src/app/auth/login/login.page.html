@@ -4,10 +4,11 @@
       <!-- Inyección directa del asset para la vista de login -->
       <img src="assets/img/login.png" alt="Mascota Signy Login" class="auth-mascot" />
       <h1>¡Hola de nuevo!</h1>
-      <p>Inicia sesión para seguir aprendiendo LSCh</p>
+      <p *ngIf="!pidiendoCodigoMfa">Inicia sesión para seguir aprendiendo LSCh</p>
+      <p *ngIf="pidiendoCodigoMfa">Ingresa el código de tu app autenticadora</p>
     </div>
 
-    <form [formGroup]="form" (ngSubmit)="iniciarSesion()" autocomplete="off" class="auth-form">
+    <form *ngIf="!pidiendoCodigoMfa" [formGroup]="form" (ngSubmit)="iniciarSesion()" autocomplete="off" class="auth-form">
 
       <ion-input
         label="Email"
@@ -43,9 +44,39 @@
         <span *ngIf="!cargando">Iniciar sesión</span>
       </ion-button>
 
+      <ion-button expand="block" fill="clear" type="button" (click)="irARecuperar()" class="btn-link">
+        ¿Olvidaste tu contraseña?
+      </ion-button>
+
       <ion-button expand="block" fill="clear" type="button" (click)="irARegistro()" class="btn-link">
         ¿No tienes cuenta? &nbsp;<strong>Regístrate</strong>
       </ion-button>
     </form>
+
+    <!-- Paso 2: verificación en dos pasos -->
+    <div *ngIf="pidiendoCodigoMfa" class="auth-form">
+      <ion-input
+        label="Código de 6 dígitos"
+        labelPlacement="floating"
+        fill="outline"
+        inputmode="numeric"
+        maxlength="6"
+        [(ngModel)]="codigoMfa"
+        class="signy-input">
+      </ion-input>
+
+      <ion-text class="form-error" *ngIf="errorMsg">
+        <p>{{ errorMsg }}</p>
+      </ion-text>
+
+      <ion-button expand="block" [disabled]="cargando || codigoMfa.length !== 6" class="btn-fox" (click)="verificarCodigoMfa()">
+        <ion-spinner *ngIf="cargando" name="dots"></ion-spinner>
+        <span *ngIf="!cargando">Verificar</span>
+      </ion-button>
+
+      <ion-button expand="block" fill="clear" type="button" (click)="cancelarMfa()" class="btn-link">
+        Cancelar
+      </ion-button>
+    </div>
   </div>
 </ion-content>

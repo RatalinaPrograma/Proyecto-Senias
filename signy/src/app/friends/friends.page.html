@@ -1,0 +1,104 @@
+<ion-content [fullscreen]="true" class="signy-content">
+
+  <div class="friends-topbar">
+    <button class="icon-btn" (click)="volver()" aria-label="Volver">
+      <ion-icon name="arrow-back"></ion-icon>
+    </button>
+    <h1>Amigos</h1>
+    <div class="spacer"></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab" [class.active]="tab === 'buscar'" (click)="cambiarTab('buscar')">Buscar</button>
+    <button class="tab" [class.active]="tab === 'seguidores'" (click)="cambiarTab('seguidores')">Seguidores</button>
+    <button class="tab" [class.active]="tab === 'seguidos'" (click)="cambiarTab('seguidos')">Seguidos</button>
+  </div>
+
+  <!-- ===== BUSCAR ===== -->
+  <div class="tab-body" *ngIf="tab === 'buscar'">
+    <div class="search-box">
+      <ion-icon name="search"></ion-icon>
+      <input
+        type="text"
+        placeholder="Busca por nombre o usuario"
+        [(ngModel)]="query"
+        (ngModelChange)="onBuscarInput()" />
+    </div>
+
+    <div *ngIf="buscando" class="ion-text-center ion-padding">
+      <ion-spinner name="dots"></ion-spinner>
+    </div>
+
+    <p class="empty-hint" *ngIf="!buscando && query && resultadosBusqueda.length === 0">
+      No encontramos a nadie con "{{ query }}"
+    </p>
+
+    <div class="person-row" *ngFor="let persona of resultadosBusqueda">
+      <div class="person-avatar">
+        <img *ngIf="persona.avatar_url" [src]="persona.avatar_url" [alt]="persona.full_name || ''" />
+        <ion-icon *ngIf="!persona.avatar_url" name="paw"></ion-icon>
+      </div>
+      <div class="person-info">
+        <p class="person-name">{{ persona.full_name || 'Usuario Signy' }}</p>
+        <p class="person-username" *ngIf="persona.username">&#64;{{ persona.username }}</p>
+      </div>
+      <button class="follow-btn" [class.following]="loSigo(persona.id)" (click)="toggleSeguir(persona)">
+        <ion-icon [name]="loSigo(persona.id) ? 'checkmark-circle' : 'person-add'"></ion-icon>
+        {{ loSigo(persona.id) ? 'Siguiendo' : 'Seguir' }}
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== SEGUIDORES ===== -->
+  <div class="tab-body" *ngIf="tab === 'seguidores'">
+    <div *ngIf="cargandoListas" class="ion-text-center ion-padding">
+      <ion-spinner name="dots"></ion-spinner>
+    </div>
+
+    <p class="empty-hint" *ngIf="!cargandoListas && seguidores.length === 0">
+      Todavía no tienes seguidores. ¡Comparte tu usuario con tus amigos!
+    </p>
+
+    <div class="person-row" *ngFor="let persona of seguidores">
+      <div class="person-avatar">
+        <img *ngIf="persona.avatar_url" [src]="persona.avatar_url" [alt]="persona.full_name || ''" />
+        <ion-icon *ngIf="!persona.avatar_url" name="paw"></ion-icon>
+      </div>
+      <div class="person-info">
+        <p class="person-name">{{ persona.full_name || 'Usuario Signy' }}</p>
+        <p class="person-username" *ngIf="persona.username">&#64;{{ persona.username }}</p>
+      </div>
+      <button class="follow-btn" [class.following]="loSigo(persona.id)" (click)="toggleSeguir(persona)">
+        <ion-icon [name]="loSigo(persona.id) ? 'checkmark-circle' : 'person-add'"></ion-icon>
+        {{ loSigo(persona.id) ? 'Siguiendo' : 'Seguir de vuelta' }}
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== SEGUIDOS ===== -->
+  <div class="tab-body" *ngIf="tab === 'seguidos'">
+    <div *ngIf="cargandoListas" class="ion-text-center ion-padding">
+      <ion-spinner name="dots"></ion-spinner>
+    </div>
+
+    <p class="empty-hint" *ngIf="!cargandoListas && seguidos.length === 0">
+      Aún no sigues a nadie. Búscalos en la pestaña "Buscar".
+    </p>
+
+    <div class="person-row" *ngFor="let persona of seguidos">
+      <div class="person-avatar">
+        <img *ngIf="persona.avatar_url" [src]="persona.avatar_url" [alt]="persona.full_name || ''" />
+        <ion-icon *ngIf="!persona.avatar_url" name="paw"></ion-icon>
+      </div>
+      <div class="person-info">
+        <p class="person-name">{{ persona.full_name || 'Usuario Signy' }}</p>
+        <p class="person-username" *ngIf="persona.username">&#64;{{ persona.username }}</p>
+      </div>
+      <button class="follow-btn following" (click)="toggleSeguir(persona)">
+        <ion-icon name="checkmark-circle"></ion-icon>
+        Dejar de seguir
+      </button>
+    </div>
+  </div>
+
+</ion-content>

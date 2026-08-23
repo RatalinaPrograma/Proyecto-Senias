@@ -1,0 +1,72 @@
+<ion-content [fullscreen]="true" class="signy-content">
+
+  <div class="profile-topbar">
+    <button class="icon-btn" (click)="volver()" aria-label="Volver">
+      <ion-icon name="close"></ion-icon>
+    </button>
+    <button class="icon-btn" (click)="irAConfiguracion()" aria-label="Configuración">
+      <ion-icon name="settings-outline"></ion-icon>
+    </button>
+  </div>
+
+  <div *ngIf="cargando" class="ion-text-center ion-padding">
+    <ion-spinner name="dots"></ion-spinner>
+  </div>
+
+  <ng-container *ngIf="!cargando && perfil">
+    <div class="profile-header">
+      <div class="avatar-wrap">
+        <img *ngIf="perfil.avatar_url" [src]="perfil.avatar_url" [alt]="perfil.full_name || 'Avatar'" />
+        <ion-icon *ngIf="!perfil.avatar_url" name="paw"></ion-icon>
+      </div>
+
+      <h1 class="profile-name">{{ perfil.full_name || 'Usuario Signy' }}</h1>
+      <p class="profile-username" *ngIf="perfil.username">&#64;{{ perfil.username }}</p>
+      <p class="profile-username profile-username-empty" *ngIf="!perfil.username" (click)="irAConfiguracion()">
+        Agrega un nombre de usuario
+      </p>
+    </div>
+
+    <div class="profile-stats">
+      <div class="stat-box">
+        <ion-icon name="flame"></ion-icon>
+        <strong>{{ stats?.racha_actual ?? 0 }}</strong>
+        <span>racha</span>
+      </div>
+      <div class="stat-box">
+        <ion-icon name="star"></ion-icon>
+        <strong>{{ stats?.puntos_experiencia ?? 0 }}</strong>
+        <span>puntos</span>
+      </div>
+    </div>
+
+    <div class="follow-row">
+      <button class="follow-box" (click)="irASeguidores()">
+        <strong>{{ seguidores }}</strong>
+        <span>Seguidores</span>
+      </button>
+      <button class="follow-box" (click)="irASeguidos()">
+        <strong>{{ seguidos }}</strong>
+        <span>Seguidos</span>
+      </button>
+    </div>
+
+    <div class="profile-actions">
+      <ion-button expand="block" class="btn-fox" (click)="irABuscarAmigos()">
+        <ion-icon slot="start" name="person-add-outline"></ion-icon>
+        Buscar amigos
+      </ion-button>
+
+      <ion-button expand="block" fill="outline" class="btn-outline" (click)="irAConfiguracion()">
+        <ion-icon slot="start" name="settings-outline"></ion-icon>
+        Configuración
+      </ion-button>
+
+      <ion-button expand="block" fill="clear" class="btn-link" (click)="cerrarSesion()">
+        <ion-icon slot="start" name="log-out-outline"></ion-icon>
+        Cerrar sesión
+      </ion-button>
+    </div>
+  </ng-container>
+
+</ion-content>

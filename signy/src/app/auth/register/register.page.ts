@@ -61,6 +61,12 @@ export class RegisterPage implements OnDestroy {
       return;
     }
 
+    // Se crea de una vez la fila en "profiles" para que el usuario pueda
+    // aparecer en búsquedas de amigos desde el primer momento.
+    if (data.user) {
+      await this.supabaseService.upsertProfile({ id: data.user.id, full_name: fullName! });
+    }
+
     console.log('Registro exitoso:', data);
     this.exito = true;
     this.form.reset();

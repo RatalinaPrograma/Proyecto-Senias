@@ -1,0 +1,207 @@
+<ion-content [fullscreen]="true" class="signy-content">
+
+  <!-- ===== CARGANDO ===== -->
+  <div class="empty-state" *ngIf="fase === 'cargando'">
+    <ion-spinner name="dots"></ion-spinner>
+    <p>Cargando lección…</p>
+  </div>
+
+  <!-- ===== ERROR ===== -->
+  <div class="empty-state" *ngIf="fase === 'error'">
+    <span class="cam-emoji">😕</span>
+    <h2>No se pudo abrir</h2>
+    <p>{{ errorMsg }}</p>
+    <ion-button class="btn-fox" expand="block" (click)="salir()">Volver al camino</ion-button>
+  </div>
+
+  <!-- ===== SIN VIDAS ===== -->
+  <div class="empty-state" *ngIf="fase === 'sinvidas'">
+    <img src="assets/img/login.png" alt="Signy" class="sad-fox" />
+    <h2>¡Sin vidas!</h2>
+    <p *ngIf="minutosParaVida > 0">Recuperas una vida en {{ minutosParaVida }} min. Vuelve más tarde.</p>
+    <p *ngIf="minutosParaVida <= 0">Ya deberías tener vidas nuevas — vuelve a intentarlo.</p>
+    <ion-button class="btn-fox" expand="block" (click)="salir()">Volver al camino</ion-button>
+  </div>
+
+  <ng-container *ngIf="fase !== 'cargando' && fase !== 'error' && fase !== 'sinvidas' && fase !== 'complete'">
+    <div class="lesson-topbar">
+      <button class="icon-btn" (click)="salir()"><ion-icon name="close"></ion-icon></button>
+
+      <div class="phase-track" *ngIf="fase !== 'quiz'">
+        <div class="phase-dot" [class.active]="true"></div>
+        <div class="phase-dot" [class.active]="fase === 'match' || fase === 'record'"></div>
+        <div class="phase-dot" [class.active]="fase === 'record'"></div>
+        <div class="phase-dot" [class.active]="fase === 'record'"></div>
+      </div>
+
+      <div class="quiz-progress" *ngIf="fase === 'quiz'">
+        <div class="quiz-progress-fill" [style.width.%]="progresoPct" [style.background]="nivel.color || 'var(--signy-fox)'"></div>
+      </div>
+
+      <div class="hearts" *ngIf="fase === 'quiz'">
+        <ion-icon name="heart"></ion-icon>
+        <span>{{ vidas }}</span>
+      </div>
+    </div>
+
+    <!-- ===== FLASHCARDS ===== -->
+    <div class="phase-body" *ngIf="fase === 'flash'">
+      <p class="eyebrow">FLASHCARDS · {{ flashIndex + 1 }}/{{ senas.length }}</p>
+
+      <button class="flash-card" [style.background]="nivel.color || 'var(--signy-fox)'" [style.boxShadow]="'0 5px 0 ' + (nivel.color_oscuro || 'var(--signy-fox-deep)')" (click)="voltear()">
+        <ng-container *ngIf="!flipped">
+          <div class="flash-icon-wrap" *ngIf="!senas[flashIndex].video_url">
+            <app-sena-icon [seed]="nivel.id * 10 + flashIndex" [size]="80" color="#fff" dark="rgba(0,0,0,0.2)"></app-sena-icon>
+          </div>
+          <img *ngIf="senas[flashIndex].video_url" [src]="senas[flashIndex].video_url" [alt]="senas[flashIndex].palabra" class="real-media" />
+        </ng-container>
+        <div class="flash-word" *ngIf="flipped">{{ senas[flashIndex].palabra }}</div>
+        <span class="flash-hint">toca para {{ flipped ? 'ver la seña' : 'revelar la palabra' }}</span>
+      </button>
+
+      <ion-button expand="block" class="btn-fox" (click)="siguienteFlash()">
+        {{ flashIndex + 1 >= senas.length ? 'Ir a emparejar' : 'Siguiente' }}
+      </ion-button>
+    </div>
+
+    <!-- ===== MATCH ===== -->
+    <div class="phase-body" *ngIf="fase === 'match'">
+      <p class="eyebrow">UNE CADA SEÑA CON SU PALABRA</p>
+
+      <div class="match-grid">
+        <button
+          *ngFor="let m of manos"
+          class="match-tile"
+          [disabled]="emparejados.includes(m.palabra)"
+          [class.matched]="emparejados.includes(m.palabra)"
+          [class.selected]="selMano === m && !matchMal"
+          [class.wrong]="selMano === m && matchMal"
+          (click)="elegirMano(m)">
+          <app-sena-icon [seed]="m.seed" [size]="36" [color]="nivel.color || '#F2701A'" [dark]="nivel.color_oscuro || '#C6560E'"></app-sena-icon>
+        </button>
+      </div>
+
+      <div class="match-grid">
+        <button
+          *ngFor="let p of palabrasMezcladas"
+          class="match-tile match-word"
+          [disabled]="emparejados.includes(p.palabra)"
+          [class.matched]="emparejados.includes(p.palabra)"
+          [class.selected]="selPalabra === p.palabra && !matchMal"
+          [class.wrong]="selPalabra === p.palabra && matchMal"
+          (click)="elegirPalabra(p.palabra)">
+          {{ p.palabra }}
+        </button>
+      </div>
+
+      <ion-button expand="block" class="btn-fox" *ngIf="matchCompleto" (click)="irAQuiz()">
+        Ir a las preguntas
+      </ion-button>
+    </div>
+
+    <!-- ===== QUIZ ===== -->
+    <div class="phase-body" *ngIf="fase === 'quiz'">
+      <p class="eyebrow" *ngIf="!modoRepaso">¿QUÉ SIGNIFICA ESTA SEÑA?</p>
+      <p class="eyebrow eyebrow-repaso" *ngIf="modoRepaso">REPASO · {{ qi + 1 }}/{{ preguntas.length }} · respóndela bien para avanzar</p>
+
+      <div class="quiz-card" [style.background]="nivel.color || 'var(--signy-fox)'" [style.boxShadow]="'0 5px 0 ' + (nivel.color_oscuro || 'var(--signy-fox-deep)')">
+        <div class="quiz-icon-wrap" *ngIf="!preguntaActual.videoUrl">
+          <app-sena-icon [seed]="preguntaActual.seed" [size]="90" color="#fff" dark="rgba(0,0,0,0.2)"></app-sena-icon>
+        </div>
+        <img *ngIf="preguntaActual.videoUrl" [src]="preguntaActual.videoUrl" [alt]="preguntaActual.palabra" class="real-media" />
+        <span class="quiz-hint">{{ preguntaActual.videoUrl ? 'seña real' : 'video de referencia (demo)' }}</span>
+      </div>
+
+      <div class="quiz-options">
+        <button
+          *ngFor="let opt of preguntaActual.opciones"
+          class="quiz-option"
+          [class.ok]="estado && opt === preguntaActual.palabra"
+          [class.bad]="estado === 'incorrecto' && seleccionada === opt"
+          (click)="elegirOpcion(opt)">
+          {{ opt }}
+        </button>
+      </div>
+    </div>
+
+    <div class="feedback-bar" *ngIf="fase === 'quiz' && estado">
+      <div [class.ok]="estado === 'correcto'" [class.bad]="estado === 'incorrecto'" class="feedback-box">
+        <div class="feedback-text">
+          <strong>{{ estado === 'correcto' ? '¡Bacán, correcto!' : (modoRepaso ? 'Esa no era, ¡de nuevo!' : 'Sigue así') }}</strong>
+          <p *ngIf="estado === 'incorrecto'">Era: {{ preguntaActual.palabra }}</p>
+        </div>
+        <ion-button class="btn-continue" [class.ok]="estado === 'correcto'" [class.bad]="estado === 'incorrecto'" (click)="siguientePregunta()">
+          {{ modoRepaso && estado === 'incorrecto' ? 'Intentar de nuevo' : 'Continuar' }}
+        </ion-button>
+      </div>
+    </div>
+
+    <!-- ===== CÁMARA ===== -->
+    <div class="phase-body" *ngIf="fase === 'record'">
+      <p class="eyebrow">PRÁCTICA CON CÁMARA</p>
+
+      <div class="cam-frame">
+        <div class="cam-idle" *ngIf="camStage === 'idle'">
+          <app-sena-icon [seed]="7" [size]="70" [color]="nivel.color || '#F2701A'" [dark]="nivel.color_oscuro || '#C6560E'"></app-sena-icon>
+          <h3>Haz la seña de:</h3>
+          <p class="cam-word" [style.color]="nivel.color || '#F2701A'">{{ senaCamara.palabra }}</p>
+          <ion-button class="btn-fox" (click)="iniciarCamara()">
+            <ion-icon name="camera" slot="start"></ion-icon> Activar cámara
+          </ion-button>
+          <button class="skip-link" (click)="saltarCamara()">Omitir por ahora</button>
+        </div>
+
+        <div class="cam-msg" *ngIf="camStage === 'requesting'">Pidiendo acceso a tu cámara…</div>
+
+        <div class="cam-idle" *ngIf="camStage === 'denied'">
+          <span class="cam-emoji">🚫</span>
+          <h3>No pudimos acceder a tu cámara</h3>
+          <p class="cam-sub">Revisa los permisos de cámara del navegador o el dispositivo.</p>
+          <ion-button class="btn-fox" (click)="saltarCamara()">Continuar sin cámara</ion-button>
+        </div>
+
+        <div class="cam-video-wrap" [class.hidden]="camStage !== 'countdown' && camStage !== 'recording'">
+          <video #video muted playsinline class="cam-video"></video>
+          <div class="cam-oval" [class.recording]="camStage === 'recording'"></div>
+          <div class="cam-overlay" *ngIf="camStage === 'countdown'">
+            <span>{{ camCount }}</span>
+          </div>
+          <div class="cam-rec-badge" *ngIf="camStage === 'recording'">
+            <span class="dot"></span> Grabando
+          </div>
+        </div>
+
+        <div class="cam-idle" *ngIf="camStage === 'result'">
+          <span class="cam-emoji">{{ camPassed ? '✅' : '🤔' }}</span>
+          <h3>{{ camMsg }}</h3>
+          <p class="cam-sub">Nivel de movimiento detectado: {{ camScore }}%</p>
+          <div class="cam-result-actions">
+            <ion-button fill="outline" (click)="reintentarCamara()">Reintentar</ion-button>
+            <ion-button class="btn-fox" (click)="confirmarCamara()">Continuar</ion-button>
+          </div>
+        </div>
+
+        <canvas #canvas class="hidden"></canvas>
+      </div>
+
+      <p class="cam-footnote">
+        Beta: por ahora medimos movimiento en cámara. El módulo final usará MediaPipe Hands para validar la postura exacta (senas.landmarks_referencia ya está listo para eso).
+      </p>
+    </div>
+  </ng-container>
+
+  <!-- ===== LECCIÓN COMPLETA ===== -->
+  <div class="empty-state" *ngIf="fase === 'complete'">
+    <img src="assets/img/login.png" alt="Signy" class="happy-fox" />
+    <h2>¡Lección superada!</h2>
+    <p>Cachai cada vez más señas. Sigue la racha 🔥</p>
+    <div class="complete-stats">
+      <div class="complete-stat">
+        <strong>+{{ xpGanado }}</strong>
+        <span>PUNTOS XP</span>
+      </div>
+    </div>
+    <ion-button class="btn-fox" expand="block" (click)="salir()">Continuar</ion-button>
+  </div>
+
+</ion-content>

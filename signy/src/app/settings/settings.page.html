@@ -1,0 +1,206 @@
+<ion-content [fullscreen]="true" class="signy-content">
+
+  <div class="settings-topbar">
+    <button class="icon-btn" (click)="volver()" aria-label="Volver">
+      <ion-icon name="arrow-back"></ion-icon>
+    </button>
+    <h1>Configuración</h1>
+    <div class="spacer"></div>
+  </div>
+
+  <div *ngIf="cargando" class="ion-text-center ion-padding">
+    <ion-spinner name="dots"></ion-spinner>
+  </div>
+
+  <div class="settings-body" *ngIf="!cargando">
+
+    <!-- ===== EDITAR PERFIL ===== -->
+    <section class="card-section">
+      <h2>Tu perfil</h2>
+
+      <div class="avatar-edit">
+        <div class="avatar-wrap">
+          <img *ngIf="avatarUrlActual" [src]="avatarUrlActual" alt="Avatar" />
+          <ion-icon *ngIf="!avatarUrlActual" name="paw"></ion-icon>
+        </div>
+        <label class="avatar-btn">
+          <ion-icon name="camera-outline"></ion-icon>
+          {{ subiendoAvatar ? 'Subiendo…' : 'Cambiar foto' }}
+          <input type="file" accept="image/*" (change)="subirAvatar($event)" [disabled]="subiendoAvatar" hidden />
+        </label>
+      </div>
+
+      <form [formGroup]="formPerfil" (ngSubmit)="guardarPerfil()">
+        <ion-input
+          label="Nombre completo"
+          labelPlacement="floating"
+          fill="outline"
+          formControlName="full_name"
+          class="signy-input">
+        </ion-input>
+
+        <ion-input
+          label="Nombre de usuario"
+          labelPlacement="floating"
+          fill="outline"
+          placeholder="sin espacios, minúsculas"
+          formControlName="username"
+          class="signy-input">
+        </ion-input>
+
+        <ion-text class="form-error" *ngIf="errorPerfil"><p>{{ errorPerfil }}</p></ion-text>
+        <ion-text class="form-success" *ngIf="exitoPerfil"><p>Perfil actualizado</p></ion-text>
+
+        <ion-button expand="block" type="submit" [disabled]="guardandoPerfil" class="btn-fox">
+          <ion-spinner *ngIf="guardandoPerfil" name="dots"></ion-spinner>
+          <span *ngIf="!guardandoPerfil">Guardar perfil</span>
+        </ion-button>
+      </form>
+    </section>
+
+    <!-- ===== CAMBIAR CONTRASEÑA ===== -->
+    <section class="card-section">
+      <h2>Cambiar contraseña</h2>
+
+      <form [formGroup]="formPassword" (ngSubmit)="cambiarPassword()">
+        <ion-input
+          label="Contraseña actual"
+          labelPlacement="floating"
+          fill="outline"
+          type="password"
+          formControlName="currentPassword"
+          class="signy-input">
+        </ion-input>
+
+        <ion-input
+          label="Contraseña nueva"
+          labelPlacement="floating"
+          fill="outline"
+          type="password"
+          formControlName="newPassword"
+          class="signy-input">
+        </ion-input>
+        <ion-text class="field-error" *ngIf="formPassword.get('newPassword')?.touched && formPassword.get('newPassword')?.invalid">
+          <p *ngIf="formPassword.get('newPassword')?.errors?.['minlength']">Mínimo 8 caracteres</p>
+          <p *ngIf="formPassword.get('newPassword')?.errors?.['sinMayuscula']">Necesita al menos una mayúscula</p>
+          <p *ngIf="formPassword.get('newPassword')?.errors?.['sinNumero']">Necesita al menos un número</p>
+        </ion-text>
+
+        <ion-input
+          label="Confirma la contraseña nueva"
+          labelPlacement="floating"
+          fill="outline"
+          type="password"
+          formControlName="confirmPassword"
+          class="signy-input">
+        </ion-input>
+        <ion-text class="field-error" *ngIf="formPassword.errors?.['passwordsNoCoinciden'] && formPassword.get('confirmPassword')?.touched">
+          <p>Las contraseñas no coinciden</p>
+        </ion-text>
+
+        <ion-text class="form-error" *ngIf="errorPassword"><p>{{ errorPassword }}</p></ion-text>
+        <ion-text class="form-success" *ngIf="exitoPassword"><p>Contraseña actualizada</p></ion-text>
+
+        <ion-button expand="block" type="submit" [disabled]="cambiandoPassword" class="btn-fox">
+          <ion-spinner *ngIf="cambiandoPassword" name="dots"></ion-spinner>
+          <span *ngIf="!cambiandoPassword">Cambiar contraseña</span>
+        </ion-button>
+      </form>
+    </section>
+
+    <!-- ===== 2FA ===== -->
+    <section class="card-section">
+      <h2><ion-icon name="shield-checkmark"></ion-icon> Verificación en dos pasos</h2>
+
+      <ng-container *ngIf="!inscribiendoMfa">
+        <p class="section-hint" *ngIf="!mfaActivado">
+          Agrega una capa extra de seguridad: además de tu contraseña, se pedirá un código de tu app autenticadora (Google Authenticator, Authy, etc.) al iniciar sesión.
+        </p>
+        <p class="section-hint" *ngIf="mfaActivado">
+          La verificación en dos pasos está <strong>activada</strong> en tu cuenta.
+        </p>
+
+        <ion-text class="form-error" *ngIf="errorMfa"><p>{{ errorMfa }}</p></ion-text>
+
+        <ion-button *ngIf="!mfaActivado" expand="block" class="btn-fox" [disabled]="cargandoMfa" (click)="iniciarActivacionMfa()">
+          <ion-spinner *ngIf="cargandoMfa" name="dots"></ion-spinner>
+          <span *ngIf="!cargandoMfa">Activar verificación en dos pasos</span>
+        </ion-button>
+
+        <ion-button *ngIf="mfaActivado" expand="block" fill="outline" class="btn-outline-danger" [disabled]="cargandoMfa" (click)="desactivarMfa()">
+          Desactivar
+        </ion-button>
+      </ng-container>
+
+      <!-- Paso de inscripción: escanear QR + confirmar código -->
+      <div class="mfa-enroll" *ngIf="inscribiendoMfa">
+        <p class="section-hint">Escanea este código con tu app autenticadora:</p>
+
+        <div class="qr-wrap">
+          <img *ngIf="qrCode" [src]="qrCode" alt="Código QR para 2FA" />
+        </div>
+
+        <p class="section-hint" *ngIf="secretoManual">
+          ¿No puedes escanear? Ingresa este código manualmente:<br />
+          <code>{{ secretoManual }}</code>
+        </p>
+
+        <ion-input
+          label="Código de 6 dígitos"
+          labelPlacement="floating"
+          fill="outline"
+          inputmode="numeric"
+          maxlength="6"
+          [(ngModel)]="codigoMfa"
+          class="signy-input">
+        </ion-input>
+
+        <ion-text class="form-error" *ngIf="errorMfa"><p>{{ errorMfa }}</p></ion-text>
+
+        <ion-button expand="block" class="btn-fox" [disabled]="cargandoMfa || codigoMfa.length !== 6" (click)="confirmarActivacionMfa()">
+          <ion-spinner *ngIf="cargandoMfa" name="dots"></ion-spinner>
+          <span *ngIf="!cargandoMfa">Confirmar y activar</span>
+        </ion-button>
+
+        <ion-button expand="block" fill="clear" class="btn-link" (click)="cancelarActivacionMfa()">
+          Cancelar
+        </ion-button>
+      </div>
+    </section>
+
+    <!-- ===== ELIMINAR CUENTA ===== -->
+    <section class="card-section card-danger">
+      <h2>Eliminar cuenta</h2>
+      <p class="section-hint">
+        Esto borra tu cuenta y todo tu progreso de forma permanente. No se puede deshacer.
+      </p>
+
+      <ion-button *ngIf="!confirmandoEliminar" expand="block" fill="outline" class="btn-outline-danger" (click)="confirmandoEliminar = true">
+        <ion-icon slot="start" name="trash-outline"></ion-icon>
+        Eliminar mi cuenta
+      </ion-button>
+
+      <div *ngIf="confirmandoEliminar" class="confirm-delete">
+        <p class="section-hint">Escribe <strong>ELIMINAR</strong> para confirmar:</p>
+        <ion-input
+          fill="outline"
+          [(ngModel)]="textoConfirmacion"
+          class="signy-input">
+        </ion-input>
+
+        <ion-text class="form-error" *ngIf="errorEliminar"><p>{{ errorEliminar }}</p></ion-text>
+
+        <ion-button expand="block" class="btn-danger" [disabled]="!confirmacionValida || eliminandoCuenta" (click)="eliminarCuenta()">
+          <ion-spinner *ngIf="eliminandoCuenta" name="dots"></ion-spinner>
+          <span *ngIf="!eliminandoCuenta">Eliminar cuenta definitivamente</span>
+        </ion-button>
+
+        <ion-button expand="block" fill="clear" class="btn-link" (click)="confirmandoEliminar = false; textoConfirmacion = ''">
+          Cancelar
+        </ion-button>
+      </div>
+    </section>
+
+  </div>
+
+</ion-content>
