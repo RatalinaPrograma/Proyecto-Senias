@@ -84,24 +84,30 @@ export class SupabaseService {
     return this.supabase.auth.updateUser({ password: newPassword });
   }
 
-  // ---------- Recuperar contraseña con código por correo ----------
-  // Importante: en Supabase Dashboard → Authentication → Email Templates →
-  // "Reset Password", el template debe incluir {{ .Token }} (el código de
-  // 6 dígitos), no solo {{ .ConfirmationURL }}, para que esto funcione.
-  requestPasswordResetCode(email: string) {
-    return this.supabase.auth.resetPasswordForEmail(email);
+  // ---------- Recuperar contraseña con código por correo (EmailJS) ----------
+  // El código se genera, guarda y verifica en la Edge Function
+  // supabase/functions/password-reset, que también envía el correo vía la
+  // API de EmailJS y cambia la contraseña con la service role key.
+  async requestPasswordResetCode(email: string) {
+    const { error } = await this.supabase.functions.invoke('password-reset', {
+      body: { action: 'request', email },
+    });
+    return { error: await this.mensajeErrorFuncion(error) };
   }
 
   async confirmPasswordResetCode(email: string, code: string, newPassword: string) {
-    const { error: verifyError } = await this.supabase.auth.verifyOtp({
-      email,
-      token: code,
-      type: 'recovery',
+    const { error } = await this.supabase.functions.invoke('password-reset', {
+      body: { action: 'confirm', email, code, newPassword },
     });
-    if (verifyError) {
-      return { error: verifyError };
-    }
-    return this.supabase.auth.updateUser({ password: newPassword });
+    return { error: await this.mensajeErrorFuncion(error) };
+  }
+
+  /** Las Edge Functions devuelven { error: "mensaje" } en el body cuando fallan;
+   * invoke() solo da un mensaje genérico, así que hay que leer el body real. */
+  private async mensajeErrorFuncion(error: any) {
+    if (!error) return null;
+    const body = await error.context?.json?.().catch(() => null);
+    return { message: body?.error ?? error.message };
   }
 
   // ---------- Autenticación en dos pasos (TOTP) ----------
