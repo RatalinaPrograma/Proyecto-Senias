@@ -174,6 +174,34 @@
   height: 46px;
 }
 
+.btn-outline-mint {
+  --color: var(--signy-mint);
+  --border-color: var(--signy-mint);
+  --border-radius: 14px;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  height: 46px;
+}
+
+.tts-toggle-row {
+  --background: transparent;
+  --padding-start: 0;
+  --inner-padding-end: 0;
+  --border-color: transparent;
+  margin-bottom: 12px;
+
+  ion-label {
+    font-family: 'Manrope', sans-serif;
+    color: var(--signy-cream);
+    font-weight: 600;
+  }
+
+  ion-toggle {
+    --track-background-checked: var(--signy-mint);
+  }
+}
+
 .btn-danger {
   --background: var(--signy-error);
   --background-activated: #C33F2F;

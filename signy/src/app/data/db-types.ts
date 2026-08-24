@@ -101,6 +101,8 @@ export interface Profile {
   full_name: string | null;
   username: string | null;
   avatar_url: string | null;
+  tts_habilitado: boolean | null;
+  tts_voz: string | null;
   created_at: string | null;
 }
 

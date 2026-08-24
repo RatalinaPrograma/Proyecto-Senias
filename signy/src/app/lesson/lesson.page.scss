@@ -130,6 +130,25 @@
   margin-top: 14px;
 }
 
+.listen-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  background: transparent;
+  border: 1.5px solid var(--signy-mint);
+  border-radius: 14px;
+  color: var(--signy-mint);
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+
+  ion-icon { font-size: 18px; }
+}
+
 /* ---------- Match ---------- */
 .match-grid {
   display: grid;

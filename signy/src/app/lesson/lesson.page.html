@@ -59,6 +59,15 @@
         <span class="flash-hint">toca para {{ flipped ? 'ver la seña' : 'revelar la palabra' }}</span>
       </button>
 
+      <button
+        class="listen-btn"
+        *ngIf="flipped"
+        (click)="escucharPalabra()"
+        aria-label="Escuchar la palabra">
+        <ion-icon name="volume-high"></ion-icon>
+        Escuchar
+      </button>
+
       <ion-button expand="block" class="btn-fox" (click)="siguienteFlash()">
         {{ flashIndex + 1 >= senas.length ? 'Ir a emparejar' : 'Siguiente' }}
       </ion-button>
