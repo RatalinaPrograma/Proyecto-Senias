@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
 import { ContenidoService } from '../services/contenido';
 import { NivelConEstado, SubnivelConEstado, UserStats } from '../data/db-types';
+import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { addIcons } from 'ionicons';
 import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline, refresh } from 'ionicons/icons';
 
@@ -13,7 +14,7 @@ addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw, 'log-o
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule, IonicModule],
+  imports: [CommonModule, IonicModule, CachedSrcDirective],
   templateUrl: './home.page.html',
   styleUrls: ['./home.page.scss'],
 })

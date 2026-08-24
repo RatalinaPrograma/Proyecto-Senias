@@ -4,6 +4,7 @@ import { ReactiveFormsModule, FormsModule, FormBuilder, Validators } from '@angu
 import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../../services/supabase';
+import { CachedSrcDirective } from '../../shared/cached-src.directive';
 import { addIcons } from 'ionicons';
 import { paw } from 'ionicons/icons';
 
@@ -12,7 +13,7 @@ addIcons({ paw });
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, FormsModule, IonicModule],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, IonicModule, CachedSrcDirective],
   templateUrl: './login.page.html',
   styleUrls: ['./login.page.scss'],
 })

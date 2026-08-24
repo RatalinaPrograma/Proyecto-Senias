@@ -16,7 +16,7 @@
 
   <!-- ===== SIN VIDAS ===== -->
   <div class="empty-state" *ngIf="fase === 'sinvidas'">
-    <img src="assets/img/login.png" alt="Signy" class="sad-fox" />
+    <img [appCachedSrc]="'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="Signy" class="sad-fox" />
     <h2>¡Sin vidas!</h2>
     <p *ngIf="minutosParaVida > 0">Recuperas una vida en {{ minutosParaVida }} min. Vuelve más tarde.</p>
     <p *ngIf="minutosParaVida <= 0">Ya deberías tener vidas nuevas — vuelve a intentarlo.</p>
@@ -53,7 +53,7 @@
           <div class="flash-icon-wrap" *ngIf="!senas[flashIndex].video_url">
             <app-sena-icon [seed]="nivel.id * 10 + flashIndex" [size]="80" color="#fff" dark="rgba(0,0,0,0.2)"></app-sena-icon>
           </div>
-          <img *ngIf="senas[flashIndex].video_url" [src]="senas[flashIndex].video_url" [alt]="senas[flashIndex].palabra" class="real-media" />
+          <img *ngIf="senas[flashIndex].video_url" [appCachedSrc]="senas[flashIndex].video_url" [alt]="senas[flashIndex].palabra" class="real-media" />
         </ng-container>
         <div class="flash-word" *ngIf="flipped">{{ senas[flashIndex].palabra }}</div>
         <span class="flash-hint">toca para {{ flipped ? 'ver la seña' : 'revelar la palabra' }}</span>
@@ -117,7 +117,7 @@
         <div class="quiz-icon-wrap" *ngIf="!preguntaActual.videoUrl">
           <app-sena-icon [seed]="preguntaActual.seed" [size]="90" color="#fff" dark="rgba(0,0,0,0.2)"></app-sena-icon>
         </div>
-        <img *ngIf="preguntaActual.videoUrl" [src]="preguntaActual.videoUrl" [alt]="preguntaActual.palabra" class="real-media" />
+        <img *ngIf="preguntaActual.videoUrl" [appCachedSrc]="preguntaActual.videoUrl" [alt]="preguntaActual.palabra" class="real-media" />
         <span class="quiz-hint">{{ preguntaActual.videoUrl ? 'seña real' : 'video de referencia (demo)' }}</span>
       </div>
 
@@ -201,7 +201,7 @@
 
   <!-- ===== LECCIÓN COMPLETA ===== -->
   <div class="empty-state" *ngIf="fase === 'complete'">
-    <img src="assets/img/login.png" alt="Signy" class="happy-fox" />
+    <img [appCachedSrc]="'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="Signy" class="happy-fox" />
     <h2>¡Lección superada!</h2>
     <p>Cachai cada vez más señas. Sigue la racha 🔥</p>
     <div class="complete-stats">

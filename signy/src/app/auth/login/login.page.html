@@ -2,7 +2,7 @@
   <div class="auth-wrap">
     <div class="auth-header">
       <!-- Inyección directa del asset para la vista de login -->
-      <img src="assets/img/login.png" alt="Mascota Signy Login" class="auth-mascot" />
+      <img [appCachedSrc]="'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="Mascota Signy Login" class="auth-mascot" />
       <h1>¡Hola de nuevo!</h1>
       <p *ngIf="!pidiendoCodigoMfa">Inicia sesión para seguir aprendiendo LSCh</p>
       <p *ngIf="pidiendoCodigoMfa">Ingresa el código de tu app autenticadora</p>
