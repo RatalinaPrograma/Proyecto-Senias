@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
+import { CachedSrcDirective } from '../shared/cached-src.directive';
 
 interface Slide {
   imagen: string;
@@ -14,7 +15,7 @@ const STORAGE_KEY = 'signy_onboarding_visto';
 @Component({
   selector: 'app-onboarding',
   standalone: true,
-  imports: [CommonModule, IonicModule],
+  imports: [CommonModule, IonicModule, CachedSrcDirective],
   templateUrl: './onboarding.page.html',
   styleUrls: ['./onboarding.page.scss'],
 })

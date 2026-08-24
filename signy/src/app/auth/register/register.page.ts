@@ -5,6 +5,7 @@ import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../../services/supabase';
 import { passwordStrengthValidator, passwordsMatchValidator } from '../../shared/validators';
+import { CachedSrcDirective } from '../../shared/cached-src.directive';
 import { addIcons } from 'ionicons';
 import { paw } from 'ionicons/icons';
 
@@ -13,7 +14,7 @@ addIcons({ paw });
 @Component({
   selector: 'app-register',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, IonicModule],
+  imports: [CommonModule, ReactiveFormsModule, IonicModule, CachedSrcDirective],
   templateUrl: './register.page.html',
   styleUrls: ['./register.page.scss'],
 })

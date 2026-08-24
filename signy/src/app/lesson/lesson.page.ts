@@ -7,6 +7,7 @@ import { ContenidoService } from '../services/contenido';
 import { TtsService } from '../services/tts';
 import { Nivel, Subnivel, Sena } from '../data/db-types';
 import { SenaIconComponent } from '../shared/sena-icon/sena-icon.component';
+import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { addIcons } from 'ionicons';
 import { close, heart, checkmarkCircle, camera, videocam, volumeHigh } from 'ionicons/icons';
 
@@ -23,7 +24,7 @@ const MENSAJES_MAL = ['Ajusta el pulgar', 'Centra tu mano en el óvalo', 'Prueba
 @Component({
   selector: 'app-lesson',
   standalone: true,
-  imports: [CommonModule, IonicModule, SenaIconComponent],
+  imports: [CommonModule, IonicModule, SenaIconComponent, CachedSrcDirective],
   templateUrl: './lesson.page.html',
   styleUrls: ['./lesson.page.scss'],
 })

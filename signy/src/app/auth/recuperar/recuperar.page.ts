@@ -5,11 +5,12 @@ import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../../services/supabase';
 import { passwordStrengthValidator, passwordsMatchValidator } from '../../shared/validators';
+import { CachedSrcDirective } from '../../shared/cached-src.directive';
 
 @Component({
   selector: 'app-recuperar',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, IonicModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, IonicModule, CachedSrcDirective],
   templateUrl: './recuperar.page.html',
   styleUrls: ['./recuperar.page.scss'],
 })
