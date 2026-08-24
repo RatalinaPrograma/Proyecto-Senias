@@ -4,7 +4,7 @@
     <!-- PASO 1: pedir email -->
     <ng-container *ngIf="paso === 'email'">
       <div class="auth-header">
-        <img src="assets/img/login.png" alt="Signy" class="auth-mascot" />
+        <img src="https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png" alt="Signy" class="auth-mascot" />
         <h1>Recupera tu cuenta</h1>
         <p>Te enviaremos un código de 6 dígitos a tu correo</p>
       </div>
@@ -37,7 +37,7 @@
     <!-- PASO 2: código + nueva contraseña -->
     <ng-container *ngIf="paso === 'codigo'">
       <div class="auth-header">
-        <img src="assets/img/login.png" alt="Signy" class="auth-mascot" />
+        <img src="https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png" alt="Signy" class="auth-mascot" />
         <h1>Revisa tu correo</h1>
         <p>Enviamos un código a {{ emailEnviado }}</p>
       </div>
@@ -97,7 +97,7 @@
     <!-- PASO 3: listo -->
     <ng-container *ngIf="paso === 'listo'">
       <div class="auth-header">
-        <img src="assets/img/login.png" alt="Signy" class="auth-mascot" />
+        <img src="https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png" alt="Signy" class="auth-mascot" />
         <h1>¡Listo!</h1>
         <p>Tu contraseña se actualizó correctamente</p>
       </div>
