@@ -4,12 +4,13 @@ import { IonicModule } from '@ionic/angular';
 import { ActivatedRoute, Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
 import { ContenidoService } from '../services/contenido';
+import { TtsService } from '../services/tts';
 import { Nivel, Subnivel, Sena } from '../data/db-types';
 import { SenaIconComponent } from '../shared/sena-icon/sena-icon.component';
 import { addIcons } from 'ionicons';
-import { close, heart, checkmarkCircle, camera, videocam } from 'ionicons/icons';
+import { close, heart, checkmarkCircle, camera, videocam, volumeHigh } from 'ionicons/icons';
 
-addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, camera, videocam });
+addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, camera, videocam, 'volume-high': volumeHigh });
 
 type Fase = 'cargando' | 'flash' | 'match' | 'quiz' | 'record' | 'complete' | 'sinvidas' | 'error';
 
@@ -82,7 +83,8 @@ export class LessonPage implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private router: Router,
     private supabaseService: SupabaseService,
-    private contenidoService: ContenidoService
+    private contenidoService: ContenidoService,
+    private ttsService: TtsService
   ) {}
 
   async ngOnInit() {
@@ -155,6 +157,10 @@ export class LessonPage implements OnInit, OnDestroy {
     this.flipped = !this.flipped;
   }
 
+  escucharPalabra() {
+    this.ttsService.hablarSiHabilitado(this.userId, this.senas[this.flashIndex].palabra);
+  }
+
   siguienteFlash() {
     if (this.flashIndex + 1 >= this.senas.length) {
       this.fase = 'match';
@@ -174,6 +180,11 @@ export class LessonPage implements OnInit, OnDestroy {
   elegirPalabra(p: string) {
     if (this.emparejados.includes(p)) return;
     this.selPalabra = p;
+    // Se lee la palabra al tocarla: es texto que ya está visible en
+    // pantalla, así que no revela nada, solo refuerza la pronunciación.
+    // (A propósito NO se hace lo mismo en elegirMano: ahí leer la palabra
+    // asociada a la seña sería literalmente dar la respuesta del ejercicio.)
+    this.ttsService.hablarSiHabilitado(this.userId, p);
     this.evaluarMatch();
   }
 
@@ -205,6 +216,9 @@ export class LessonPage implements OnInit, OnDestroy {
   async elegirOpcion(opt: string) {
     if (this.estado) return;
     this.seleccionada = opt;
+    // Se lee la opción tocada: es texto ya visible, no da pistas de cuál
+    // es la correcta (todas las opciones se leen igual si las tocas).
+    this.ttsService.hablarSiHabilitado(this.userId, opt);
     const correcto = opt === this.preguntaActual.palabra;
 
     if (correcto) {

@@ -58,6 +58,52 @@
       </form>
     </section>
 
+    <!-- ===== ACCESIBILIDAD ===== -->
+    <section class="card-section">
+      <h2><ion-icon name="volume-high"></ion-icon> Accesibilidad</h2>
+
+      <p class="section-hint" *ngIf="ttsDisponible">
+        Cuando está activado, Signy lee las palabras en voz alta durante las lecciones.
+      </p>
+      <p class="section-hint" *ngIf="!ttsDisponible">
+        Tu navegador o dispositivo no soporta lectura de texto a voz.
+      </p>
+
+      <ion-item lines="none" class="tts-toggle-row" *ngIf="ttsDisponible">
+        <ion-label>Texto a voz</ion-label>
+        <ion-toggle
+          [checked]="ttsHabilitado"
+          [disabled]="guardandoTts"
+          (ionChange)="cambiarTts($event)"
+          aria-label="Activar texto a voz">
+        </ion-toggle>
+      </ion-item>
+
+      <ion-item lines="none" class="tts-toggle-row" *ngIf="ttsDisponible && ttsHabilitado && voces.length">
+        <ion-label>Voz</ion-label>
+        <ion-select
+          [value]="vozSeleccionada"
+          [disabled]="guardandoVoz"
+          placeholder="Predeterminada del sistema"
+          interface="action-sheet"
+          (ionChange)="cambiarVoz($event)">
+          <ion-select-option [value]="null">Predeterminada del sistema</ion-select-option>
+          <ion-select-option *ngFor="let v of voces" [value]="v.name">
+            {{ v.name }} ({{ v.lang }})
+          </ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <ion-button
+        expand="block"
+        fill="outline"
+        *ngIf="ttsDisponible"
+        (click)="probarTts()"
+        class="btn-outline-mint">
+        Probar
+      </ion-button>
+    </section>
+
     <!-- ===== CAMBIAR CONTRASEÑA ===== -->
     <section class="card-section">
       <h2>Cambiar contraseña</h2>

@@ -43,7 +43,7 @@ export class SupabaseService {
     return this.supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
   }
 
-  async upsertProfile(profile: { id: string; full_name?: string | null; username?: string | null; avatar_url?: string | null }) {
+  async upsertProfile(profile: { id: string; full_name?: string | null; username?: string | null; avatar_url?: string | null; tts_habilitado?: boolean | null; tts_voz?: string | null }) {
     return this.supabase.from('profiles').upsert(profile);
   }
 
@@ -216,6 +216,8 @@ export class SupabaseService {
       full_name: 'Usuario Signy',
       username: null,
       avatar_url: null,
+      tts_habilitado: true,
+      tts_voz: null,
       created_at: null,
     });
   }
@@ -239,7 +241,7 @@ export class SupabaseService {
     const { data } = await this.getProfile(userId);
     if (data) return data;
 
-    const nuevo: Profile = { id: userId, full_name: nombreFallback, username: null, avatar_url: null, created_at: null };
+    const nuevo: Profile = { id: userId, full_name: nombreFallback, username: null, avatar_url: null, tts_habilitado: true, tts_voz: null, created_at: null };
     await this.upsertProfile(nuevo);
     return nuevo;
   }

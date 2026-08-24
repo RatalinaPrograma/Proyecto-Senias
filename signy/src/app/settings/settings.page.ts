@@ -4,10 +4,12 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, Validators } from '@angu
 import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
+import { TtsService } from '../services/tts';
+import { SpeechSynthesisVoice } from '@capacitor-community/text-to-speech';
 import { passwordStrengthValidator, passwordsMatchValidator } from '../shared/validators';
 import { Profile } from '../data/db-types';
 import { addIcons } from 'ionicons';
-import { arrowBack, paw, cameraOutline, shieldCheckmark, trashOutline } from 'ionicons/icons';
+import { arrowBack, paw, cameraOutline, shieldCheckmark, trashOutline, volumeHigh } from 'ionicons/icons';
 
 addIcons({
   'arrow-back': arrowBack,
@@ -15,6 +17,7 @@ addIcons({
   'camera-outline': cameraOutline,
   'shield-checkmark': shieldCheckmark,
   'trash-outline': trashOutline,
+  'volume-high': volumeHigh,
 });
 
 @Component({
@@ -54,6 +57,14 @@ export class SettingsPage implements OnInit {
   errorPassword = '';
   exitoPassword = false;
 
+  // ---- accesibilidad ----
+  ttsDisponible = true;
+  ttsHabilitado = true;
+  guardandoTts = false;
+  voces: SpeechSynthesisVoice[] = [];
+  vozSeleccionada: string | null = null;
+  guardandoVoz = false;
+
   // ---- 2FA ----
   mfaActivado = false;
   private factorIdActivo: string | null = null;
@@ -75,6 +86,7 @@ export class SettingsPage implements OnInit {
   constructor(
     private fb: FormBuilder,
     private supabaseService: SupabaseService,
+    private ttsService: TtsService,
     private router: Router
   ) {}
 
@@ -92,6 +104,13 @@ export class SettingsPage implements OnInit {
       full_name: this.perfil.full_name ?? '',
       username: this.perfil.username ?? '',
     });
+
+    this.ttsDisponible = this.ttsService.disponible();
+    this.ttsHabilitado = await this.ttsService.estaHabilitado(this.userId);
+    if (this.ttsDisponible) {
+      this.voces = await this.ttsService.listarVoces();
+      this.vozSeleccionada = await this.ttsService.obtenerVozPreferida(this.userId);
+    }
 
     const { data: factores } = await this.supabaseService.mfaListFactors();
     const verificado = factores?.totp?.find(f => f.status === 'verified');
@@ -158,6 +177,36 @@ export class SettingsPage implements OnInit {
 
     this.exitoPerfil = true;
     setTimeout(() => (this.exitoPerfil = false), 2500);
+  }
+
+  // ========== ACCESIBILIDAD (TEXTO A VOZ) ==========
+  async cambiarTts(evento: any) {
+    const valor: boolean = evento.detail.checked;
+    this.ttsHabilitado = valor; // optimista, se revierte si falla el guardado
+    this.guardandoTts = true;
+    const { error } = await this.ttsService.establecerHabilitado(this.userId, valor);
+    this.guardandoTts = false;
+
+    if (error) {
+      this.ttsHabilitado = !valor; // revertir
+    }
+  }
+
+  probarTts() {
+    this.ttsService.hablar('Así sonará el texto a voz en Signy', this.vozSeleccionada);
+  }
+
+  async cambiarVoz(evento: any) {
+    const nombreVoz: string | null = evento.detail.value || null;
+    const anterior = this.vozSeleccionada;
+    this.vozSeleccionada = nombreVoz; // optimista
+    this.guardandoVoz = true;
+    const { error } = await this.ttsService.establecerVoz(this.userId, nombreVoz);
+    this.guardandoVoz = false;
+
+    if (error) {
+      this.vozSeleccionada = anterior; // revertir
+    }
   }
 
   // ========== CONTRASEÑA ==========
