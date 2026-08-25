@@ -1,0 +1,468 @@
+.signy-content {
+  --background: var(--signy-ink);
+}
+
+.admin-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(16px + env(safe-area-inset-top)) 16px 8px;
+}
+
+.spacer { width: 38px; flex-shrink: 0; }
+
+.breadcrumb {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  white-space: nowrap;
+
+  ion-icon {
+    color: var(--signy-muted);
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+}
+
+.crumb {
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--signy-muted);
+  white-space: nowrap;
+
+  &.current {
+    color: var(--signy-cream);
+  }
+}
+
+.icon-btn {
+  background: var(--signy-card);
+  border: none;
+  color: var(--signy-cream);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+
+  &.small {
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+  }
+
+  &.danger { color: var(--signy-error); }
+
+  // sobre un fondo de color (las tarjetas de nivel), usar blanco translúcido
+  &.on-color {
+    background: rgba(255, 255, 255, 0.22);
+    color: #fff;
+
+    &.danger { color: #fff; }
+  }
+}
+
+.state-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--signy-muted);
+  font-family: 'Manrope', sans-serif;
+}
+
+.view-body {
+  padding: 8px 20px calc(32px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.view-hint {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12.5px;
+  color: var(--signy-muted);
+  margin: 0 0 2px;
+}
+
+// ---------- tarjeta de nivel (usa su propio color) ----------
+.nivel-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: var(--signy-radius);
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.nivel-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 20px;
+  color: #fff;
+}
+
+.nivel-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.nivel-tag {
+  font-family: 'Manrope', sans-serif;
+  font-weight: 800;
+  font-size: 10.5px;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.85);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.nivel-title {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 17px;
+  color: #fff;
+  margin: 2px 0 0;
+}
+
+.nivel-sub {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  margin: 2px 0 0;
+}
+
+.nivel-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.nivel-preview {
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+// ---------- tarjeta genérica (subnivel / seña) ----------
+.item-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--signy-card);
+  border-radius: 14px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.item-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--signy-ink-deep);
+  color: var(--signy-mint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.item-thumb-wrap { flex-shrink: 0; }
+
+.item-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--signy-ink-deep);
+
+  &.placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--signy-muted);
+    font-size: 18px;
+  }
+}
+
+.item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-title {
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  color: var(--signy-cream);
+  font-size: 14px;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-sub {
+  font-family: 'Manrope', sans-serif;
+  color: var(--signy-muted);
+  font-size: 12px;
+  margin: 2px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+
+  &.warn {
+    color: var(--signy-fox);
+    ion-icon { font-size: 13px; }
+  }
+}
+
+// ---------- estado vacío ----------
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  padding: 28px 20px;
+  background: var(--signy-card);
+  border-radius: var(--signy-radius);
+
+  ion-icon {
+    font-size: 32px;
+    color: var(--signy-muted);
+    margin-bottom: 6px;
+  }
+
+  p {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    color: var(--signy-cream);
+    margin: 0;
+    font-size: 14px;
+  }
+}
+
+.empty-sub {
+  font-family: 'Manrope', sans-serif !important;
+  font-weight: 400 !important;
+  color: var(--signy-muted) !important;
+  font-size: 12.5px !important;
+}
+
+.empty-hint {
+  text-align: center;
+  color: var(--signy-muted);
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  padding: 10px 0;
+}
+
+// ---------- botones ----------
+.btn-fox {
+  --background: var(--signy-fox);
+  --background-activated: var(--signy-fox-deep);
+  --color: #4A2100;
+  --border-radius: 14px;
+  --box-shadow: none;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  height: 46px;
+}
+
+// "Guardar" — verde de confirmación, letras blancas
+.btn-success {
+  --background: #2E9E5B;
+  --background-activated: #257C48;
+  --color: #fff;
+  --border-radius: 14px;
+  --box-shadow: none;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  height: 46px;
+}
+
+// "Cancelar" — rojo, letras blancas
+.btn-cancel {
+  --background: var(--signy-error);
+  --background-activated: #C13D2D;
+  --color: #fff;
+  --border-radius: 14px;
+  --box-shadow: none;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  height: 46px;
+}
+
+// "Nuevo nivel / subnivel / seña" — blanco sólido, texto oscuro, se lee
+// perfecto sobre cualquier fondo y no se confunde con guardar/cancelar
+.btn-add {
+  --background: var(--signy-cream);
+  --background-activated: #E5E1D8;
+  --color: var(--signy-ink);
+  --border-radius: 14px;
+  --box-shadow: none;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  height: 46px;
+}
+
+// ---------- formularios ----------
+.form-card {
+  background: var(--signy-card);
+  border-radius: var(--signy-radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  h3 {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    color: var(--signy-cream);
+    margin: 0;
+  }
+}
+
+.form-context {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12.5px;
+  color: var(--signy-muted);
+  margin: -6px 0 4px;
+
+  strong { color: var(--signy-mint); }
+}
+
+.two-col {
+  display: flex;
+  gap: 8px;
+
+  .signy-input { flex: 1; }
+}
+
+.color-picker-row {
+  display: flex;
+  gap: 12px;
+}
+
+.color-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--signy-ink-deep);
+  border-radius: 12px;
+  padding: 10px 12px;
+
+  span {
+    font-family: 'Manrope', sans-serif;
+    font-size: 11.5px;
+    color: var(--signy-muted);
+  }
+
+  input[type="color"] {
+    width: 100%;
+    height: 36px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+  }
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+
+  ion-button { flex: 1; }
+}
+
+.form-error {
+  color: var(--signy-error);
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  margin: 0;
+}
+
+.media-mode {
+  display: flex;
+  gap: 8px;
+}
+
+.mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--signy-ink-deep);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  padding: 10px;
+  color: var(--signy-muted);
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+
+  &.active {
+    border-color: var(--signy-mint);
+    color: var(--signy-mint);
+  }
+}
+
+.upload-box {
+  background: var(--signy-ink-deep);
+  border-radius: 12px;
+  padding: 12px;
+
+  input[type="file"] {
+    color: var(--signy-cream);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    width: 100%;
+  }
+}
+
+.upload-hint {
+  color: var(--signy-mint);
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  margin: 6px 0 0;
+}
+
+.preview-img {
+  width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  border-radius: 12px;
+  background: var(--signy-ink-deep);
+}

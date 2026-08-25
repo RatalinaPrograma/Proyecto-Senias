@@ -103,6 +103,7 @@ export interface Profile {
   avatar_url: string | null;
   tts_habilitado: boolean | null;
   tts_voz: string | null;
+  es_admin: boolean | null;
   created_at: string | null;
 }
 

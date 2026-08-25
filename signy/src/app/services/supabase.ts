@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { environment } from '../../environments/environment';
-import { Profile } from '../data/db-types';
+import { Profile, Nivel, Subnivel, Sena } from '../data/db-types';
 
 @Injectable({ providedIn: 'root' })
 export class SupabaseService {
@@ -218,6 +218,7 @@ export class SupabaseService {
       avatar_url: null,
       tts_habilitado: true,
       tts_voz: null,
+      es_admin: false,
       created_at: null,
     });
   }
@@ -241,7 +242,7 @@ export class SupabaseService {
     const { data } = await this.getProfile(userId);
     if (data) return data;
 
-    const nuevo: Profile = { id: userId, full_name: nombreFallback, username: null, avatar_url: null, tts_habilitado: true, tts_voz: null, created_at: null };
+    const nuevo: Profile = { id: userId, full_name: nombreFallback, username: null, avatar_url: null, tts_habilitado: true, tts_voz: null, es_admin: false, created_at: null };
     await this.upsertProfile(nuevo);
     return nuevo;
   }
@@ -256,5 +257,118 @@ export class SupabaseService {
       headers: { Authorization: `Bearer ${token}` },
     });
     return { error };
+  }
+
+  // ==================== ADMINISTRACIÓN DE VOCABULARIO ====================
+  // Todo lo de acá abajo requiere que profiles.es_admin sea true para el
+  // usuario logueado — eso lo hace cumplir el RLS de la base de datos, no
+  // solo el guard de rutas del lado del cliente.
+
+  async esAdmin(userId: string): Promise<boolean> {
+    const { data } = await this.getProfile(userId);
+    return data?.es_admin ?? false;
+  }
+
+  // ---- Niveles ----
+  async listarNiveles(): Promise<Nivel[]> {
+    const { data, error } = await this.supabase.from('niveles').select('*').order('numero_nivel');
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  async crearNivel(nivel: Omit<Nivel, 'id' | 'created_at'>) {
+    return this.supabase.from('niveles').insert(nivel).select().single();
+  }
+
+  async actualizarNivel(id: number, cambios: Partial<Omit<Nivel, 'id' | 'created_at'>>) {
+    return this.supabase.from('niveles').update(cambios).eq('id', id);
+  }
+
+  async eliminarNivel(id: number) {
+    return this.supabase.from('niveles').delete().eq('id', id);
+  }
+
+  // ---- Subniveles ----
+  async listarSubniveles(nivelId?: number): Promise<Subnivel[]> {
+    let query = this.supabase.from('subniveles').select('*').order('numero_subnivel');
+    if (nivelId != null) query = query.eq('nivel_id', nivelId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  async crearSubnivel(subnivel: Omit<Subnivel, 'id' | 'created_at'>) {
+    return this.supabase.from('subniveles').insert(subnivel).select().single();
+  }
+
+  async actualizarSubnivel(id: number, cambios: Partial<Omit<Subnivel, 'id' | 'created_at'>>) {
+    return this.supabase.from('subniveles').update(cambios).eq('id', id);
+  }
+
+  async eliminarSubnivel(id: number) {
+    return this.supabase.from('subniveles').delete().eq('id', id);
+  }
+
+  // ---- Señas ----
+  async listarSenas(subnivelId?: number): Promise<Sena[]> {
+    let query = this.supabase.from('senas').select('*').order('palabra');
+    if (subnivelId != null) query = query.eq('subnivel_id', subnivelId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  async crearSena(sena: Omit<Sena, 'id' | 'created_at' | 'landmarks_referencia'>) {
+    return this.supabase.from('senas').insert(sena).select().single();
+  }
+
+  async actualizarSena(id: number, cambios: Partial<Omit<Sena, 'id' | 'created_at'>>) {
+    return this.supabase.from('senas').update(cambios).eq('id', id);
+  }
+
+  async eliminarSena(id: number) {
+    return this.supabase.from('senas').delete().eq('id', id);
+  }
+
+  /**
+   * Sube el GIF/foto de una seña al bucket `senas` y devuelve la URL
+   * pública. Mismo patrón que `uploadAvatar`. El nombre del archivo
+   * incluye timestamp para no pisar versiones anteriores por accidente
+   * (a diferencia del avatar, donde sí queremos que se sobrescriba).
+   */
+  async uploadSenaMedia(file: File) {
+    const ext = file.name.split('.').pop();
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error: uploadError } = await this.supabase.storage
+      .from('senas-media')
+      .upload(path, file);
+
+    if (uploadError) return { data: null, error: uploadError };
+
+    const { data } = this.supabase.storage.from('senas-media').getPublicUrl(path);
+    return { data: data.publicUrl, error: null };
+  }
+
+  /**
+   * Borra un archivo del bucket `senas-media` a partir de su URL pública,
+   * pero SOLO si la URL de verdad apunta a ese bucket — si alguien pegó
+   * una URL externa a mano (otro sitio, otro bucket), no se toca nada. Se
+   * usa para no dejar basura acumulándose cuando se reemplaza o borra una
+   * seña. Falla en silencio: es limpieza de fondo, no debe romper el
+   * flujo principal de guardar/borrar si algo sale mal acá.
+   */
+  async eliminarSenaMediaSiEsPropia(url: string) {
+    const marcador = '/storage/v1/object/public/senas-media/';
+    const indice = url.indexOf(marcador);
+    if (indice === -1) return;
+
+    const path = url.slice(indice + marcador.length);
+    if (!path) return;
+
+    try {
+      await this.supabase.storage.from('senas-media').remove([path]);
+    } catch {
+      // limpieza de fondo, no crítico
+    }
   }
 }

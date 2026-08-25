@@ -7,9 +7,9 @@ import { ContenidoService } from '../services/contenido';
 import { NivelConEstado, SubnivelConEstado, UserStats } from '../data/db-types';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { addIcons } from 'ionicons';
-import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline, refresh } from 'ionicons/icons';
+import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline, refresh, construct } from 'ionicons/icons';
 
-addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw, 'log-out-outline': logOutOutline, refresh });
+addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw, 'log-out-outline': logOutOutline, refresh, construct });
 
 @Component({
   selector: 'app-home',
@@ -25,6 +25,7 @@ export class HomePage {
   niveles: NivelConEstado[] = [];
   stats: UserStats | null = null;
   avatarUrl: string | null = null;
+  esAdmin = false;
 
   constructor(
     private supabaseService: SupabaseService,
@@ -52,6 +53,7 @@ export class HomePage {
       this.niveles = niveles;
       this.stats = stats;
       this.avatarUrl = perfil?.avatar_url ?? null;
+      this.esAdmin = perfil?.es_admin ?? false;
     } catch (e: any) {
       this.error = 'No se pudo cargar tu progreso. Revisa tu conexión.';
       console.error(e);
@@ -82,6 +84,10 @@ export class HomePage {
 
   irAPerfil() {
     this.router.navigate(['/profile']);
+  }
+
+  irAAdmin() {
+    this.router.navigate(['/admin/vocabulario']);
   }
 
   async cerrarSesion() {

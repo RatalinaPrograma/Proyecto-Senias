@@ -36,6 +36,13 @@
     object-fit: cover;
   }
 
+  &.admin-badge {
+    margin-left: auto;
+    box-shadow: 0 3px 0 var(--signy-mint-deep, var(--signy-mint));
+    color: var(--signy-mint);
+    font-size: 20px;
+  }
+
   &-lg {
     width: 76px;
     height: 76px;

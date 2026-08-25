@@ -1,0 +1,265 @@
+<ion-content [fullscreen]="true" class="signy-content">
+
+  <div class="admin-topbar">
+    <button class="icon-btn" (click)="volver()" aria-label="Volver">
+      <ion-icon name="arrow-back"></ion-icon>
+    </button>
+    <div class="breadcrumb">
+      <button class="crumb" [class.current]="vista === 'niveles'" (click)="volverANiveles()">Vocabulario</button>
+      <ng-container *ngIf="nivelActivo">
+        <ion-icon name="chevron-forward"></ion-icon>
+        <button class="crumb" [class.current]="vista === 'subniveles'" (click)="volverASubniveles()">{{ nivelActivo.nombre }}</button>
+      </ng-container>
+      <ng-container *ngIf="subnivelActivo">
+        <ion-icon name="chevron-forward"></ion-icon>
+        <span class="crumb current">{{ subnivelActivo.nombre }}</span>
+      </ng-container>
+    </div>
+    <div class="spacer"></div>
+  </div>
+
+  <!-- ===== CARGANDO / ERROR ===== -->
+  <div class="state-box" *ngIf="cargando">
+    <ion-spinner name="dots"></ion-spinner>
+    <p>Cargando vocabulario…</p>
+  </div>
+
+  <div class="state-box" *ngIf="!cargando && error">
+    <p>{{ error }}</p>
+    <ion-button class="btn-fox" (click)="cargarTodo()">Reintentar</ion-button>
+  </div>
+
+  <ng-container *ngIf="!cargando && !error">
+
+    <!-- ===================== VISTA: NIVELES ===================== -->
+    <div class="view-body" *ngIf="vista === 'niveles'">
+      <p class="view-hint">Toca un nivel para ver y editar sus subniveles.</p>
+
+      <div class="nivel-card" *ngFor="let n of niveles" (click)="abrirNivel(n)"
+        [style.background]="n.color || 'var(--signy-card)'"
+        [style.boxShadow]="'0 4px 0 ' + (n.color_oscuro || 'var(--signy-locked)')">
+        <div class="nivel-icon">
+          <ion-icon [name]="n.icono || 'layers-outline'"></ion-icon>
+        </div>
+        <div class="nivel-info">
+          <p class="nivel-tag">Nivel {{ n.numero_nivel }} · {{ n.etiqueta || n.dificultad || 'sin etiqueta' }}</p>
+          <p class="nivel-title">{{ n.nombre }}</p>
+          <p class="nivel-sub">{{ subnivelesDe(n.id).length }} subnivel(es)</p>
+        </div>
+        <div class="nivel-actions">
+          <button class="icon-btn small on-color" (click)="editarNivel(n, $event)" aria-label="Editar">
+            <ion-icon name="create-outline"></ion-icon>
+          </button>
+          <button class="icon-btn small on-color danger" (click)="eliminarNivel(n, $event)" aria-label="Eliminar">
+            <ion-icon name="trash-outline"></ion-icon>
+          </button>
+        </div>
+      </div>
+
+      <div class="empty-state" *ngIf="!niveles.length">
+        <ion-icon name="layers-outline"></ion-icon>
+        <p>Todavía no hay ningún nivel creado.</p>
+        <p class="empty-sub">Un nivel es lo primero — adentro van los subniveles, y adentro de esos, las señas.</p>
+      </div>
+
+      <ion-button class="btn-add" expand="block" (click)="abrirNuevoNivel()" *ngIf="!formNivelAbierto">
+        <ion-icon name="add" slot="start"></ion-icon> {{ niveles.length ? 'Nuevo nivel' : 'Crear tu primer nivel' }}
+      </ion-button>
+
+      <!-- form nivel -->
+      <div class="form-card" *ngIf="formNivelAbierto">
+        <h3>{{ editandoNivelId ? 'Editar nivel' : 'Nuevo nivel' }}</h3>
+
+        <!-- vista previa en vivo, igual a como lo va a ver un estudiante -->
+        <div class="nivel-preview" [style.background]="formNivel.color" [style.boxShadow]="'0 4px 0 ' + formNivel.color_oscuro">
+          <div class="nivel-icon"><ion-icon [name]="formNivel.icono || 'layers-outline'"></ion-icon></div>
+          <div class="nivel-info">
+            <p class="nivel-tag">Nivel {{ formNivel.numero_nivel || '?' }} · {{ formNivel.etiqueta || formNivel.dificultad || 'sin etiqueta' }}</p>
+            <p class="nivel-title">{{ formNivel.nombre || 'Nombre del nivel' }}</p>
+          </div>
+        </div>
+
+        <ion-input label="Número de nivel" labelPlacement="floating" fill="outline" type="number"
+          [(ngModel)]="formNivel.numero_nivel" class="signy-input"></ion-input>
+
+        <ion-input label="Nombre" labelPlacement="floating" fill="outline"
+          [(ngModel)]="formNivel.nombre" class="signy-input"></ion-input>
+
+        <ion-textarea label="Descripción" labelPlacement="floating" fill="outline" autoGrow="true"
+          [(ngModel)]="formNivel.descripcion" class="signy-input"></ion-textarea>
+
+        <div class="two-col">
+          <ion-input label="Dificultad" labelPlacement="floating" fill="outline" placeholder="ej: básico"
+            [(ngModel)]="formNivel.dificultad" class="signy-input"></ion-input>
+          <ion-input label="Etiqueta" labelPlacement="floating" fill="outline" placeholder="ej: Saludos"
+            [(ngModel)]="formNivel.etiqueta" class="signy-input"></ion-input>
+        </div>
+
+        <div class="color-picker-row">
+          <label class="color-field">
+            <span>Color</span>
+            <input type="color" [(ngModel)]="formNivel.color" />
+          </label>
+          <label class="color-field">
+            <span>Color oscuro (sombra)</span>
+            <input type="color" [(ngModel)]="formNivel.color_oscuro" />
+          </label>
+        </div>
+
+        <ion-input label="Ícono" labelPlacement="floating" fill="outline" placeholder="nombre de un ionicon, ej: hand-left-outline"
+          [(ngModel)]="formNivel.icono" class="signy-input"></ion-input>
+
+        <p class="form-error" *ngIf="errorForm">{{ errorForm }}</p>
+
+        <div class="form-actions">
+          <ion-button class="btn-cancel" (click)="cancelarFormulario()" [disabled]="guardando">
+            <ion-icon name="close-outline" slot="start"></ion-icon> Cancelar
+          </ion-button>
+          <ion-button class="btn-success" (click)="guardarNivel()" [disabled]="guardando">
+            <ion-icon name="save-outline" slot="start"></ion-icon> {{ guardando ? 'Guardando…' : 'Guardar' }}
+          </ion-button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== VISTA: SUBNIVELES (dentro de un nivel) ===================== -->
+    <div class="view-body" *ngIf="vista === 'subniveles' && nivelActivo">
+      <p class="view-hint">Toca un subnivel para ver y editar sus señas.</p>
+
+      <div class="item-card" *ngFor="let s of subnivelesDelNivelActivo" (click)="abrirSubnivel(s)">
+        <div class="item-icon"><ion-icon name="layers-outline"></ion-icon></div>
+        <div class="item-info">
+          <p class="item-title">{{ s.numero_subnivel }}. {{ s.nombre }}</p>
+          <p class="item-sub">{{ senasDe(s.id).length }} seña(s) · {{ s.tipo || 'sin tipo' }}</p>
+        </div>
+        <button class="icon-btn small" (click)="editarSubnivel(s, $event)" aria-label="Editar">
+          <ion-icon name="create-outline"></ion-icon>
+        </button>
+        <button class="icon-btn small danger" (click)="eliminarSubnivel(s, $event)" aria-label="Eliminar">
+          <ion-icon name="trash-outline"></ion-icon>
+        </button>
+      </div>
+
+      <div class="empty-state" *ngIf="!subnivelesDelNivelActivo.length">
+        <ion-icon name="layers-outline"></ion-icon>
+        <p>"{{ nivelActivo.nombre }}" todavía no tiene subniveles.</p>
+        <p class="empty-sub">Un subnivel agrupa un puñado de señas — por ejemplo, "Saludos" o "Números".</p>
+      </div>
+
+      <ion-button class="btn-add" expand="block" (click)="abrirNuevoSubnivel()" *ngIf="!formSubnivelAbierto">
+        <ion-icon name="add" slot="start"></ion-icon> {{ subnivelesDelNivelActivo.length ? 'Nuevo subnivel' : 'Crear el primer subnivel' }}
+      </ion-button>
+
+      <!-- form subnivel -->
+      <div class="form-card" *ngIf="formSubnivelAbierto">
+        <h3>{{ editandoSubnivelId ? 'Editar subnivel' : 'Nuevo subnivel' }}</h3>
+        <p class="form-context">Dentro de <strong>{{ nivelActivo.nombre }}</strong></p>
+
+        <ion-input label="Número de subnivel" labelPlacement="floating" fill="outline" type="number"
+          [(ngModel)]="formSubnivel.numero_subnivel" class="signy-input"></ion-input>
+
+        <ion-input label="Nombre" labelPlacement="floating" fill="outline" placeholder="ej: Saludos"
+          [(ngModel)]="formSubnivel.nombre" class="signy-input"></ion-input>
+
+        <ion-input label="Tipo (opcional)" labelPlacement="floating" fill="outline" placeholder="aún no se usa en la lección"
+          [(ngModel)]="formSubnivel.tipo" class="signy-input"></ion-input>
+
+        <ion-textarea label="Descripción" labelPlacement="floating" fill="outline" autoGrow="true"
+          [(ngModel)]="formSubnivel.descripcion" class="signy-input"></ion-textarea>
+
+        <p class="form-error" *ngIf="errorForm">{{ errorForm }}</p>
+
+        <div class="form-actions">
+          <ion-button class="btn-cancel" (click)="cancelarFormulario()" [disabled]="guardando">
+            <ion-icon name="close-outline" slot="start"></ion-icon> Cancelar
+          </ion-button>
+          <ion-button class="btn-success" (click)="guardarSubnivel()" [disabled]="guardando">
+            <ion-icon name="save-outline" slot="start"></ion-icon> {{ guardando ? 'Guardando…' : 'Guardar' }}
+          </ion-button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== VISTA: SEÑAS (dentro de un subnivel) ===================== -->
+    <div class="view-body" *ngIf="vista === 'senas' && subnivelActivo">
+      <ion-input label="Buscar palabra" labelPlacement="floating" fill="outline"
+        [(ngModel)]="buscarSena" class="signy-input" *ngIf="senasDe(subnivelActivo.id).length"></ion-input>
+
+      <div class="item-card sena-card" *ngFor="let s of senasDelSubnivelActivo" (click)="editarSena(s)">
+        <div class="item-thumb-wrap">
+          <img *ngIf="s.video_url" [src]="s.video_url" [alt]="s.palabra" class="item-thumb" />
+          <div class="item-thumb placeholder" *ngIf="!s.video_url"><ion-icon name="image-outline"></ion-icon></div>
+        </div>
+        <div class="item-info">
+          <p class="item-title">{{ s.palabra }}</p>
+          <p class="item-sub warn" *ngIf="!s.video_url"><ion-icon name="alert-circle-outline"></ion-icon> Sin GIF/foto</p>
+        </div>
+        <button class="icon-btn small" (click)="editarSena(s); $event.stopPropagation()" aria-label="Editar">
+          <ion-icon name="create-outline"></ion-icon>
+        </button>
+        <button class="icon-btn small danger" (click)="eliminarSena(s); $event.stopPropagation()" aria-label="Eliminar">
+          <ion-icon name="trash-outline"></ion-icon>
+        </button>
+      </div>
+
+      <div class="empty-state" *ngIf="!senasDe(subnivelActivo.id).length">
+        <ion-icon name="image-outline"></ion-icon>
+        <p>"{{ subnivelActivo.nombre }}" todavía no tiene señas.</p>
+        <p class="empty-sub">Agrega la primera palabra con su GIF o foto de la seña real.</p>
+      </div>
+
+      <p class="empty-hint" *ngIf="senasDe(subnivelActivo.id).length && !senasDelSubnivelActivo.length">
+        Ninguna palabra coincide con "{{ buscarSena }}".
+      </p>
+
+      <ion-button class="btn-add" expand="block" (click)="abrirNuevaSena()" *ngIf="!formSenaAbierto">
+        <ion-icon name="add" slot="start"></ion-icon> {{ senasDe(subnivelActivo.id).length ? 'Nueva seña' : 'Agregar la primera seña' }}
+      </ion-button>
+
+      <!-- form seña -->
+      <div class="form-card" *ngIf="formSenaAbierto">
+        <h3>{{ editandoSenaId ? 'Editar seña' : 'Nueva seña' }}</h3>
+        <p class="form-context">Dentro de <strong>{{ subnivelActivo.nombre }}</strong></p>
+
+        <ion-input label="Palabra" labelPlacement="floating" fill="outline"
+          [(ngModel)]="formSena.palabra" class="signy-input"></ion-input>
+
+        <ion-textarea label="Descripción (opcional)" labelPlacement="floating" fill="outline" autoGrow="true"
+          [(ngModel)]="formSena.descripcion" class="signy-input"></ion-textarea>
+
+        <div class="media-mode">
+          <button class="mode-btn" [class.active]="modoMedia === 'url'" (click)="modoMedia = 'url'">
+            <ion-icon name="link-outline"></ion-icon> Pegar URL
+          </button>
+          <button class="mode-btn" [class.active]="modoMedia === 'subir'" (click)="modoMedia = 'subir'">
+            <ion-icon name="cloud-upload-outline"></ion-icon> Subir archivo
+          </button>
+        </div>
+
+        <ion-input *ngIf="modoMedia === 'url'" label="URL del GIF/foto" labelPlacement="floating" fill="outline"
+          [(ngModel)]="formSena.video_url" class="signy-input"></ion-input>
+
+        <div *ngIf="modoMedia === 'subir'" class="upload-box">
+          <input type="file" accept="image/*" (change)="onArchivoSeleccionado($event)" />
+          <p class="upload-hint" *ngIf="archivoSeleccionado">{{ archivoSeleccionado.name }}</p>
+          <p class="upload-hint" *ngIf="subiendoArchivo">Subiendo…</p>
+        </div>
+
+        <img *ngIf="formSena.video_url" [src]="formSena.video_url" alt="Vista previa" class="preview-img" />
+
+        <p class="form-error" *ngIf="errorForm">{{ errorForm }}</p>
+
+        <div class="form-actions">
+          <ion-button class="btn-cancel" (click)="cancelarFormulario()" [disabled]="guardando">
+            <ion-icon name="close-outline" slot="start"></ion-icon> Cancelar
+          </ion-button>
+          <ion-button class="btn-success" (click)="guardarSena()" [disabled]="guardando">
+            <ion-icon name="save-outline" slot="start"></ion-icon> {{ guardando ? 'Guardando…' : 'Guardar' }}
+          </ion-button>
+        </div>
+      </div>
+    </div>
+
+  </ng-container>
+
+</ion-content>

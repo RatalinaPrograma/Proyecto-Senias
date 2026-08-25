@@ -25,6 +25,10 @@
           <h1>¡Hola de nuevo!</h1>
           <p>Sigamos aprendiendo LSCh</p>
         </div>
+
+        <button class="fox-badge admin-badge" *ngIf="esAdmin" (click)="irAAdmin()" aria-label="Administrar vocabulario">
+          <ion-icon name="construct"></ion-icon>
+        </button>
       </div>
 
       <div class="hud-right">
