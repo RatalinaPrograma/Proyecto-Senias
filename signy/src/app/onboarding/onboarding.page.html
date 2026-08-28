@@ -1,5 +1,8 @@
 <ion-content [fullscreen]="true" class="signy-content">
-  <button class="skip-btn" *ngIf="!esUltimo" (click)="saltar()">Saltar</button>
+  <div class="top-actions">
+    <button class="lab-pill-btn" (click)="irALab()">🧪 Probar Cámara</button>
+    <button class="skip-btn" *ngIf="!esUltimo" (click)="saltar()">Saltar</button>
+  </div>
 
   <div class="onboarding-wrap">
     <div class="slide-image-wrap">

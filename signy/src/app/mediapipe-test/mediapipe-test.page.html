@@ -1,0 +1,125 @@
+<ion-content [fullscreen]="true" class="signy-content">
+  <div class="test-header">
+    <button class="icon-btn" (click)="volver()" aria-label="Volver">
+      <ion-icon name="arrow-back"></ion-icon>
+    </button>
+    <h1>Laboratorio MediaPipe</h1>
+    <button class="icon-btn" (click)="alternarCamara()" [disabled]="estadoCamara !== 'activa'" aria-label="Cambiar Cámara">
+      <ion-icon name="camera-reverse"></ion-icon>
+    </button>
+  </div>
+
+  <div class="test-body">
+    <!-- Contenedor del Stream de Video y Canvas Superpuesto -->
+    <div class="camera-viewport">
+      <video
+        #video
+        playsinline
+        webkit-playsinline
+        muted
+        autoplay
+        [class.mirrored]="facingMode === 'user'">
+      </video>
+
+      <canvas
+        #canvas
+        [class.mirrored]="facingMode === 'user'">
+      </canvas>
+
+      <!-- Overlay de FPS y Rendimiento -->
+      <div class="metrics-badge" *ngIf="estadoCamara === 'activa'">
+        <div class="metric-item">
+          <span class="dot"></span>
+          <strong>{{ fps }} FPS</strong>
+        </div>
+        <div class="metric-item">
+          <span>{{ latenciaMs }} ms</span>
+        </div>
+      </div>
+
+      <!-- Estado: Descargando Modelo -->
+      <div class="viewport-overlay" *ngIf="estadoModelo === 'descargando'">
+        <ion-spinner name="crescent" color="warning"></ion-spinner>
+        <h3>Cargando MediaPipe WASM…</h3>
+        <p>Descargando modelo neuronal de detección de manos</p>
+      </div>
+
+      <!-- Estado: Error de Modelo -->
+      <div class="viewport-overlay error-overlay" *ngIf="estadoModelo === 'error'">
+        <span class="emoji">⚠️</span>
+        <h3>Error al cargar modelo</h3>
+        <p>{{ mensajeError }}</p>
+        <ion-button class="btn-fox" (click)="inicializarMediaPipe()">
+          <ion-icon name="refresh" slot="start"></ion-icon> Reintentar
+        </ion-button>
+      </div>
+
+      <!-- Estado: Permiso de Cámara Denegado -->
+      <div class="viewport-overlay error-overlay" *ngIf="estadoCamara === 'denegada'">
+        <span class="emoji">🚫</span>
+        <h3>Cámara no disponible</h3>
+        <p>{{ mensajeError }}</p>
+        <ion-button class="btn-fox" (click)="iniciarCamara()">
+          <ion-icon name="videocam" slot="start"></ion-icon> Permitir Cámara
+        </ion-button>
+      </div>
+
+      <!-- Estado: Cámara Iniciando -->
+      <div class="viewport-overlay" *ngIf="estadoModelo === 'listo' && estadoCamara === 'iniciando'">
+        <ion-spinner name="dots" color="primary"></ion-spinner>
+        <p>Iniciando stream de video…</p>
+      </div>
+    </div>
+
+    <!-- Panel de Información de Manos Detectadas -->
+    <div class="card-section">
+      <div class="section-title">
+        <ion-icon name="analytics"></ion-icon>
+        <h2>Detección en Vivo (21 Landmarks)</h2>
+      </div>
+
+      <div class="detection-list" *ngIf="manosDetectadas.length > 0">
+        <div class="hand-card" *ngFor="let det of manosDetectadas">
+          <div class="hand-header">
+            <span class="hand-name">{{ det.mano }}</span>
+            <span class="hand-score">{{ det.confianza }}% confianza</span>
+          </div>
+          <div class="gesture-badge">
+            <ion-icon name="checkmark-circle"></ion-icon>
+            <strong>{{ det.gesto }}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="empty-hint" *ngIf="manosDetectadas.length === 0 && estadoCamara === 'activa'">
+        <p>👋 Coloca tu mano frente a la cámara para ver el tracking de MediaPipe en tiempo real.</p>
+      </div>
+    </div>
+
+    <!-- Opciones de Visualización -->
+    <div class="card-section">
+      <h2>Opciones de Visualización</h2>
+
+      <div class="toggle-row">
+        <span>Dibujar Esqueleto (Conexiones)</span>
+        <ion-toggle [(ngModel)]="mostrarEsqueleto" color="secondary"></ion-toggle>
+      </div>
+
+      <div class="toggle-row">
+        <span>Dibujar Nodos Articulares</span>
+        <ion-toggle [(ngModel)]="mostrarPuntos" color="warning"></ion-toggle>
+      </div>
+
+      <div class="toggle-row">
+        <span>Etiquetas de Gestos y Confianza</span>
+        <ion-toggle [(ngModel)]="mostrarEtiquetas" color="primary"></ion-toggle>
+      </div>
+    </div>
+
+    <!-- Botón Volver -->
+    <ion-button expand="block" class="btn-fox" (click)="volver()">
+      Volver al Camino de Niveles
+    </ion-button>
+  </div>
+</ion-content>
+

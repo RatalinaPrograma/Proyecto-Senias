@@ -55,5 +55,9 @@ export const routes: Routes = [
     path: 'admin/vocabulario',
     canActivate: [adminGuard],
     loadComponent: () => import('./admin-vocabulario/admin-vocabulario.page').then(m => m.AdminVocabularioPage)
+  },
+  {
+    path: 'mediapipe-test',
+    loadComponent: () => import('./mediapipe-test/mediapipe-test.page').then(m => m.MediapipeTestPage)
   }
 ];

@@ -28,17 +28,45 @@
 /**
  * Ionic Dark Mode
  * -----------------------------------------------------
- * For more info, please see:
- * https://ionicframework.com/docs/theming/dark-mode
+ * Signy usa su propia paleta personalizada de marca (modo oscuro nativo propio).
+ * Desactivamos la paleta genérica de Ionic para evitar conflictos en móviles con modo oscuro activado.
  */
-
 /* @import "@ionic/angular/css/palettes/dark.always.css"; */
 /* @import "@ionic/angular/css/palettes/dark.class.css"; */
-@import '@ionic/angular/css/palettes/dark.system.css';
-@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Manrope:wght@400;600;700;800&display=swap');
-
+/* @import '@ionic/angular/css/palettes/dark.system.css'; */
 
 :root {
+  /* Variables base de Ionic sincronizadas con el tema Signy */
+  --ion-background-color: #12213B;
+  --ion-background-color-rgb: 18, 33, 59;
+  --ion-text-color: #F7F5F0;
+  --ion-text-color-rgb: 247, 245, 240;
+  --ion-font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Color Primario (Zorro Signy) */
+  --ion-color-primary: #F2701A;
+  --ion-color-primary-rgb: 242, 112, 26;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #C6560E;
+  --ion-color-primary-tint: #FF9A52;
+
+  /* Color Secundario (Teal / Mint) */
+  --ion-color-secondary: #2CA6A4;
+  --ion-color-secondary-rgb: 44, 166, 164;
+  --ion-color-secondary-contrast: #ffffff;
+  --ion-color-secondary-contrast-rgb: 255, 255, 255;
+  --ion-color-secondary-shade: #1F8482;
+  --ion-color-secondary-tint: #43BDBB;
+
+  /* Color de Peligro / Error */
+  --ion-color-danger: #E14F3D;
+  --ion-color-danger-rgb: 225, 79, 61;
+  --ion-color-danger-contrast: #ffffff;
+  --ion-color-danger-contrast-rgb: 255, 255, 255;
+  --ion-color-danger-shade: #C33F2F;
+  --ion-color-danger-tint: #FF6E5E;
+
   /* Fondo y superficies (azul marino de marca) */
   --signy-ink: #12213B;
   --signy-ink-deep: #0A1526;
@@ -63,4 +91,66 @@
   --signy-radius: 18px;
   --signy-shadow-fox: 0 4px 0 var(--signy-fox-deep);
   --signy-shadow-card: 0 10px 30px rgba(10, 21, 38, 0.35);
+}
+
+body {
+  background-color: var(--signy-ink);
+  color: var(--signy-cream);
+  font-family: var(--ion-font-family);
+}
+
+/* Reglas globales para inputs y textareas de formularios */
+.signy-input,
+ion-input.signy-input,
+ion-textarea.signy-input {
+  --background: #1B2E4E !important;
+  --color: #F7F5F0 !important;
+  --placeholder-color: #93A3C4 !important;
+  --placeholder-opacity: 0.9 !important;
+  --border-color: rgba(147, 163, 196, 0.45) !important;
+  --border-width: 1.5px !important;
+  --border-radius: 14px !important;
+  --padding-start: 16px !important;
+  --padding-end: 16px !important;
+  --highlight-color-focused: #F2701A !important;
+  background: #1B2E4E !important;
+  border: 1.5px solid rgba(147, 163, 196, 0.45) !important;
+  border-radius: 14px !important;
+  font-family: 'Manrope', sans-serif !important;
+  margin-bottom: 14px !important;
+  min-height: 56px !important;
+  width: 100% !important;
+  display: block !important;
+  box-sizing: border-box !important;
+
+  /* Etiqueta flotante visible y con buen contraste en Android */
+  .label-text,
+  .label-text-wrapper,
+  label {
+    color: #93A3C4 !important;
+    font-weight: 600 !important;
+  }
+
+  &.ion-focused {
+    border-color: #F2701A !important;
+    --border-color: #F2701A !important;
+    .label-text,
+    .label-text-wrapper,
+    label {
+      color: #F2701A !important;
+    }
+  }
+
+  /* Texto ingresado */
+  input.native-input,
+  textarea.native-textarea,
+  input {
+    color: #F7F5F0 !important;
+    font-size: 15px !important;
+  }
+}
+
+/* Soporte para inputs nativos si se usan en formularios */
+input, textarea, select {
+  color: var(--signy-cream);
 }

@@ -7,9 +7,9 @@ import { ContenidoService } from '../services/contenido';
 import { NivelConEstado, SubnivelConEstado, UserStats } from '../data/db-types';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { addIcons } from 'ionicons';
-import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline, refresh, construct } from 'ionicons/icons';
+import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline, refresh, construct, videocam, arrowForward } from 'ionicons/icons';
 
-addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw, 'log-out-outline': logOutOutline, refresh, construct });
+addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw, 'log-out-outline': logOutOutline, refresh, construct, videocam, 'arrow-forward': arrowForward });
 
 @Component({
   selector: 'app-home',
@@ -88,6 +88,10 @@ export class HomePage {
 
   irAAdmin() {
     this.router.navigate(['/admin/vocabulario']);
+  }
+
+  irALabMediaPipe() {
+    this.router.navigate(['/mediapipe-test']);
   }
 
   async cerrarSesion() {

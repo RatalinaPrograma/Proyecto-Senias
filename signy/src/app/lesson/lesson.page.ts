@@ -8,6 +8,7 @@ import { TtsService } from '../services/tts';
 import { Nivel, Subnivel, Sena } from '../data/db-types';
 import { SenaIconComponent } from '../shared/sena-icon/sena-icon.component';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
+import { ImageCacheService } from '../services/image-cache';
 import { addIcons } from 'ionicons';
 import { close, heart, checkmarkCircle, camera, videocam, volumeHigh } from 'ionicons/icons';
 
@@ -85,11 +86,15 @@ export class LessonPage implements OnInit, OnDestroy {
     private router: Router,
     private supabaseService: SupabaseService,
     private contenidoService: ContenidoService,
-    private ttsService: TtsService
+    private ttsService: TtsService,
+    private imageCacheService: ImageCacheService
   ) {}
 
   async ngOnInit() {
     try {
+      // Limpiar caché de subniveles anteriores antes de comenzar
+      await this.imageCacheService.limpiarCacheSubnivel();
+
       const subnivelId = Number(this.route.snapshot.paramMap.get('subnivelId'));
 
       const { data: userData } = await this.supabaseService.getUser();
@@ -114,6 +119,12 @@ export class LessonPage implements OnInit, OnDestroy {
       this.vidas = stats.vidas ?? 5;
       this.minutosParaVida = this.contenidoService.minutosParaProximaVida(stats);
 
+      // Precargar los GIFs/recursos del subnivel actual en segundo plano
+      const urlsMedia = senas.map(s => s.video_url).filter((u): u is string => !!u);
+      if (urlsMedia.length > 0) {
+        await this.imageCacheService.precargarSubnivel(urlsMedia);
+      }
+
       const pares: Par[] = senas.map((s, i) => ({ palabra: s.palabra, senaId: s.id, seed: this.nivel.id * 10 + i, videoUrl: s.video_url }));
       this.manos = this.mezclar([...pares]);
       this.palabrasMezcladas = this.mezclar([...pares]);
@@ -130,6 +141,7 @@ export class LessonPage implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.detenerCamara();
     if (this.rafId) cancelAnimationFrame(this.rafId);
+    this.imageCacheService.limpiarCacheSubnivel();
   }
 
   private mezclar<T>(arr: T[]): T[] {
@@ -403,6 +415,7 @@ export class LessonPage implements OnInit, OnDestroy {
   // ---------- Salidas ----------
   salir() {
     this.detenerCamara();
+    this.imageCacheService.limpiarCacheSubnivel();
     this.router.navigate(['/home']);
   }
 }

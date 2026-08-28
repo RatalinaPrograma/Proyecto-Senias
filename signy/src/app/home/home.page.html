@@ -112,6 +112,21 @@
       </div>
     </ng-container>
 
+    <!-- Botón al Laboratorio de Pruebas de MediaPipe -->
+    <div class="lab-card-container">
+      <button class="lab-card" (click)="irALabMediaPipe()">
+        <div class="lab-icon-wrap">
+          <ion-icon name="videocam"></ion-icon>
+        </div>
+        <div class="lab-content">
+          <div class="lab-badge">BETA · VISIÓN ARTIFICIAL</div>
+          <h3>Laboratorio MediaPipe</h3>
+          <p>Pruebas de tracking y reconocimiento de señas en vivo</p>
+        </div>
+        <ion-icon name="arrow-forward" class="lab-arrow"></ion-icon>
+      </button>
+    </div>
+
     <div class="footer-mascot">
       <div class="fox-badge fox-badge-lg">
         <img [appCachedSrc]="'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="Signy" />

@@ -2,17 +2,37 @@
   --background: var(--signy-ink);
 }
 
-.skip-btn {
+.top-actions {
   position: absolute;
   top: calc(16px + env(safe-area-inset-top));
-  right: 16px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   z-index: 10;
+}
+
+.lab-pill-btn {
+  background: rgba(44, 166, 164, 0.2);
+  border: 1px solid var(--signy-mint);
+  color: var(--signy-mint);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.skip-btn {
   background: transparent;
   border: none;
   color: var(--signy-muted);
   font-family: 'Manrope', sans-serif;
   font-weight: 700;
   font-size: 13px;
+  margin-left: auto;
 }
 
 .onboarding-wrap {

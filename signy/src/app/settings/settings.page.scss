@@ -126,13 +126,16 @@
   --background: var(--signy-ink-deep);
   --color: var(--signy-cream);
   --placeholder-color: var(--signy-muted);
-  --border-color: var(--signy-locked);
+  --placeholder-opacity: 0.9;
+  --border-color: rgba(147, 163, 196, 0.45);
+  --border-width: 1.5px;
   --border-radius: 14px;
   --padding-start: 16px;
   --padding-end: 16px;
   --highlight-color-focused: var(--signy-fox);
   font-family: 'Manrope', sans-serif;
   margin-bottom: 12px;
+  min-height: 56px;
 }
 
 .field-error, .form-error, .form-success {

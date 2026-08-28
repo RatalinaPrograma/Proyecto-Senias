@@ -77,6 +77,10 @@ export class OnboardingPage implements OnInit {
     this.terminar();
   }
 
+  irALab() {
+    this.router.navigate(['/mediapipe-test']);
+  }
+
   private terminar() {
     localStorage.setItem(STORAGE_KEY, '1');
     this.router.navigate(['/auth/login'], { replaceUrl: true });
