@@ -68,9 +68,10 @@
         Escuchar
       </button>
 
-      <ion-button expand="block" class="btn-fox" (click)="siguienteFlash()">
+      <ion-button expand="block" class="btn-fox" (click)="siguienteFlash()" [disabled]="!flipped">
         {{ flashIndex + 1 >= senas.length ? 'Ir a emparejar' : 'Siguiente' }}
       </ion-button>
+      <p class="flash-lock-hint" *ngIf="!flipped">Revela la palabra para continuar</p>
     </div>
 
     <!-- ===== MATCH ===== -->
