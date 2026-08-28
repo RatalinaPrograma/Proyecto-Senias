@@ -1,9 +1,11 @@
 <ion-content [fullscreen]="true" class="signy-content">
 
   <!-- ===== CARGANDO ===== -->
-  <div class="empty-state" *ngIf="fase === 'cargando'">
-    <ion-spinner name="dots"></ion-spinner>
-    <p>Cargando lección…</p>
+  <div class="empty-state carga-state" *ngIf="fase === 'cargando'">
+    <img [appCachedSrc]="'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="Signy" class="carga-fox" />
+    <ion-progress-bar [value]="cargaProgreso / 100" class="carga-bar"></ion-progress-bar>
+    <p class="carga-pct">{{ cargaProgreso }}%</p>
+    <p class="carga-msg">{{ cargaMensaje }}</p>
   </div>
 
   <!-- ===== ERROR ===== -->
@@ -68,9 +70,10 @@
         Escuchar
       </button>
 
-      <ion-button expand="block" class="btn-fox" (click)="siguienteFlash()">
+      <ion-button expand="block" class="btn-fox" (click)="siguienteFlash()" [disabled]="!flipped">
         {{ flashIndex + 1 >= senas.length ? 'Ir a emparejar' : 'Siguiente' }}
       </ion-button>
+      <p class="flash-lock-hint" *ngIf="!flipped">Revela la palabra para continuar</p>
     </div>
 
     <!-- ===== MATCH ===== -->

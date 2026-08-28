@@ -19,15 +19,20 @@ export class ImageCacheService {
   /**
    * Precarga en segundo plano todos los recursos multimedia (GIFs/videos)
    * del subnivel actual y los deja listos en memoria y en la caché temporal.
+   * `onProgress`, si se entrega, se llama cada vez que un recurso termina
+   * (con éxito o con error) para poder mostrar una barra de carga real.
    */
-  async precargarSubnivel(urls: string[]): Promise<void> {
+  async precargarSubnivel(urls: string[], onProgress?: (completados: number, total: number) => void): Promise<void> {
     if (!('caches' in window) || !urls || !urls.length) return;
+
+    const total = urls.length;
+    let completados = 0;
 
     try {
       const cache = await caches.open(SUBNIVEL_CACHE_NAME);
       await Promise.all(
         urls.map(async (url) => {
-          if (!url) return;
+          if (!url) { completados++; onProgress?.(completados, total); return; }
 
           try {
             let response = await cache.match(url);
@@ -44,6 +49,9 @@ export class ImageCacheService {
             }
           } catch (err) {
             console.warn('ImageCache: No se pudo precargar URL:', url, err);
+          } finally {
+            completados++;
+            onProgress?.(completados, total);
           }
         })
       );

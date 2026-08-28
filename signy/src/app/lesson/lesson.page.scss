@@ -130,6 +130,14 @@
   margin-top: 14px;
 }
 
+.flash-lock-hint {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  color: var(--signy-muted);
+  text-align: center;
+  margin-top: 8px;
+}
+
 .listen-btn {
   display: flex;
   align-items: center;
@@ -411,6 +419,46 @@
   justify-content: center;
   text-align: center;
   padding: 40px 28px;
+
+  &.carga-state {
+    gap: 4px;
+  }
+
+  .carga-fox {
+    width: 84px;
+    height: 84px;
+    object-fit: contain;
+    border-radius: 50%;
+    margin-bottom: 22px;
+  }
+
+  .carga-bar {
+    width: 100%;
+    max-width: 260px;
+    height: 10px;
+    border-radius: 999px;
+    --background: var(--signy-locked);
+    --progress-background: var(--signy-fox);
+    // ion-progress-bar interpola su ancho solo; se agrega un poco de
+    // suavizado extra para que los saltos entre archivos precargados
+    // no se sientan bruscos.
+    transition: opacity 0.2s ease;
+  }
+
+  .carga-pct {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    color: var(--signy-cream);
+    margin: 14px 0 2px;
+  }
+
+  .carga-msg {
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    color: var(--signy-muted);
+    margin: 0;
+  }
 
   .sad-fox, .happy-fox {
     width: 96px;

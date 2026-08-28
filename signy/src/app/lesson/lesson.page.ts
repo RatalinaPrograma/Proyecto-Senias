@@ -36,6 +36,11 @@ export class LessonPage implements OnInit, OnDestroy {
   fase: Fase = 'cargando';
   errorMsg = '';
 
+  // ---- barra de carga: progreso real (0-100) repartido entre las etapas
+  // de ngOnInit, no una animación decorativa ----
+  cargaProgreso = 0;
+  cargaMensaje = 'Preparando tu lección…';
+
   userId = '';
   nivel!: Nivel;
   subnivel!: Subnivel;
@@ -94,16 +99,20 @@ export class LessonPage implements OnInit, OnDestroy {
     try {
       // Limpiar caché de subniveles anteriores antes de comenzar
       await this.imageCacheService.limpiarCacheSubnivel();
+      this.cargaProgreso = 5;
 
       const subnivelId = Number(this.route.snapshot.paramMap.get('subnivelId'));
 
       const { data: userData } = await this.supabaseService.getUser();
       if (!userData?.user) { this.router.navigate(['/auth/login']); return; }
       this.userId = userData.user.id;
+      this.cargaProgreso = 10;
 
       const subnivel = await this.contenidoService.getSubnivelPorId(subnivelId);
       if (!subnivel) { this.fase = 'error'; this.errorMsg = 'Esta lección no existe.'; return; }
       this.subnivel = subnivel;
+      this.cargaProgreso = 20;
+      this.cargaMensaje = 'Cargando nivel…';
 
       const [nivel, senas, stats] = await Promise.all([
         this.contenidoService.getNivelPorId(subnivel.nivel_id),
@@ -118,17 +127,29 @@ export class LessonPage implements OnInit, OnDestroy {
       this.senas = senas;
       this.vidas = stats.vidas ?? 5;
       this.minutosParaVida = this.contenidoService.minutosParaProximaVida(stats);
+      this.cargaProgreso = 35;
+      this.cargaMensaje = '¿Estás preparado?';
 
-      // Precargar los GIFs/recursos del subnivel actual en segundo plano
+      // Precargar los GIFs/recursos del subnivel actual en segundo plano.
+      // Suele ser la etapa más lenta y variable, así que se reparte el 35%-90%
+      // de la barra proporcional a cuántos recursos van descargados. El
+      // mensaje se mantiene simple y cercano, sin exponer detalles técnicos.
       const urlsMedia = senas.map(s => s.video_url).filter((u): u is string => !!u);
       if (urlsMedia.length > 0) {
-        await this.imageCacheService.precargarSubnivel(urlsMedia);
+        await this.imageCacheService.precargarSubnivel(urlsMedia, (completados, total) => {
+          this.cargaProgreso = 35 + Math.round((completados / total) * 55);
+          this.cargaMensaje = this.cargaProgreso < 65 ? '¿Estás preparado?' : 'Ya casi estamos…';
+        });
+      } else {
+        this.cargaProgreso = 90;
       }
 
       const pares: Par[] = senas.map((s, i) => ({ palabra: s.palabra, senaId: s.id, seed: this.nivel.id * 10 + i, videoUrl: s.video_url }));
       this.manos = this.mezclar([...pares]);
       this.palabrasMezcladas = this.mezclar([...pares]);
+      this.cargaMensaje = '¡Ya casi! Últimos detalles…';
       this.preguntas = await this.construirPreguntas();
+      this.cargaProgreso = 100;
 
       this.fase = this.vidas <= 0 ? 'sinvidas' : 'flash';
     } catch (e) {
