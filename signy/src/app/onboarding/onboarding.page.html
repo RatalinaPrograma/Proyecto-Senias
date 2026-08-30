@@ -1,4 +1,5 @@
 <ion-content [fullscreen]="true" class="signy-content">
+ <ng-container *ngIf="listo">
   <div class="top-actions">
     <button class="lab-pill-btn" (click)="irALab()">🧪 Probar Cámara</button>
     <button class="skip-btn" *ngIf="!esUltimo" (click)="saltar()">Saltar</button>
@@ -39,4 +40,5 @@
       </ion-button>
     </div>
   </div>
+ </ng-container>
 </ion-content>

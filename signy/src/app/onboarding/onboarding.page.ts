@@ -4,6 +4,7 @@ import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { Preferences } from '@capacitor/preferences';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
+import { SupabaseService } from '../services/supabase';
 
 interface Slide {
   imagen: string;
@@ -22,6 +23,9 @@ const STORAGE_KEY = 'signy_onboarding_visto';
 })
 export class OnboardingPage implements OnInit {
   paso = 0;
+  // Recién en true cuando confirmamos que el tutorial SÍ hay que mostrarlo;
+  // evita el parpadeo de la slide 1 antes de redirigir a quien ya lo vio.
+  listo = false;
 
   slides: Slide[] = [
     {
@@ -46,13 +50,29 @@ export class OnboardingPage implements OnInit {
     },
   ];
 
-  constructor(private router: Router) {}
+  constructor(
+    private router: Router,
+    private supabaseService: SupabaseService
+  ) {}
 
   async ngOnInit() {
+    // El tutorial se muestra una sola vez. Si ya se vio, esta página no
+    // debería aparecer nunca más: se salta directo a donde corresponda
+    // según haya sesión o no.
     const { value } = await Preferences.get({ key: STORAGE_KEY });
     if (value === '1') {
-      this.router.navigate(['/auth/login'], { replaceUrl: true });
+      await this.irADestino();
+      return;
     }
+    this.listo = true;
+  }
+
+  // Manda a /home si hay sesión, a /auth/login si no. Los guards de cada
+  // ruta revalidan igual; esto solo evita el rebote login -> home.
+  private async irADestino() {
+    const { data } = await this.supabaseService.getUser();
+    const destino = data?.user ? '/home' : '/auth/login';
+    this.router.navigate([destino], { replaceUrl: true });
   }
 
   get esUltimo(): boolean {
@@ -85,6 +105,6 @@ export class OnboardingPage implements OnInit {
 
   private async terminar() {
     await Preferences.set({ key: STORAGE_KEY, value: '1' });
-    this.router.navigate(['/auth/login'], { replaceUrl: true });
+    await this.irADestino();
   }
 }
