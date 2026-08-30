@@ -64,7 +64,15 @@ export class AdminVocabularioPage implements OnInit {
   subniveles: Subnivel[] = [];
   senas: Sena[] = [];
 
+  // Índices por padre: se arman una vez al cargar en vez de filtrar el array
+  // entero en cada llamada desde el template (que corría por cada ciclo de CD).
+  private subnivelesPorNivel = new Map<number, Subnivel[]>();
+  private senasPorSubnivel = new Map<number, Sena[]>();
+
   buscarSena = '';
+  // Lista ya filtrada por el buscador; se recalcula al cargar, al entrar a un
+  // subnivel y al escribir — no en cada render.
+  senasFiltradas: Sena[] = [];
 
   // ---- formulario de nivel ----
   formNivelAbierto = false;
@@ -100,15 +108,43 @@ export class AdminVocabularioPage implements OnInit {
     this.cargando = true;
     this.error = null;
     try {
-      this.niveles = await this.supabaseService.listarNiveles();
-      this.subniveles = await this.supabaseService.listarSubniveles();
-      this.senas = await this.supabaseService.listarSenas();
+      const [niveles, subniveles, senas] = await Promise.all([
+        this.supabaseService.listarNiveles(),
+        this.supabaseService.listarSubniveles(),
+        this.supabaseService.listarSenas(),
+      ]);
+      this.niveles = niveles;
+      this.subniveles = subniveles;
+      this.senas = senas;
+      this.reindexar();
+      this.filtrarSenas();
     } catch (e: any) {
       this.error = e?.message ?? 'No se pudo cargar el vocabulario.';
     } finally {
       this.cargando = false;
     }
   }
+
+  private reindexar() {
+    this.subnivelesPorNivel.clear();
+    for (const s of this.subniveles) {
+      const arr = this.subnivelesPorNivel.get(s.nivel_id);
+      if (arr) arr.push(s); else this.subnivelesPorNivel.set(s.nivel_id, [s]);
+    }
+    this.senasPorSubnivel.clear();
+    for (const s of this.senas) {
+      const arr = this.senasPorSubnivel.get(s.subnivel_id);
+      if (arr) arr.push(s); else this.senasPorSubnivel.set(s.subnivel_id, [s]);
+    }
+  }
+
+  filtrarSenas() {
+    const base = this.subnivelActivo ? this.senasDe(this.subnivelActivo.id) : [];
+    const q = this.buscarSena.trim().toLowerCase();
+    this.senasFiltradas = q ? base.filter(s => s.palabra.toLowerCase().includes(q)) : base;
+  }
+
+  trackById = (_: number, item: { id: number }) => item.id;
 
   // ==================== NAVEGACIÓN (breadcrumb) ====================
   // La flechita de "volver" del topbar retrocede un escalón a la vez,
@@ -134,6 +170,7 @@ export class AdminVocabularioPage implements OnInit {
     this.subnivelActivo = s;
     this.vista = 'senas';
     this.buscarSena = '';
+    this.filtrarSenas();
     this.cerrarFormularios();
   }
 
@@ -151,25 +188,19 @@ export class AdminVocabularioPage implements OnInit {
   }
 
   // ==================== helpers de conteo / filtrado ====================
+  // Lookups O(1) sobre los índices; devuelven la MISMA referencia de array
+  // entre llamadas, así que son seguros de usar en el template.
   subnivelesDe(nivelId: number): Subnivel[] {
-    return this.subniveles.filter(s => s.nivel_id === nivelId);
+    return this.subnivelesPorNivel.get(nivelId) ?? [];
   }
 
   senasDe(subnivelId: number): Sena[] {
-    return this.senas.filter(s => s.subnivel_id === subnivelId);
+    return this.senasPorSubnivel.get(subnivelId) ?? [];
   }
 
   get subnivelesDelNivelActivo(): Subnivel[] {
     if (!this.nivelActivo) return [];
     return this.subnivelesDe(this.nivelActivo.id);
-  }
-
-  get senasDelSubnivelActivo(): Sena[] {
-    if (!this.subnivelActivo) return [];
-    const lista = this.senasDe(this.subnivelActivo.id);
-    const q = this.buscarSena.trim().toLowerCase();
-    if (!q) return lista;
-    return lista.filter(s => s.palabra.toLowerCase().includes(q));
   }
 
   private cerrarFormularios() {

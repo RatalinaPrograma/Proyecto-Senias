@@ -58,9 +58,15 @@ export class GifTileComponent implements OnChanges, AfterViewInit {
     const previa = new Image();
     previa.onload = () => {
       const canvas = this.lienzoRef.nativeElement;
-      canvas.width = previa.naturalWidth || 100;
-      canvas.height = previa.naturalHeight || 100;
-      canvas.getContext('2d')?.drawImage(previa, 0, 0);
+      // El tile se ve a ~80-160px: dibujar el frame a resolución completa
+      // gasta decode y memoria de más en gama media sin ganancia visible.
+      const MAX = 200;
+      const w = previa.naturalWidth || 100;
+      const h = previa.naturalHeight || 100;
+      const escala = Math.min(1, MAX / Math.max(w, h));
+      canvas.width = Math.round(w * escala);
+      canvas.height = Math.round(h * escala);
+      canvas.getContext('2d')?.drawImage(previa, 0, 0, canvas.width, canvas.height);
     };
     previa.src = this.urlResuelta;
   }

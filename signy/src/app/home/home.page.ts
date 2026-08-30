@@ -27,19 +27,30 @@ export class HomePage {
   avatarUrl: string | null = null;
   esAdmin = false;
 
+  // Se calculan una vez por carga en vez de en cada ciclo de change detection.
+  totalSubniveles = 0;
+  subnivelesCompletados = 0;
+
+  private ultimaCarga = 0;
+
   constructor(
     private supabaseService: SupabaseService,
     private contenidoService: ContenidoService,
     private router: Router
   ) {}
 
-  // Se recalcula cada vez que vuelves a Home (ej. después de terminar una lección)
+  // Se recalcula cada vez que vuelves a Home (ej. después de terminar una lección).
+  // El throttle corto solo mata los rebotes de navegación (abrir perfil y volver
+  // al toque) que disparaban una recarga completa de 7 queries.
   async ionViewWillEnter() {
+    if (this.niveles.length && Date.now() - this.ultimaCarga < 2000) return;
     await this.cargarTodo();
   }
 
   async cargarTodo() {
-    this.cargando = true;
+    // Solo mostrar el spinner de pantalla completa si aún no hay nada que mostrar;
+    // en las recargas (volver de una lección) se actualiza en silencio.
+    if (!this.niveles.length) this.cargando = true;
     this.error = '';
     try {
       const { data: userData } = await this.supabaseService.getUser();
@@ -54,6 +65,12 @@ export class HomePage {
       this.stats = stats;
       this.avatarUrl = perfil?.avatar_url ?? null;
       this.esAdmin = perfil?.es_admin ?? false;
+      this.totalSubniveles = niveles.reduce((acc, n) => acc + n.subniveles.length, 0);
+      this.subnivelesCompletados = niveles.reduce(
+        (acc, n) => acc + n.subniveles.filter(s => s.estado === 'completado').length,
+        0
+      );
+      this.ultimaCarga = Date.now();
     } catch (e: any) {
       this.error = 'No se pudo cargar tu progreso. Revisa tu conexión.';
       console.error(e);
@@ -62,20 +79,12 @@ export class HomePage {
     }
   }
 
+  trackNivel = (_: number, n: NivelConEstado) => n.id;
+  trackSub = (_: number, s: SubnivelConEstado) => s.id;
+
   get racha(): number { return this.stats?.racha_actual ?? 0; }
   get xp(): number { return this.stats?.puntos_experiencia ?? 0; }
   get vidas(): number { return this.stats?.vidas ?? 5; }
-
-  get totalSubniveles(): number {
-    return this.niveles.reduce((acc, n) => acc + n.subniveles.length, 0);
-  }
-
-  get subnivelesCompletados(): number {
-    return this.niveles.reduce(
-      (acc, n) => acc + n.subniveles.filter(s => s.estado === 'completado').length,
-      0
-    );
-  }
 
   abrirLeccion(subnivel: SubnivelConEstado) {
     if (subnivel.estado === 'bloqueado' || subnivel.estado === 'proximamente') return;

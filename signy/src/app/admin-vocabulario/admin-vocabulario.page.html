@@ -35,7 +35,7 @@
     <div class="view-body" *ngIf="vista === 'niveles'">
       <p class="view-hint">Toca un nivel para ver y editar sus subniveles.</p>
 
-      <div class="nivel-card" *ngFor="let n of niveles" (click)="abrirNivel(n)"
+      <div class="nivel-card" *ngFor="let n of niveles; trackBy: trackById" (click)="abrirNivel(n)"
         [style.background]="n.color || 'var(--signy-card)'"
         [style.boxShadow]="'0 4px 0 ' + (n.color_oscuro || 'var(--signy-locked)')">
         <div class="nivel-icon">
@@ -126,7 +126,7 @@
     <div class="view-body" *ngIf="vista === 'subniveles' && nivelActivo">
       <p class="view-hint">Toca un subnivel para ver y editar sus señas.</p>
 
-      <div class="item-card" *ngFor="let s of subnivelesDelNivelActivo" (click)="abrirSubnivel(s)">
+      <div class="item-card" *ngFor="let s of subnivelesDelNivelActivo; trackBy: trackById" (click)="abrirSubnivel(s)">
         <div class="item-icon"><ion-icon name="layers-outline"></ion-icon></div>
         <div class="item-info">
           <p class="item-title">{{ s.numero_subnivel }}. {{ s.nombre }}</p>
@@ -183,11 +183,11 @@
     <!-- ===================== VISTA: SEÑAS (dentro de un subnivel) ===================== -->
     <div class="view-body" *ngIf="vista === 'senas' && subnivelActivo">
       <ion-input label="Buscar palabra" labelPlacement="floating" fill="outline"
-        [(ngModel)]="buscarSena" class="signy-input" *ngIf="senasDe(subnivelActivo.id).length"></ion-input>
+        [(ngModel)]="buscarSena" (ngModelChange)="filtrarSenas()" class="signy-input" *ngIf="senasDe(subnivelActivo.id).length"></ion-input>
 
-      <div class="item-card sena-card" *ngFor="let s of senasDelSubnivelActivo" (click)="editarSena(s)">
+      <div class="item-card sena-card" *ngFor="let s of senasFiltradas; trackBy: trackById" (click)="editarSena(s)">
         <div class="item-thumb-wrap">
-          <img *ngIf="s.video_url" [src]="s.video_url" [alt]="s.palabra" class="item-thumb" />
+          <img *ngIf="s.video_url" [src]="s.video_url" [alt]="s.palabra" class="item-thumb" loading="lazy" decoding="async" />
           <div class="item-thumb placeholder" *ngIf="!s.video_url"><ion-icon name="image-outline"></ion-icon></div>
         </div>
         <div class="item-info">
@@ -208,7 +208,7 @@
         <p class="empty-sub">Agrega la primera palabra con su GIF o foto de la seña real.</p>
       </div>
 
-      <p class="empty-hint" *ngIf="senasDe(subnivelActivo.id).length && !senasDelSubnivelActivo.length">
+      <p class="empty-hint" *ngIf="senasDe(subnivelActivo.id).length && !senasFiltradas.length">
         Ninguna palabra coincide con "{{ buscarSena }}".
       </p>
 
@@ -245,7 +245,7 @@
           <p class="upload-hint" *ngIf="subiendoArchivo">Subiendo…</p>
         </div>
 
-        <img *ngIf="formSena.video_url" [src]="formSena.video_url" alt="Vista previa" class="preview-img" />
+        <img *ngIf="formSena.video_url" [src]="formSena.video_url" alt="Vista previa" class="preview-img" decoding="async" />
 
         <p class="form-error" *ngIf="errorForm">{{ errorForm }}</p>
 

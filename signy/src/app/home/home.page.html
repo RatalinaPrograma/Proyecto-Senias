@@ -19,7 +19,7 @@
     <div class="hud">
       <div class="hud-brand">
         <button class="fox-badge" (click)="irAPerfil()" aria-label="Ver mi perfil">
-          <img [src]="avatarUrl || 'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="Tu perfil" />
+          <img [appCachedSrc]="avatarUrl || 'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="Tu perfil" decoding="async" />
         </button>
         <div class="hud-greeting">
           <h1>¡Hola de nuevo!</h1>
@@ -59,7 +59,7 @@
       <span>{{ subnivelesCompletados }} / {{ totalSubniveles }} lecciones</span>
     </div>
 
-    <ng-container *ngFor="let nivel of niveles">
+    <ng-container *ngFor="let nivel of niveles; trackBy: trackNivel">
       <div class="unit-banner" [class.locked]="!nivel.accesible" [style.background]="nivel.color || 'var(--signy-card)'" [style.boxShadow]="'0 4px 0 ' + (nivel.color_oscuro || 'var(--signy-locked)')">
         <div>
           <p class="unit-tag">{{ nivel.etiqueta || ('Nivel ' + nivel.numero_nivel) }}</p>
@@ -72,7 +72,7 @@
       </div>
 
       <div class="path">
-        <ng-container *ngFor="let sub of nivel.subniveles; let i = index; let last = last">
+        <ng-container *ngFor="let sub of nivel.subniveles; let i = index; let last = last; trackBy: trackSub">
           <div class="path-row" [class.align-left]="i % 2 === 0" [class.align-right]="i % 2 !== 0">
             <button
               class="node"
@@ -132,7 +132,7 @@
 
     <div class="footer-mascot">
       <div class="fox-badge fox-badge-lg">
-        <img [appCachedSrc]="'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="Signy" />
+        <img [appCachedSrc]="'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="Signy" loading="lazy" decoding="async" />
       </div>
       <p>Contenido de referencia — validar señas finales con la comunidad sorda chilena.</p>
     </div>

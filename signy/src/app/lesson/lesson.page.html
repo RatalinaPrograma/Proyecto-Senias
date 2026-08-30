@@ -55,7 +55,7 @@
           <div class="flash-icon-wrap" *ngIf="!senas[flashIndex].video_url">
             <app-sena-icon [seed]="nivel.id * 10 + flashIndex" [size]="80" color="#fff" dark="rgba(0,0,0,0.2)"></app-sena-icon>
           </div>
-          <img *ngIf="senas[flashIndex].video_url" [appCachedSrc]="senas[flashIndex].video_url" [alt]="senas[flashIndex].palabra" class="real-media" />
+          <img *ngIf="senas[flashIndex].video_url" [appCachedSrc]="senas[flashIndex].video_url" [alt]="senas[flashIndex].palabra" class="real-media" decoding="async" />
         </ng-container>
         <div class="flash-word" *ngIf="flipped">{{ senas[flashIndex].palabra }}</div>
         <span class="flash-hint">toca para {{ flipped ? 'ver la seña' : 'revelar la palabra' }}</span>
@@ -84,7 +84,7 @@
       <div class="match-columnas">
         <div class="match-col">
           <button
-            *ngFor="let m of manos"
+            *ngFor="let m of manos; trackBy: trackPar"
             class="match-tile"
             [class.match-tile-gif]="m.videoUrl"
             [disabled]="emparejados.includes(m.palabra)"
@@ -99,7 +99,7 @@
 
         <div class="match-col">
           <button
-            *ngFor="let p of palabrasMezcladas"
+            *ngFor="let p of palabrasMezcladas; trackBy: trackPar"
             class="match-tile match-word"
             [disabled]="emparejados.includes(p.palabra)"
             [class.matched]="emparejados.includes(p.palabra)"
@@ -125,7 +125,7 @@
         <div class="quiz-icon-wrap" *ngIf="!preguntaActual.videoUrl">
           <app-sena-icon [seed]="preguntaActual.seed" [size]="90" color="#fff" dark="rgba(0,0,0,0.2)"></app-sena-icon>
         </div>
-        <img *ngIf="preguntaActual.videoUrl" [appCachedSrc]="preguntaActual.videoUrl" [alt]="preguntaActual.palabra" class="real-media" />
+        <img *ngIf="preguntaActual.videoUrl" [appCachedSrc]="preguntaActual.videoUrl" [alt]="preguntaActual.palabra" class="real-media" decoding="async" />
         <span class="quiz-hint">{{ preguntaActual.videoUrl ? 'seña real' : 'video de referencia (demo)' }}</span>
       </div>
 

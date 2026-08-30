@@ -105,8 +105,8 @@ export class LessonPage implements OnInit, OnDestroy {
 
   async ngOnInit() {
     try {
-      // Limpiar caché de subniveles anteriores antes de comenzar
-      await this.imageCacheService.limpiarCacheSubnivel();
+      // La caché del subnivel anterior ya se limpia en su ngOnDestroy/salir();
+      // no hace falta bloquear el arranque con otro caches.delete() acá.
       this.cargaProgreso = 5;
 
       const subnivelId = Number(this.route.snapshot.paramMap.get('subnivelId'));
@@ -122,10 +122,13 @@ export class LessonPage implements OnInit, OnDestroy {
       this.cargaProgreso = 20;
       this.cargaMensaje = 'Cargando nivel…';
 
-      const [nivel, senas, stats] = await Promise.all([
+      // El pool de palabras del quiz se trae acá, en paralelo con lo demás,
+      // en vez de en serie justo antes de arrancar las flashcards.
+      const [nivel, senas, stats, pool] = await Promise.all([
         this.contenidoService.getNivelPorId(subnivel.nivel_id),
         this.contenidoService.getSenas(subnivelId),
         this.contenidoService.getMisStats(this.userId),
+        this.contenidoService.getPoolDePalabras(),
       ]);
 
       if (!nivel) { this.fase = 'error'; this.errorMsg = 'No se encontró la categoría de esta lección.'; return; }
@@ -156,7 +159,7 @@ export class LessonPage implements OnInit, OnDestroy {
       this.rondas = this.armarRondas(pares);
       this.cargarRonda(0);
       this.cargaMensaje = '¡Ya casi! Últimos detalles…';
-      this.preguntas = await this.construirPreguntas();
+      this.preguntas = this.construirPreguntas(pool);
       this.cargaProgreso = 100;
 
       this.fase = this.vidas <= 0 ? 'sinvidas' : 'flash';
@@ -177,8 +180,10 @@ export class LessonPage implements OnInit, OnDestroy {
     return arr.sort(() => 0.5 - Math.random());
   }
 
-  private async construirPreguntas(): Promise<Pregunta[]> {
-    const pool = await this.contenidoService.getPoolDePalabras();
+  // Sin esto, cada cambio de ronda recrea (y redecodifica el GIF de) los 4 tiles.
+  trackPar = (_: number, p: Par) => p.senaId;
+
+  private construirPreguntas(pool: string[]): Pregunta[] {
     return this.senas.map((s, i) => {
       const distractores = this.mezclar(pool.filter(w => w !== s.palabra)).slice(0, 3);
       const opciones = this.mezclar([...distractores, s.palabra]);
