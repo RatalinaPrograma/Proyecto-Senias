@@ -30,6 +30,27 @@ export class ContenidoService {
     return data ?? [];
   }
 
+  /** Todos los subniveles de todos los niveles en una sola consulta (evita
+   * el N+1 de llamar getSubniveles por cada nivel al armar el camino). */
+  async getSubnivelesTodos(): Promise<Subnivel[]> {
+    const { data, error } = await this.db
+      .from('subniveles')
+      .select('*')
+      .order('nivel_id')
+      .order('numero_subnivel');
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  /** IDs de subniveles que ya tienen al menos una seña con video_url
+   * cargado. Una fila de seña sin video_url (palabra cargada de antemano,
+   * pendiente del GIF real) no cuenta como "lista" todavía. */
+  async getSubnivelesConContenido(): Promise<Set<number>> {
+    const { data, error } = await this.db.from('senas').select('subnivel_id').not('video_url', 'is', null);
+    if (error) throw error;
+    return new Set((data ?? []).map(r => r.subnivel_id));
+  }
+
   async getSubnivelPorId(subnivelId: number): Promise<Subnivel | null> {
     const { data, error } = await this.db.from('subniveles').select('*').eq('id', subnivelId).maybeSingle();
     if (error) throw error;
@@ -71,14 +92,23 @@ export class ContenidoService {
    * árbol listo para pintar en Home, con el estado de cada subnivel ya
    * calculado (completado / actual / bloqueado). */
   async obtenerMapaDeAprendizaje(userId: string): Promise<NivelConEstado[]> {
-    const [niveles, progresoNiveles, progresoSubniveles] = await Promise.all([
+    const [niveles, progresoNiveles, progresoSubniveles, todosLosSubniveles, subnivelesConContenido] = await Promise.all([
       this.getNiveles(),
       this.getMisProgresosNivel(userId),
       this.getMisProgresosSubnivel(userId),
+      this.getSubnivelesTodos(),
+      this.getSubnivelesConContenido(),
     ]);
 
     const progresoNivelPorId = new Map(progresoNiveles.map(p => [p.nivel_id, p]));
     const progresoSubnivelPorId = new Map(progresoSubniveles.map(p => [p.subnivel_id, p]));
+
+    const subnivelesPorNivel = new Map<number, Subnivel[]>();
+    for (const sub of todosLosSubniveles) {
+      const lista = subnivelesPorNivel.get(sub.nivel_id) ?? [];
+      lista.push(sub);
+      subnivelesPorNivel.set(sub.nivel_id, lista);
+    }
 
     const resultado: NivelConEstado[] = [];
 
@@ -91,15 +121,19 @@ export class ContenidoService {
       const accesible = progNivel?.acceso === true || (i === 0 && !progNivel);
       const completadoNivel = progNivel?.completado === true;
 
-      const subniveles = await this.getSubniveles(nivel.id);
+      const subniveles = subnivelesPorNivel.get(nivel.id) ?? [];
       let yaHayActual = false;
 
       const subnivelesConEstado = subniveles.map((sub) => {
         const progSub = progresoSubnivelPorId.get(sub.id);
         const completado = progSub?.completado === true;
 
-        let estado: 'completado' | 'actual' | 'bloqueado';
-        if (!accesible) {
+        let estado: 'completado' | 'actual' | 'bloqueado' | 'proximamente';
+        if (!subnivelesConContenido.has(sub.id)) {
+          // Todavía no tiene señas con video_url: nunca se marca como
+          // 'actual' (no invitamos a tocar algo que va a mostrar un error).
+          estado = 'proximamente';
+        } else if (!accesible) {
           estado = 'bloqueado';
         } else if (completado) {
           estado = 'completado';

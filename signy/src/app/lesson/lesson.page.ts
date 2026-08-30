@@ -8,6 +8,7 @@ import { TtsService } from '../services/tts';
 import { Nivel, Subnivel, Sena } from '../data/db-types';
 import { SenaIconComponent } from '../shared/sena-icon/sena-icon.component';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
+import { GifTileComponent } from '../shared/gif-tile/gif-tile.component';
 import { ImageCacheService } from '../services/image-cache';
 import { addIcons } from 'ionicons';
 import { close, heart, checkmarkCircle, camera, videocam, volumeHigh } from 'ionicons/icons';
@@ -25,7 +26,7 @@ const MENSAJES_MAL = ['Ajusta el pulgar', 'Centra tu mano en el óvalo', 'Prueba
 @Component({
   selector: 'app-lesson',
   standalone: true,
-  imports: [CommonModule, IonicModule, SenaIconComponent, CachedSrcDirective],
+  imports: [CommonModule, IonicModule, SenaIconComponent, CachedSrcDirective, GifTileComponent],
   templateUrl: './lesson.page.html',
   styleUrls: ['./lesson.page.scss'],
 })
@@ -60,6 +61,13 @@ export class LessonPage implements OnInit, OnDestroy {
   selPalabra: string | null = null;
   emparejados: string[] = [];
   matchMal = false;
+
+  // Si el subnivel tiene muchas señas, se reparten en tandas de a
+  // TAMANO_RONDA para que cada tile del emparejar quepa grande y legible
+  // en vez de apretar todo en una sola pantalla.
+  private readonly TAMANO_RONDA = 4;
+  private rondas: Par[][] = [];
+  rondaActual = 0;
 
   // ---- quiz ----
   preguntas: Pregunta[] = [];
@@ -145,8 +153,8 @@ export class LessonPage implements OnInit, OnDestroy {
       }
 
       const pares: Par[] = senas.map((s, i) => ({ palabra: s.palabra, senaId: s.id, seed: this.nivel.id * 10 + i, videoUrl: s.video_url }));
-      this.manos = this.mezclar([...pares]);
-      this.palabrasMezcladas = this.mezclar([...pares]);
+      this.rondas = this.armarRondas(pares);
+      this.cargarRonda(0);
       this.cargaMensaje = '¡Ya casi! Últimos detalles…';
       this.preguntas = await this.construirPreguntas();
       this.cargaProgreso = 100;
@@ -242,8 +250,40 @@ export class LessonPage implements OnInit, OnDestroy {
     return this.emparejados.length === this.manos.length;
   }
 
-  irAQuiz() {
-    this.fase = 'quiz';
+  get totalRondas(): number {
+    return this.rondas.length;
+  }
+
+  get hayMasRondas(): boolean {
+    return this.rondaActual < this.rondas.length - 1;
+  }
+
+  private armarRondas(pares: Par[]): Par[][] {
+    const mezclados = this.mezclar([...pares]);
+    const rondas: Par[][] = [];
+    for (let i = 0; i < mezclados.length; i += this.TAMANO_RONDA) {
+      rondas.push(mezclados.slice(i, i + this.TAMANO_RONDA));
+    }
+    return rondas;
+  }
+
+  private cargarRonda(indice: number) {
+    this.rondaActual = indice;
+    const grupo = this.rondas[indice];
+    this.manos = this.mezclar([...grupo]);
+    this.palabrasMezcladas = this.mezclar([...grupo]);
+    this.emparejados = [];
+    this.selMano = null;
+    this.selPalabra = null;
+    this.matchMal = false;
+  }
+
+  siguienteRondaOQuiz() {
+    if (this.hayMasRondas) {
+      this.cargarRonda(this.rondaActual + 1);
+    } else {
+      this.fase = 'quiz';
+    }
   }
 
   // ---------- Quiz ----------

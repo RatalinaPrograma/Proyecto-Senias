@@ -122,7 +122,7 @@ export interface PerfilConRelacion extends Profile {
 }
 
 // ---- Tipos "de vista", combinan datos + progreso para la UI ----
-export type EstadoSubnivel = 'completado' | 'actual' | 'bloqueado';
+export type EstadoSubnivel = 'completado' | 'actual' | 'bloqueado' | 'proximamente';
 
 export interface SubnivelConEstado extends Subnivel {
   estado: EstadoSubnivel;

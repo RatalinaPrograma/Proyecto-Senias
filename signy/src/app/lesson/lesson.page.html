@@ -79,35 +79,40 @@
     <!-- ===== MATCH ===== -->
     <div class="phase-body" *ngIf="fase === 'match'">
       <p class="eyebrow">UNE CADA SEÑA CON SU PALABRA</p>
+      <p class="match-ronda" *ngIf="totalRondas > 1">Grupo {{ rondaActual + 1 }} de {{ totalRondas }}</p>
 
-      <div class="match-grid">
-        <button
-          *ngFor="let m of manos"
-          class="match-tile"
-          [disabled]="emparejados.includes(m.palabra)"
-          [class.matched]="emparejados.includes(m.palabra)"
-          [class.selected]="selMano === m && !matchMal"
-          [class.wrong]="selMano === m && matchMal"
-          (click)="elegirMano(m)">
-          <app-sena-icon [seed]="m.seed" [size]="36" [color]="nivel.color || '#F2701A'" [dark]="nivel.color_oscuro || '#C6560E'"></app-sena-icon>
-        </button>
+      <div class="match-columnas">
+        <div class="match-col">
+          <button
+            *ngFor="let m of manos"
+            class="match-tile"
+            [class.match-tile-gif]="m.videoUrl"
+            [disabled]="emparejados.includes(m.palabra)"
+            [class.matched]="emparejados.includes(m.palabra)"
+            [class.selected]="selMano === m && !matchMal"
+            [class.wrong]="selMano === m && matchMal"
+            (click)="elegirMano(m)">
+            <app-gif-tile *ngIf="m.videoUrl" [url]="m.videoUrl" [activo]="selMano === m"></app-gif-tile>
+            <app-sena-icon *ngIf="!m.videoUrl" [seed]="m.seed" [size]="36" [color]="nivel.color || '#F2701A'" [dark]="nivel.color_oscuro || '#C6560E'"></app-sena-icon>
+          </button>
+        </div>
+
+        <div class="match-col">
+          <button
+            *ngFor="let p of palabrasMezcladas"
+            class="match-tile match-word"
+            [disabled]="emparejados.includes(p.palabra)"
+            [class.matched]="emparejados.includes(p.palabra)"
+            [class.selected]="selPalabra === p.palabra && !matchMal"
+            [class.wrong]="selPalabra === p.palabra && matchMal"
+            (click)="elegirPalabra(p.palabra)">
+            {{ p.palabra }}
+          </button>
+        </div>
       </div>
 
-      <div class="match-grid">
-        <button
-          *ngFor="let p of palabrasMezcladas"
-          class="match-tile match-word"
-          [disabled]="emparejados.includes(p.palabra)"
-          [class.matched]="emparejados.includes(p.palabra)"
-          [class.selected]="selPalabra === p.palabra && !matchMal"
-          [class.wrong]="selPalabra === p.palabra && matchMal"
-          (click)="elegirPalabra(p.palabra)">
-          {{ p.palabra }}
-        </button>
-      </div>
-
-      <ion-button expand="block" class="btn-fox" *ngIf="matchCompleto" (click)="irAQuiz()">
-        Ir a las preguntas
+      <ion-button expand="block" class="btn-fox" *ngIf="matchCompleto" (click)="siguienteRondaOQuiz()">
+        {{ hayMasRondas ? 'Siguiente grupo' : 'Ir a las preguntas' }}
       </ion-button>
     </div>
 

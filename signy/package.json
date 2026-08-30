@@ -24,6 +24,7 @@
     "@capacitor-community/text-to-speech": "^8.0.2",
     "@capacitor/android": "8.5.0",
     "@capacitor/core": "8.5.0",
+    "@capacitor/preferences": "^8.0.1",
     "@capacitor/status-bar": "^8.0.3",
     "@ionic/angular": "^8.0.0",
     "@mediapipe/tasks-vision": "^1.0.1",

@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, guestGuard, adminGuard } from './auth/auth.guard';
+import { authGuard, guestGuard, adminGuard, lessonGuard } from './auth/auth.guard';
 
 export const routes: Routes = [
   {
@@ -48,7 +48,7 @@ export const routes: Routes = [
   },
   {
     path: 'lesson/:subnivelId',
-    canActivate: [authGuard],
+    canActivate: [authGuard, lessonGuard],
     loadComponent: () => import('./lesson/lesson.page').then(m => m.LessonPage)
   },
   {

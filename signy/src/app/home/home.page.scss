@@ -230,6 +230,18 @@
     color: var(--signy-muted);
     opacity: 0.75;
   }
+
+  &-proximamente {
+    background: transparent;
+    border: 2px dashed var(--signy-muted);
+    color: var(--signy-muted);
+    opacity: 0.6;
+  }
+}
+
+.node-badge-soon {
+  background: var(--signy-locked);
+  color: var(--signy-muted);
 }
 
 .node-badge {

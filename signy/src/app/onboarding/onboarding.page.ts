@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
+import { Preferences } from '@capacitor/preferences';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
 
 interface Slide {
@@ -47,8 +48,9 @@ export class OnboardingPage implements OnInit {
 
   constructor(private router: Router) {}
 
-  ngOnInit() {
-    if (localStorage.getItem(STORAGE_KEY) === '1') {
+  async ngOnInit() {
+    const { value } = await Preferences.get({ key: STORAGE_KEY });
+    if (value === '1') {
       this.router.navigate(['/auth/login'], { replaceUrl: true });
     }
   }
@@ -81,8 +83,8 @@ export class OnboardingPage implements OnInit {
     this.router.navigate(['/mediapipe-test']);
   }
 
-  private terminar() {
-    localStorage.setItem(STORAGE_KEY, '1');
+  private async terminar() {
+    await Preferences.set({ key: STORAGE_KEY, value: '1' });
     this.router.navigate(['/auth/login'], { replaceUrl: true });
   }
 }

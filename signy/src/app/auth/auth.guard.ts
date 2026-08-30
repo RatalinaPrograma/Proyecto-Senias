@@ -1,6 +1,7 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
+import { ContenidoService } from '../services/contenido';
 
 export const authGuard: CanActivateFn = async () => {
   const supabaseService = inject(SupabaseService);
@@ -51,4 +52,33 @@ export const adminGuard: CanActivateFn = async () => {
   }
 
   return true;
+};
+
+// Antes solo el botón del Home evitaba entrar a un subnivel bloqueado o
+// sin contenido -- pero la ruta en sí quedaba abierta si alguien
+// navegaba directo por URL (ej. /lesson/5). Reutiliza el mismo cálculo
+// de estado que pinta el camino en Home, para que el guard nunca quede
+// desincronizado de lo que el usuario ve en pantalla.
+export const lessonGuard: CanActivateFn = async (route) => {
+  const supabaseService = inject(SupabaseService);
+  const contenidoService = inject(ContenidoService);
+  const router = inject(Router);
+
+  const { data } = await supabaseService.getUser();
+  if (!data?.user) {
+    router.navigate(['/auth/login']);
+    return false;
+  }
+
+  const subnivelId = Number(route.paramMap.get('subnivelId'));
+  const mapa = await contenidoService.obtenerMapaDeAprendizaje(data.user.id);
+  const todosLosSubniveles = mapa.reduce<typeof mapa[number]['subniveles']>((acc, n) => acc.concat(n.subniveles), []);
+  const subnivel = todosLosSubniveles.find(s => s.id === subnivelId);
+
+  if (subnivel && (subnivel.estado === 'actual' || subnivel.estado === 'completado')) {
+    return true;
+  }
+
+  router.navigate(['/home']);
+  return false;
 };

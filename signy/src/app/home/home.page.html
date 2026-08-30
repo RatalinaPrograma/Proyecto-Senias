@@ -79,15 +79,18 @@
               [class.node-completado]="sub.estado === 'completado'"
               [class.node-actual]="sub.estado === 'actual'"
               [class.node-bloqueado]="sub.estado === 'bloqueado'"
-              [style.background]="sub.estado === 'bloqueado' ? null : (nivel.color || 'var(--signy-fox)')"
-              [style.boxShadow]="sub.estado === 'bloqueado' ? null : '0 5px 0 ' + (nivel.color_oscuro || 'var(--signy-fox-deep)')"
-              [disabled]="sub.estado === 'bloqueado'"
+              [class.node-proximamente]="sub.estado === 'proximamente'"
+              [style.background]="(sub.estado === 'bloqueado' || sub.estado === 'proximamente') ? null : (nivel.color || 'var(--signy-fox)')"
+              [style.boxShadow]="(sub.estado === 'bloqueado' || sub.estado === 'proximamente') ? null : '0 5px 0 ' + (nivel.color_oscuro || 'var(--signy-fox-deep)')"
+              [disabled]="sub.estado === 'bloqueado' || sub.estado === 'proximamente'"
               (click)="abrirLeccion(sub)">
 
               <span class="node-badge" *ngIf="sub.estado === 'actual'">EMPEZAR</span>
+              <span class="node-badge node-badge-soon" *ngIf="sub.estado === 'proximamente'">PRÓXIMAMENTE</span>
 
               <ion-icon *ngIf="sub.estado === 'completado'" name="checkmark"></ion-icon>
               <ion-icon *ngIf="sub.estado === 'bloqueado'" name="lock-closed"></ion-icon>
+              <ion-icon *ngIf="sub.estado === 'proximamente'" name="hourglass-outline"></ion-icon>
               <span *ngIf="sub.estado === 'actual'" class="node-number">{{ sub.numero_subnivel }}</span>
 
               <span class="node-ring" *ngIf="sub.estado === 'actual'"></span>
