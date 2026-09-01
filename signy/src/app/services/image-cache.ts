@@ -1,54 +1,165 @@
 import { Injectable } from '@angular/core';
 
 const STATIC_CACHE_NAME = 'signy-static-v1';
-const SUBNIVEL_CACHE_NAME = 'signy-subnivel-media';
+const MEDIA_PERMANENT_CACHE_NAME = 'signy-media-permanent-v1';
+const MASTER_PACK_STORAGE_KEY = 'signy_master_pack_version';
+const CURRENT_PACK_VERSION = '1.1';
 
 /**
- * Gestiona el almacenamiento en caché de imágenes y GIFs en el WebView/Navegador.
- * - `signy-static-v1`: Recursos permanentes de la interfaz (mascota, íconos UI).
- * - `signy-subnivel-media`: GIFs y videos de las señas de la lección actual,
- *   precargados al iniciar el subnivel y eliminados al salir/completar para no
- *   acumular almacenamiento ni consumir memoria excesiva.
+ * Gestiona el almacenamiento y ciclo de vida de recursos multimedia (WebP, GIF, MP4, imágenes).
+ * - Arquitectura Híbrida Inteligente con Paquete Maestro:
+ *   1. Paquete Maestro Único (.zip): Descarga 1 sola vez en la vida de la app todo el catálogo
+ *      de señas en formato WebP comprimido (8-10 MB total) y lo descomprime en el CacheStorage local.
+ *   2. Almacenamiento Permanente en Disco: Cada seña se sirve en 0ms y con 0 peticiones de red.
+ *   3. Memoria RAM: Se liberan los Object URLs al salir de la lección para evitar sobrecalentamiento.
  */
 @Injectable({ providedIn: 'root' })
 export class ImageCacheService {
   private staticMemoryUrls = new Map<string, string>();
-  private subnivelMemoryUrls = new Map<string, string>();
-  private subnivelBlobUrls = new Set<string>();
+  private activeLessonMemoryUrls = new Map<string, string>();
+  private activeLessonBlobUrls = new Set<string>();
 
   /**
-   * Precarga en segundo plano todos los recursos multimedia (GIFs/videos)
-   * del subnivel actual y los deja listos en memoria y en la caché temporal.
-   * `onProgress`, si se entrega, se llama cada vez que un recurso termina
-   * (con éxito o con error) para poder mostrar una barra de carga real.
+   * Verifica si el paquete maestro de señas ya está instalado en el dispositivo.
+   */
+  estaPackInstalado(): boolean {
+    try {
+      return localStorage.getItem(MASTER_PACK_STORAGE_KEY) === CURRENT_PACK_VERSION;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Descarga el paquete maestro comprimido (.zip) desde Supabase en una sola petición
+   * y guarda el archivo .zip INTACTO en el almacenamiento permanente del teléfono (CacheStorage).
+   * No lo descomprime todavía (Lazy Unzip).
+   */
+  async instalarPaqueteMaestro(
+    zipUrl: string,
+    baseUrlSupabase: string,
+    onProgreso?: (porcentaje: number, texto: string) => void
+  ): Promise<boolean> {
+    if (this.estaPackInstalado()) {
+      onProgreso?.(100, 'Vocabulario listo');
+      return true;
+    }
+
+    try {
+      onProgreso?.(10, 'Iniciando descarga de vocabulario…');
+
+      let response = await fetch(zipUrl);
+      
+      // Si el ZIP aún no existe en Supabase (404), pedirle a la Edge Function que lo genere
+      if (response.status === 404) {
+        onProgreso?.(15, 'Generando paquete maestro en la nube…');
+        try {
+          const { environment } = await import('../../environments/environment');
+          const fnUrl = 'https://bjxcdhtigbsbibcltnup.supabase.co/functions/v1/generate-master-pack';
+          const genRes = await fetch(fnUrl, { 
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${environment.supabase.key}`
+            }
+          });
+          if (genRes.ok) {
+            onProgreso?.(30, 'Descargando paquete maestro…');
+            response = await fetch(zipUrl);
+          }
+        } catch (genErr) {
+          console.warn('ImageCache: No se pudo auto-generar el paquete en la nube:', genErr);
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(`Error HTTP ${response.status} al descargar el paquete maestro.`);
+      }
+
+      onProgreso?.(60, 'Guardando paquete en el disco…');
+      
+      // Guardar el ZIP entero tal cual en CacheStorage
+      const mediaCache = await caches.open(MEDIA_PERMANENT_CACHE_NAME);
+      await mediaCache.put('/master_pack.zip', response.clone());
+
+      try {
+        localStorage.setItem(MASTER_PACK_STORAGE_KEY, CURRENT_PACK_VERSION);
+      } catch {}
+
+      onProgreso?.(100, '¡Curso instalado y listo para usar sin internet!');
+      return true;
+    } catch (e) {
+      console.warn('ImageCache: No se pudo instalar el paquete maestro:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Descompresión dinámica (Lazy Unzip): 
+   * Abre el ZIP almacenado en disco y extrae a memoria RAM SOLO los archivos que 
+   * necesita la lección actual, a 0ms de red.
    */
   async precargarSubnivel(urls: string[], onProgress?: (completados: number, total: number) => void): Promise<void> {
     if (!('caches' in window) || !urls || !urls.length) return;
 
     const total = urls.length;
     let completados = 0;
+    
+    let zipInstance: any = null;
 
     try {
-      const cache = await caches.open(SUBNIVEL_CACHE_NAME);
+      // 1. Intentar cargar el ZIP maestro desde el disco local
+      const mediaCache = await caches.open(MEDIA_PERMANENT_CACHE_NAME);
+      const zipResponse = await mediaCache.match('/master_pack.zip');
+      
+      if (zipResponse) {
+        // Carga dinámica de JSZip y lectura del índice del ZIP
+        const jszipModule = await import('jszip');
+        const JSZip = (jszipModule as any).default || jszipModule;
+        const zipBlob = await zipResponse.blob();
+        zipInstance = await JSZip.loadAsync(zipBlob);
+      }
+      
       await Promise.all(
         urls.map(async (url) => {
-          if (!url) { completados++; onProgress?.(completados, total); return; }
+          if (!url) {
+            completados++;
+            onProgress?.(completados, total);
+            return;
+          }
 
           try {
-            let response = await cache.match(url);
-            if (!response) {
-              await cache.add(url);
-              response = await cache.match(url);
+            // Si ya está en memoria activa de la lección, no hacer nada
+            if (this.activeLessonMemoryUrls.has(url)) return;
+
+            let fileBlob: Blob | null = null;
+            
+            // Si tenemos el ZIP cargado, extraer el archivo dinámicamente
+            if (zipInstance) {
+              const nombreLimpio = url.split('/').pop() || url;
+              const fileInZip = zipInstance.file(nombreLimpio);
+              if (fileInZip) {
+                fileBlob = await fileInZip.async('blob');
+              }
+            }
+            
+            // Fallback por si la seña es muy nueva y no estaba en el ZIP (descarga normal)
+            if (!fileBlob) {
+              let cacheRes = await mediaCache.match(url);
+              if (!cacheRes) {
+                await mediaCache.add(url);
+                cacheRes = await mediaCache.match(url);
+              }
+              if (cacheRes) fileBlob = await cacheRes.blob();
             }
 
-            if (response) {
-              const blob = await response.blob();
-              const blobUrl = URL.createObjectURL(blob);
-              this.subnivelBlobUrls.add(blobUrl);
-              this.subnivelMemoryUrls.set(url, blobUrl);
+            // Guardar en memoria RAM activa
+            if (fileBlob) {
+              const blobUrl = URL.createObjectURL(fileBlob);
+              this.activeLessonBlobUrls.add(blobUrl);
+              this.activeLessonMemoryUrls.set(url, blobUrl);
             }
           } catch (err) {
-            console.warn('ImageCache: No se pudo precargar URL:', url, err);
+            console.warn('ImageCache: No se pudo precargar recurso dinámico:', url, err);
           } finally {
             completados++;
             onProgress?.(completados, total);
@@ -56,79 +167,78 @@ export class ImageCacheService {
         })
       );
     } catch (e) {
-      console.warn('ImageCache: Error durante la precarga del subnivel:', e);
+      console.warn('ImageCache: Error durante la precarga/extracción del subnivel:', e);
     }
   }
 
   /**
-   * Elimina toda la caché temporal de la lección actual y libera los Object URLs
-   * de memoria (RAM) generados durante la lección.
+   * Libera la memoria RAM del teléfono revocando todos los Object URLs creados
+   * durante la lección activa.
+   * IMPORTANTE: Los archivos se conservan intactos en el disco dentro del ZIP.
    */
-  async limpiarCacheSubnivel(): Promise<void> {
-    // 1. Revocar los URLs de blobs en memoria para liberar RAM
-    for (const blobUrl of this.subnivelBlobUrls) {
+  liberarMemoriaRAM(): void {
+    for (const blobUrl of this.activeLessonBlobUrls) {
       try {
         URL.revokeObjectURL(blobUrl);
       } catch {}
     }
-    this.subnivelBlobUrls.clear();
-    this.subnivelMemoryUrls.clear();
-
-    // 2. Eliminar el almacén de caché del subnivel del almacenamiento físico
-    if ('caches' in window) {
-      try {
-        await caches.delete(SUBNIVEL_CACHE_NAME);
-      } catch (e) {
-        console.warn('ImageCache: Error al purgar caché de subnivel:', e);
-      }
-    }
+    this.activeLessonBlobUrls.clear();
+    this.activeLessonMemoryUrls.clear();
   }
 
   /**
-   * Resuelve una URL obteniéndola desde la memoria, la caché de subnivel o
-   * la caché estática, con fallback a la red directa.
+   * Alias de compatibilidad hacia atrás para lecciones existentes.
+   */
+  async limpiarCacheSubnivel(): Promise<void> {
+    this.liberarMemoriaRAM();
+  }
+
+  /**
+   * Resuelve una URL obteniéndola desde la memoria RAM, sin bloquear la red.
    */
   async resolve(url: string): Promise<string> {
     if (!url || !('caches' in window)) return url;
 
-    // 1. Memoria rápida (0ms si ya está precargada)
-    if (this.subnivelMemoryUrls.has(url)) {
-      return this.subnivelMemoryUrls.get(url)!;
+    // 1. Memoria rápida activa (0ms)
+    if (this.activeLessonMemoryUrls.has(url)) {
+      return this.activeLessonMemoryUrls.get(url)!;
     }
     if (this.staticMemoryUrls.has(url)) {
       return this.staticMemoryUrls.get(url)!;
     }
-
+    
+    // 2. Revisar en la caché estática de interfaz fija
     try {
-      // 2. Revisar si está en la caché de subnivel
-      const subnivelCache = await caches.open(SUBNIVEL_CACHE_NAME);
-      let response = await subnivelCache.match(url);
-      if (response) {
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        this.subnivelBlobUrls.add(blobUrl);
-        this.subnivelMemoryUrls.set(url, blobUrl);
-        return blobUrl;
-      }
-
-      // 3. Revisar / almacenar en la caché estática fija
       const staticCache = await caches.open(STATIC_CACHE_NAME);
-      response = await staticCache.match(url);
-      if (!response) {
+      let staticResponse = await staticCache.match(url);
+      if (!staticResponse) {
         await staticCache.add(url);
-        response = await staticCache.match(url);
+        staticResponse = await staticCache.match(url);
       }
 
-      if (response) {
-        const blob = await response.blob();
+      if (staticResponse) {
+        const blob = await staticResponse.blob();
         const blobUrl = URL.createObjectURL(blob);
         this.staticMemoryUrls.set(url, blobUrl);
         return blobUrl;
       }
+    } catch {}
 
-      return url;
-    } catch {
-      return url; // En caso de CORS o problemas de red, usa la URL directa
+    return url;
+  }
+
+  /**
+   * Permite forzar la actualización de un recurso si el administrador sube una
+   * nueva versión de una seña con el mismo nombre.
+   */
+  async invalidarRecurso(url: string): Promise<void> {
+    if (!url || !('caches' in window)) return;
+    try {
+      const mediaCache = await caches.open(MEDIA_PERMANENT_CACHE_NAME);
+      await mediaCache.delete(url);
+      this.activeLessonMemoryUrls.delete(url);
+    } catch (e) {
+      console.warn('ImageCache: Error al invalidar recurso:', url, e);
     }
   }
 }

@@ -273,7 +273,7 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 40px;
+  padding: 40px 24px;
   text-align: center;
 
   p {
@@ -282,6 +282,79 @@
     font-size: 14px;
     margin: 0;
   }
+}
+
+// ---------- pantalla de descarga inicial de assets ----------
+.master-pack-state {
+  gap: 14px;
+
+  .pack-fox-badge {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: var(--signy-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 0 var(--signy-fox-deep);
+    overflow: hidden;
+    margin-bottom: 8px;
+    animation: float 2.5s ease-in-out infinite;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  h2 {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    color: var(--signy-cream);
+    letter-spacing: 0.5px;
+    margin: 0;
+  }
+
+  .pack-subtitle {
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    color: var(--signy-muted);
+    max-width: 280px;
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  .pack-progress-bar {
+    width: 260px;
+    height: 10px;
+    --progress-background: var(--signy-mint);
+    --background: var(--signy-card);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+
+  .pack-pct {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--signy-mint);
+    margin: 0;
+  }
+
+  .pack-msg {
+    font-family: 'Manrope', sans-serif;
+    font-size: 12.5px;
+    color: var(--signy-cream);
+    margin: 0;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
 }
 
 .state-emoji { font-size: 34px; }

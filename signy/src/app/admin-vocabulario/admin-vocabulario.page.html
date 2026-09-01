@@ -33,6 +33,24 @@
 
     <!-- ===================== VISTA: NIVELES ===================== -->
     <div class="view-body" *ngIf="vista === 'niveles'">
+      <!-- Generador de Paquete Maestro en la Nube (Edge Function) -->
+      <div class="pack-banner">
+        <div class="pack-info">
+          <div class="pack-icon">
+            <ion-icon name="archive-outline"></ion-icon>
+          </div>
+          <div class="pack-text">
+            <h4>Paquete Maestro Offline (.zip)</h4>
+            <p>Genera en la nube un archivo comprimido con todos los WebP para descargas a 0ms.</p>
+          </div>
+        </div>
+        <ion-button class="btn-pack" [disabled]="generandoPack" (click)="generarPaqueteEnNube()">
+          <ion-spinner *ngIf="generandoPack" name="dots"></ion-spinner>
+          <span *ngIf="!generandoPack">Actualizar en la Nube</span>
+        </ion-button>
+        <p class="pack-status" *ngIf="mensajePack">{{ mensajePack }}</p>
+      </div>
+
       <p class="view-hint">Toca un nivel para ver y editar sus subniveles.</p>
 
       <div class="nivel-card" *ngFor="let n of niveles; trackBy: trackById" (click)="abrirNivel(n)"
@@ -236,11 +254,11 @@
           </button>
         </div>
 
-        <ion-input *ngIf="modoMedia === 'url'" label="URL del GIF/foto" labelPlacement="floating" fill="outline"
+        <ion-input *ngIf="modoMedia === 'url'" label="URL de WebP / GIF / Video" labelPlacement="floating" fill="outline"
           [(ngModel)]="formSena.video_url" class="signy-input"></ion-input>
 
         <div *ngIf="modoMedia === 'subir'" class="upload-box">
-          <input type="file" accept="image/*" (change)="onArchivoSeleccionado($event)" />
+          <input type="file" accept="image/webp,image/gif,image/png,image/jpeg,video/mp4,video/webm,image/*,video/*" (change)="onArchivoSeleccionado($event)" />
           <p class="upload-hint" *ngIf="archivoSeleccionado">{{ archivoSeleccionado.name }}</p>
           <p class="upload-hint" *ngIf="subiendoArchivo">Subiendo…</p>
         </div>

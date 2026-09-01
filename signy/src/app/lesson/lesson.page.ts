@@ -139,17 +139,14 @@ export class LessonPage implements OnInit, OnDestroy {
       this.vidas = stats.vidas ?? 5;
       this.minutosParaVida = this.contenidoService.minutosParaProximaVida(stats);
       this.cargaProgreso = 35;
-      this.cargaMensaje = '¿Estás preparado?';
+      this.cargaMensaje = 'Desplegando señas…';
 
-      // Precargar los GIFs/recursos del subnivel actual en segundo plano.
-      // Suele ser la etapa más lenta y variable, así que se reparte el 35%-90%
-      // de la barra proporcional a cuántos recursos van descargados. El
-      // mensaje se mantiene simple y cercano, sin exponer detalles técnicos.
+      // Precargar los recursos del subnivel actual desde el disco local a la memoria RAM.
       const urlsMedia = senas.map(s => s.video_url).filter((u): u is string => !!u);
       if (urlsMedia.length > 0) {
         await this.imageCacheService.precargarSubnivel(urlsMedia, (completados, total) => {
           this.cargaProgreso = 35 + Math.round((completados / total) * 55);
-          this.cargaMensaje = this.cargaProgreso < 65 ? '¿Estás preparado?' : 'Ya casi estamos…';
+          this.cargaMensaje = this.cargaProgreso < 65 ? 'Desplegando señas…' : 'Preparando lección…';
         });
       } else {
         this.cargaProgreso = 90;
@@ -158,7 +155,7 @@ export class LessonPage implements OnInit, OnDestroy {
       const pares: Par[] = senas.map((s, i) => ({ palabra: s.palabra, senaId: s.id, seed: this.nivel.id * 10 + i, videoUrl: s.video_url }));
       this.rondas = this.armarRondas(pares);
       this.cargarRonda(0);
-      this.cargaMensaje = '¡Ya casi! Últimos detalles…';
+      this.cargaMensaje = '¡Todo listo!';
       this.preguntas = this.construirPreguntas(pool);
       this.cargaProgreso = 100;
 
@@ -173,7 +170,7 @@ export class LessonPage implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.detenerCamara();
     if (this.rafId) cancelAnimationFrame(this.rafId);
-    this.imageCacheService.limpiarCacheSubnivel();
+    this.imageCacheService.liberarMemoriaRAM();
   }
 
   private mezclar<T>(arr: T[]): T[] {
@@ -481,7 +478,7 @@ export class LessonPage implements OnInit, OnDestroy {
   // ---------- Salidas ----------
   salir() {
     this.detenerCamara();
-    this.imageCacheService.limpiarCacheSubnivel();
+    this.imageCacheService.liberarMemoriaRAM();
     this.router.navigate(['/home']);
   }
 }

@@ -6,6 +6,7 @@ import { SupabaseService } from '../services/supabase';
 import { ContenidoService } from '../services/contenido';
 import { NivelConEstado, SubnivelConEstado, UserStats } from '../data/db-types';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
+import { ImageCacheService } from '../services/image-cache';
 import { addIcons } from 'ionicons';
 import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline, refresh, construct, videocam, arrowForward, hourglassOutline } from 'ionicons/icons';
 
@@ -22,6 +23,11 @@ export class HomePage {
   cargando = true;
   error = '';
 
+  // ---- descarga de paquete maestro por única vez ----
+  descargandoPack = false;
+  progresoPack = 0;
+  mensajePack = '';
+
   niveles: NivelConEstado[] = [];
   stats: UserStats | null = null;
   avatarUrl: string | null = null;
@@ -36,6 +42,7 @@ export class HomePage {
   constructor(
     private supabaseService: SupabaseService,
     private contenidoService: ContenidoService,
+    private imageCacheService: ImageCacheService,
     private router: Router
   ) {}
 
@@ -55,6 +62,26 @@ export class HomePage {
     try {
       const { data: userData } = await this.supabaseService.getUser();
       if (!userData?.user) return;
+
+      // 1. Descargar paquete maestro de señas si no está instalado aún
+      if (!this.imageCacheService.estaPackInstalado()) {
+        const timerId = setTimeout(() => {
+          this.descargandoPack = true;
+          this.progresoPack = 0;
+          this.mensajePack = 'Conectando con Supabase…';
+        }, 300);
+
+        const zipUrl = 'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/senas-media/signy_master_v1.zip';
+        const baseUrl = 'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/senas-media';
+
+        await this.imageCacheService.instalarPaqueteMaestro(zipUrl, baseUrl, (pct, txt) => {
+          this.progresoPack = pct;
+          this.mensajePack = txt;
+        });
+
+        clearTimeout(timerId);
+        this.descargandoPack = false;
+      }
 
       const [niveles, stats, { data: perfil }] = await Promise.all([
         this.contenidoService.obtenerMapaDeAprendizaje(userData.user.id),

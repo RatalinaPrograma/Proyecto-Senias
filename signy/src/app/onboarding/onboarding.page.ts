@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { Preferences } from '@capacitor/preferences';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { SupabaseService } from '../services/supabase';
+import { ImageCacheService } from '../services/image-cache';
 
 interface Slide {
   imagen: string;
@@ -52,7 +53,8 @@ export class OnboardingPage implements OnInit {
 
   constructor(
     private router: Router,
-    private supabaseService: SupabaseService
+    private supabaseService: SupabaseService,
+    private imageCacheService: ImageCacheService
   ) {}
 
   async ngOnInit() {
@@ -65,6 +67,17 @@ export class OnboardingPage implements OnInit {
       return;
     }
     this.listo = true;
+
+    // Intentar instalar paquete maestro en segundo plano si existe en Supabase
+    this.iniciarInstalacionPaquete();
+  }
+
+  private async iniciarInstalacionPaquete() {
+    if (this.imageCacheService.estaPackInstalado()) return;
+
+    const zipUrl = 'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/senas-media/signy_master_v1.zip';
+    const baseUrl = 'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/senas';
+    await this.imageCacheService.instalarPaqueteMaestro(zipUrl, baseUrl);
   }
 
   // Manda a /home si hay sesión, a /auth/login si no. Los guards de cada

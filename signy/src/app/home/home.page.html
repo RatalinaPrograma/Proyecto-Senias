@@ -1,13 +1,25 @@
 <ion-content [fullscreen]="true" class="signy-content">
 
-  <!-- ===== CARGANDO ===== -->
-  <div class="state-box" *ngIf="cargando">
+  <!-- ===== DESCARGANDO ASSETS (POR ÚNICA VEZ) ===== -->
+  <div class="state-box master-pack-state" *ngIf="descargandoPack">
+    <div class="pack-fox-badge">
+      <img [appCachedSrc]="'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="Signy" />
+    </div>
+    <h2>DESCARGANDO ASSETS</h2>
+    <p class="pack-subtitle">Instalando señas en tu dispositivo por única vez para uso offline.</p>
+    <ion-progress-bar [value]="progresoPack / 100" class="pack-progress-bar"></ion-progress-bar>
+    <p class="pack-pct">{{ progresoPack }}%</p>
+    <p class="pack-msg">{{ mensajePack }}</p>
+  </div>
+
+  <!-- ===== CARGANDO NORMAL ===== -->
+  <div class="state-box" *ngIf="cargando && !descargandoPack">
     <ion-spinner name="dots"></ion-spinner>
     <p>Cargando tu camino…</p>
   </div>
 
   <!-- ===== ERROR ===== -->
-  <div class="state-box" *ngIf="!cargando && error">
+  <div class="state-box" *ngIf="!cargando && !descargandoPack && error">
     <span class="state-emoji">😕</span>
     <p>{{ error }}</p>
     <button class="retry-btn" (click)="cargarTodo()">
@@ -15,7 +27,7 @@
     </button>
   </div>
 
-  <ng-container *ngIf="!cargando && !error">
+  <ng-container *ngIf="!cargando && !descargandoPack && !error">
     <div class="hud">
       <div class="hud-brand">
         <button class="fox-badge" (click)="irAPerfil()" aria-label="Ver mi perfil">

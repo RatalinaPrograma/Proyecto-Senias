@@ -1,65 +1,79 @@
-import { AfterViewInit, Component, ElementRef, Input, OnChanges, SimpleChanges, ViewChild } from '@angular/core';
+import { Component, ElementRef, Input, OnChanges, SimpleChanges, ViewChild } from '@angular/core';
 import { ImageCacheService } from '../../services/image-cache';
 
 /**
- * Vista previa de un GIF de seña "congelada" en su primer frame (dibujado a
-un canvas, que no anima) hasta que el tile pasa a [activo]=true -- ahí
- recién se muestra el <img> real, que sí reproduce el GIF en loop.
- 
- * Por qué: un GIF puesto en <img> no se puede pausar con CSS/JS una vez
-cargado, el navegador lo anima solo. Si varios tiles de un grid de
-emparejar muestran su GIF a la vez, se ve como un solo bloque de
- movimiento confuso. Mostrando solo un frame fijo por defecto, y animando
- únicamente el tile que el usuario seleccionó, se resuelve sin tener que
- inventar un botón de "play" aparte -- el tap que ya se usa para elegir la
- seña cumple ese rol.
+ * Vista previa de una seña. Soporta GIFs e MP4s.
+ * - Para MP4: Utiliza la etiqueta nativa <video>, y la pausa/reproduce según esté activa, 
+ *   ahorrando mucha batería.
+ * - Para GIF: Mantiene un <img> fijo (o se oculta) como antes.
  */
 @Component({
   selector: 'app-gif-tile',
   standalone: true,
   template: `
-    <canvas #lienzo class="gif-tile-canvas"></canvas>
-    <img #imagen class="gif-tile-img" [class.oculto]="!activo" alt="" />
+    <!-- Para formato MP4 (Más liviano y controlable) -->
+    <video 
+      #videoRef 
+      class="media-tile" 
+      [class.oculto]="!activo && esMp4"
+      [src]="esMp4 ? urlResuelta : ''" 
+      muted 
+      loop 
+      playsinline 
+      preload="auto">
+    </video>
+
+    <!-- Poster estático para MP4 cuando NO está activo -->
+    <video 
+      class="media-tile" 
+      [class.oculto]="activo || !esMp4"
+      [src]="esMp4 ? urlResuelta : ''" 
+      muted 
+      playsinline 
+      preload="metadata">
+    </video>
+
+    <!-- Para formatos antiguos (GIF, WebP) -->
+    <canvas #lienzo class="media-tile" [class.oculto]="activo || esMp4"></canvas>
+    <img #imagen class="media-tile" [class.oculto]="!activo || esMp4" alt="" />
   `,
   styles: [`
     :host { position: relative; display: block; width: 100%; height: 100%; }
-    canvas, img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+    .media-tile { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
     .oculto { visibility: hidden; }
   `],
 })
-export class GifTileComponent implements OnChanges, AfterViewInit {
+export class GifTileComponent implements OnChanges {
   @Input() url: string | null | undefined;
   @Input() activo = false;
 
+  @ViewChild('videoRef') private videoRef!: ElementRef<HTMLVideoElement>;
   @ViewChild('lienzo') private lienzoRef!: ElementRef<HTMLCanvasElement>;
   @ViewChild('imagen') private imagenRef!: ElementRef<HTMLImageElement>;
 
-  private urlResuelta = '';
-  private vistaLista = false;
+  urlResuelta = '';
+  esMp4 = false;
 
   constructor(private cache: ImageCacheService) {}
 
   async ngOnChanges(cambios: SimpleChanges) {
     if (cambios['url'] && this.url) {
+      this.esMp4 = this.url.toLowerCase().endsWith('.mp4');
       this.urlResuelta = await this.cache.resolve(this.url);
-      this.dibujarFrameCongelado();
+      
+      if (!this.esMp4) {
+        this.dibujarFrameCongelado();
+      }
     }
-    this.actualizarReproduccion();
-  }
 
-  ngAfterViewInit() {
-    this.vistaLista = true;
-    this.dibujarFrameCongelado();
     this.actualizarReproduccion();
   }
 
   private dibujarFrameCongelado() {
-    if (!this.urlResuelta || !this.vistaLista) return;
+    if (!this.urlResuelta || !this.lienzoRef) return;
     const previa = new Image();
     previa.onload = () => {
       const canvas = this.lienzoRef.nativeElement;
-      // El tile se ve a ~80-160px: dibujar el frame a resolución completa
-      // gasta decode y memoria de más en gama media sin ganancia visible.
       const MAX = 200;
       const w = previa.naturalWidth || 100;
       const h = previa.naturalHeight || 100;
@@ -72,11 +86,23 @@ export class GifTileComponent implements OnChanges, AfterViewInit {
   }
 
   private actualizarReproduccion() {
-    if (!this.vistaLista) return;
-    if (this.activo && this.urlResuelta) {
-      this.imagenRef.nativeElement.src = this.urlResuelta;
+    if (this.esMp4) {
+      if (this.videoRef && this.videoRef.nativeElement) {
+        if (this.activo) {
+          this.videoRef.nativeElement.play().catch(() => {});
+        } else {
+          this.videoRef.nativeElement.pause();
+          this.videoRef.nativeElement.currentTime = 0; // Reiniciar al inicio
+        }
+      }
     } else {
-      this.imagenRef.nativeElement.src = '';
+      if (this.imagenRef && this.imagenRef.nativeElement) {
+        if (this.activo && this.urlResuelta) {
+          this.imagenRef.nativeElement.src = this.urlResuelta;
+        } else {
+          this.imagenRef.nativeElement.src = '';
+        }
+      }
     }
   }
 }

@@ -19,6 +19,8 @@ import {
   imageOutline,
   layersOutline,
   alertCircleOutline,
+  archiveOutline,
+  checkmarkCircle,
 } from 'ionicons/icons';
 
 addIcons({
@@ -34,6 +36,8 @@ addIcons({
   'image-outline': imageOutline,
   'layers-outline': layersOutline,
   'alert-circle-outline': alertCircleOutline,
+  'archive-outline': archiveOutline,
+  'checkmark-circle': checkmarkCircle,
 });
 
 type Vista = 'niveles' | 'subniveles' | 'senas';
@@ -94,6 +98,29 @@ export class AdminVocabularioPage implements OnInit {
 
   guardando = false;
   errorForm: string | null = null;
+
+  // ---- empaquetador en la nube (Edge Function) ----
+  generandoPack = false;
+  mensajePack = '';
+
+  async generarPaqueteEnNube() {
+    this.generandoPack = true;
+    this.mensajePack = 'Empaquetando señas en la nube de Supabase…';
+    try {
+      const { data, error } = await this.supabaseService.generarPaqueteMaestro();
+      if (error) {
+        throw error;
+      }
+      this.mensajePack = `¡Paquete generado con éxito! (${data?.archivosEmpaquetados || 0} señas, ${data?.tamanoMB || ''})`;
+      setTimeout(() => { this.mensajePack = ''; }, 6000);
+    } catch (e: any) {
+      console.error('Error al generar paquete:', e);
+      this.mensajePack = `Error: ${e?.message || 'No se pudo generar el paquete'}`;
+      setTimeout(() => { this.mensajePack = ''; }, 7000);
+    } finally {
+      this.generandoPack = false;
+    }
+  }
 
   constructor(
     private supabaseService: SupabaseService,
