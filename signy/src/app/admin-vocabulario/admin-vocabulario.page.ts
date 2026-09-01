@@ -6,6 +6,7 @@ import { Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
 import { Nivel, Subnivel, Sena } from '../data/db-types';
 import { addIcons } from 'ionicons';
+import { esVideoMp4 } from '../shared/media-utils';
 import {
   arrowBack,
   add,
@@ -398,6 +399,12 @@ export class AdminVocabularioPage implements OnInit {
   onArchivoSeleccionado(evento: Event) {
     const input = evento.target as HTMLInputElement;
     this.archivoSeleccionado = input.files?.[0] ?? null;
+  }
+
+  /** true si la URL/nombre de archivo apunta a un video (.mp4), para decidir
+   * si la vista previa se muestra con <video> en vez de <img>. */
+  esVideoMp4(url: string | null | undefined): boolean {
+    return esVideoMp4(url);
   }
 
   async guardarSena() {

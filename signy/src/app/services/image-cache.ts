@@ -1,24 +1,33 @@
 import { Injectable } from '@angular/core';
 
-const STATIC_CACHE_NAME = 'signy-static-v1';
-const SUBNIVEL_CACHE_NAME = 'signy-subnivel-media';
+const MEDIA_CACHE_NAME = 'signy-media-v1';
 
 /**
- * Gestiona el almacenamiento en caché de imágenes y GIFs en el WebView/Navegador.
- * - `signy-static-v1`: Recursos permanentes de la interfaz (mascota, íconos UI).
- * - `signy-subnivel-media`: GIFs y videos de las señas de la lección actual,
- *   precargados al iniciar el subnivel y eliminados al salir/completar para no
- *   acumular almacenamiento ni consumir memoria excesiva.
+ * Gestiona el almacenamiento en caché de imágenes, GIFs/WebP y video de
+ * señas en el WebView/Navegador.
+ *
+ * Arquitectura híbrida (caché permanente): `signy-media-v1` vive en el disco
+ * del celular y NUNCA se purga desde acá. Íconos de interfaz y señas de
+ * lecciones se descargan una sola vez en la vida del usuario y quedan
+ * guardados para siempre — volver a entrar a un subnivel ya visto no vuelve
+ * a gastar datos ni egress de Supabase Storage. Antes había un caché
+ * temporal por subnivel que se borraba al salir de cada lección, obligando
+ * a re-descargar el mismo contenido una y otra vez; eso es justo lo que
+ * este esquema evita.
+ *
+ * Lo único que se libera al salir de una lección es la RAM (los Object URLs
+ * creados en memoria vía `liberarMemoriaRAM()`); el archivo en disco queda
+ * intacto.
  */
 @Injectable({ providedIn: 'root' })
 export class ImageCacheService {
-  private staticMemoryUrls = new Map<string, string>();
-  private subnivelMemoryUrls = new Map<string, string>();
-  private subnivelBlobUrls = new Set<string>();
+  private memoryUrls = new Map<string, string>();
+  private blobUrls = new Set<string>();
 
   /**
-   * Precarga en segundo plano todos los recursos multimedia (GIFs/videos)
-   * del subnivel actual y los deja listos en memoria y en la caché temporal.
+   * Precarga en segundo plano todos los recursos multimedia (GIFs/WebP/MP4)
+   * del subnivel actual. Si un recurso ya está en disco (visto en una sesión
+   * anterior), se lee directo de ahí sin pedirlo de nuevo a Supabase.
    * `onProgress`, si se entrega, se llama cada vez que un recurso termina
    * (con éxito o con error) para poder mostrar una barra de carga real.
    */
@@ -29,7 +38,7 @@ export class ImageCacheService {
     let completados = 0;
 
     try {
-      const cache = await caches.open(SUBNIVEL_CACHE_NAME);
+      const cache = await caches.open(MEDIA_CACHE_NAME);
       await Promise.all(
         urls.map(async (url) => {
           if (!url) { completados++; onProgress?.(completados, total); return; }
@@ -37,6 +46,8 @@ export class ImageCacheService {
           try {
             let response = await cache.match(url);
             if (!response) {
+              // Primera vez que se ve esta seña: se descarga y queda en
+              // disco de forma permanente, no se vuelve a pedir nunca más.
               await cache.add(url);
               response = await cache.match(url);
             }
@@ -44,8 +55,8 @@ export class ImageCacheService {
             if (response) {
               const blob = await response.blob();
               const blobUrl = URL.createObjectURL(blob);
-              this.subnivelBlobUrls.add(blobUrl);
-              this.subnivelMemoryUrls.set(url, blobUrl);
+              this.blobUrls.add(blobUrl);
+              this.memoryUrls.set(url, blobUrl);
             }
           } catch (err) {
             console.warn('ImageCache: No se pudo precargar URL:', url, err);
@@ -61,68 +72,47 @@ export class ImageCacheService {
   }
 
   /**
-   * Elimina toda la caché temporal de la lección actual y libera los Object URLs
-   * de memoria (RAM) generados durante la lección.
+   * Libera la RAM ocupada por los Object URLs generados en esta lección
+   * (revoca los blobs en memoria). El archivo en disco (Cache Storage) NO
+   * se toca: sigue ahí para la próxima vez que el usuario entre a este
+   * subnivel, sin gastar datos ni Storage de Supabase de nuevo.
    */
-  async limpiarCacheSubnivel(): Promise<void> {
-    // 1. Revocar los URLs de blobs en memoria para liberar RAM
-    for (const blobUrl of this.subnivelBlobUrls) {
+  liberarMemoriaRAM(): void {
+    for (const blobUrl of this.blobUrls) {
       try {
         URL.revokeObjectURL(blobUrl);
       } catch {}
     }
-    this.subnivelBlobUrls.clear();
-    this.subnivelMemoryUrls.clear();
-
-    // 2. Eliminar el almacén de caché del subnivel del almacenamiento físico
-    if ('caches' in window) {
-      try {
-        await caches.delete(SUBNIVEL_CACHE_NAME);
-      } catch (e) {
-        console.warn('ImageCache: Error al purgar caché de subnivel:', e);
-      }
-    }
+    this.blobUrls.clear();
+    this.memoryUrls.clear();
   }
 
   /**
-   * Resuelve una URL obteniéndola desde la memoria, la caché de subnivel o
-   * la caché estática, con fallback a la red directa.
+   * Resuelve una URL obteniéndola desde la memoria o la caché permanente de
+   * disco, con fallback a la red directa solo la primera vez que se ve.
    */
   async resolve(url: string): Promise<string> {
     if (!url || !('caches' in window)) return url;
 
-    // 1. Memoria rápida (0ms si ya está precargada)
-    if (this.subnivelMemoryUrls.has(url)) {
-      return this.subnivelMemoryUrls.get(url)!;
-    }
-    if (this.staticMemoryUrls.has(url)) {
-      return this.staticMemoryUrls.get(url)!;
+    // 1. Memoria rápida (0ms si ya está resuelta en esta sesión)
+    if (this.memoryUrls.has(url)) {
+      return this.memoryUrls.get(url)!;
     }
 
     try {
-      // 2. Revisar si está en la caché de subnivel
-      const subnivelCache = await caches.open(SUBNIVEL_CACHE_NAME);
-      let response = await subnivelCache.match(url);
-      if (response) {
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        this.subnivelBlobUrls.add(blobUrl);
-        this.subnivelMemoryUrls.set(url, blobUrl);
-        return blobUrl;
-      }
-
-      // 3. Revisar / almacenar en la caché estática fija
-      const staticCache = await caches.open(STATIC_CACHE_NAME);
-      response = await staticCache.match(url);
+      // 2. Caché permanente en disco (cubre esta y cualquier sesión anterior)
+      const cache = await caches.open(MEDIA_CACHE_NAME);
+      let response = await cache.match(url);
       if (!response) {
-        await staticCache.add(url);
-        response = await staticCache.match(url);
+        await cache.add(url);
+        response = await cache.match(url);
       }
 
       if (response) {
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
-        this.staticMemoryUrls.set(url, blobUrl);
+        this.blobUrls.add(blobUrl);
+        this.memoryUrls.set(url, blobUrl);
         return blobUrl;
       }
 

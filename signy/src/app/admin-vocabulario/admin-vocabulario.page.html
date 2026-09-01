@@ -187,7 +187,8 @@
 
       <div class="item-card sena-card" *ngFor="let s of senasFiltradas; trackBy: trackById" (click)="editarSena(s)">
         <div class="item-thumb-wrap">
-          <img *ngIf="s.video_url" [src]="s.video_url" [alt]="s.palabra" class="item-thumb" loading="lazy" decoding="async" />
+          <video *ngIf="s.video_url && esVideoMp4(s.video_url)" [src]="s.video_url" class="item-thumb" muted playsinline preload="metadata"></video>
+          <img *ngIf="s.video_url && !esVideoMp4(s.video_url)" [src]="s.video_url" [alt]="s.palabra" class="item-thumb" loading="lazy" decoding="async" />
           <div class="item-thumb placeholder" *ngIf="!s.video_url"><ion-icon name="image-outline"></ion-icon></div>
         </div>
         <div class="item-info">
@@ -236,16 +237,17 @@
           </button>
         </div>
 
-        <ion-input *ngIf="modoMedia === 'url'" label="URL del GIF/foto" labelPlacement="floating" fill="outline"
+        <ion-input *ngIf="modoMedia === 'url'" label="URL del GIF/WebP/video" labelPlacement="floating" fill="outline"
           [(ngModel)]="formSena.video_url" class="signy-input"></ion-input>
 
         <div *ngIf="modoMedia === 'subir'" class="upload-box">
-          <input type="file" accept="image/*" (change)="onArchivoSeleccionado($event)" />
+          <input type="file" accept="image/*,video/mp4" (change)="onArchivoSeleccionado($event)" />
           <p class="upload-hint" *ngIf="archivoSeleccionado">{{ archivoSeleccionado.name }}</p>
           <p class="upload-hint" *ngIf="subiendoArchivo">Subiendo…</p>
         </div>
 
-        <img *ngIf="formSena.video_url" [src]="formSena.video_url" alt="Vista previa" class="preview-img" decoding="async" />
+        <video *ngIf="formSena.video_url && esVideoMp4(formSena.video_url)" [src]="formSena.video_url" class="preview-img" controls muted playsinline preload="metadata"></video>
+        <img *ngIf="formSena.video_url && !esVideoMp4(formSena.video_url)" [src]="formSena.video_url" alt="Vista previa" class="preview-img" decoding="async" />
 
         <p class="form-error" *ngIf="errorForm">{{ errorForm }}</p>
 

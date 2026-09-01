@@ -38,6 +38,20 @@ export class SupabaseService {
     return this.supabase.auth.getSession();
   }
 
+  /**
+   * Devuelve el usuario de la sesión guardada en el dispositivo, SIN pegarle
+   * a la red (a diferencia de `getUser()`, que siempre revalida contra el
+   * servidor de Supabase y por eso falla apenas no hay conexión). Se usa
+   * para los chequeos de "¿hay alguien logueado?" que gatillan
+   * redirecciones (guards, carga de páginas) — la protección real de los
+   * datos la sigue dando el RLS en el servidor, esto es solo para decidir
+   * qué pantalla mostrar, así que no necesita ida y vuelta a la red.
+   */
+  async getUsuarioLocal() {
+    const { data, error } = await this.supabase.auth.getSession();
+    return { user: data?.session?.user ?? null, error };
+  }
+
   // ---------- Perfil (tabla real: id, full_name, username, avatar_url, created_at) ----------
   async getProfile(userId: string): Promise<{ data: Profile | null; error: any }> {
     return this.supabase.from('profiles').select('*').eq('id', userId).maybeSingle();

@@ -7,9 +7,9 @@ export const authGuard: CanActivateFn = async () => {
   const supabaseService = inject(SupabaseService);
   const router = inject(Router);
 
-  const { data } = await supabaseService.getUser();
+  const { user } = await supabaseService.getUsuarioLocal();
 
-  if (data?.user) {
+  if (user) {
     return true;
   }
 
@@ -22,9 +22,9 @@ export const guestGuard: CanActivateFn = async () => {
   const supabaseService = inject(SupabaseService);
   const router = inject(Router);
 
-  const { data } = await supabaseService.getUser();
+  const { user } = await supabaseService.getUsuarioLocal();
 
-  if (data?.user) {
+  if (user) {
     router.navigate(['/home']);
     return false;
   }
@@ -39,13 +39,13 @@ export const adminGuard: CanActivateFn = async () => {
   const supabaseService = inject(SupabaseService);
   const router = inject(Router);
 
-  const { data } = await supabaseService.getUser();
-  if (!data?.user) {
+  const { user } = await supabaseService.getUsuarioLocal();
+  if (!user) {
     router.navigate(['/auth/login']);
     return false;
   }
 
-  const esAdmin = await supabaseService.esAdmin(data.user.id);
+  const esAdmin = await supabaseService.esAdmin(user.id);
   if (!esAdmin) {
     router.navigate(['/home']);
     return false;
@@ -64,14 +64,14 @@ export const lessonGuard: CanActivateFn = async (route) => {
   const contenidoService = inject(ContenidoService);
   const router = inject(Router);
 
-  const { data } = await supabaseService.getUser();
-  if (!data?.user) {
+  const { user } = await supabaseService.getUsuarioLocal();
+  if (!user) {
     router.navigate(['/auth/login']);
     return false;
   }
 
   const subnivelId = Number(route.paramMap.get('subnivelId'));
-  const mapa = await contenidoService.obtenerMapaDeAprendizaje(data.user.id);
+  const mapa = await contenidoService.obtenerMapaDeAprendizaje(user.id);
   const todosLosSubniveles = mapa.reduce<typeof mapa[number]['subniveles']>((acc, n) => acc.concat(n.subniveles), []);
   const subnivel = todosLosSubniveles.find(s => s.id === subnivelId);
 

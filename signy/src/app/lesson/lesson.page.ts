@@ -8,6 +8,7 @@ import { TtsService } from '../services/tts';
 import { Nivel, Subnivel, Sena } from '../data/db-types';
 import { SenaIconComponent } from '../shared/sena-icon/sena-icon.component';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
+import { esVideoMp4 } from '../shared/media-utils';
 import { GifTileComponent } from '../shared/gif-tile/gif-tile.component';
 import { ImageCacheService } from '../services/image-cache';
 import { addIcons } from 'ionicons';
@@ -33,6 +34,9 @@ const MENSAJES_MAL = ['Ajusta el pulgar', 'Centra tu mano en el óvalo', 'Prueba
 export class LessonPage implements OnInit, OnDestroy {
   @ViewChild('video') videoRef?: ElementRef<HTMLVideoElement>;
   @ViewChild('canvas') canvasRef?: ElementRef<HTMLCanvasElement>;
+
+  /** Referencia al helper compartido para poder llamarlo desde el template. */
+  esVideoMp4 = esVideoMp4;
 
   fase: Fase = 'cargando';
   errorMsg = '';
@@ -105,15 +109,16 @@ export class LessonPage implements OnInit, OnDestroy {
 
   async ngOnInit() {
     try {
-      // La caché del subnivel anterior ya se limpia en su ngOnDestroy/salir();
-      // no hace falta bloquear el arranque con otro caches.delete() acá.
+      // El caché de medios es permanente en disco (no se purga al salir de
+      // una lección), así que si el usuario ya vio este subnivel antes la
+      // precarga de abajo no vuelve a gastar datos: solo lee de disco.
       this.cargaProgreso = 5;
 
       const subnivelId = Number(this.route.snapshot.paramMap.get('subnivelId'));
 
-      const { data: userData } = await this.supabaseService.getUser();
-      if (!userData?.user) { this.router.navigate(['/auth/login']); return; }
-      this.userId = userData.user.id;
+      const { user } = await this.supabaseService.getUsuarioLocal();
+      if (!user) { this.router.navigate(['/auth/login']); return; }
+      this.userId = user.id;
       this.cargaProgreso = 10;
 
       const subnivel = await this.contenidoService.getSubnivelPorId(subnivelId);
@@ -173,7 +178,7 @@ export class LessonPage implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.detenerCamara();
     if (this.rafId) cancelAnimationFrame(this.rafId);
-    this.imageCacheService.limpiarCacheSubnivel();
+    this.imageCacheService.liberarMemoriaRAM();
   }
 
   private mezclar<T>(arr: T[]): T[] {
@@ -481,7 +486,7 @@ export class LessonPage implements OnInit, OnDestroy {
   // ---------- Salidas ----------
   salir() {
     this.detenerCamara();
-    this.imageCacheService.limpiarCacheSubnivel();
+    this.imageCacheService.liberarMemoriaRAM();
     this.router.navigate(['/home']);
   }
 }
