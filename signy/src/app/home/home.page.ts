@@ -4,6 +4,7 @@ import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
 import { ContenidoService } from '../services/contenido';
+import { NotificationsService } from '../services/notifications';
 import { NivelConEstado, SubnivelConEstado, UserStats } from '../data/db-types';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { addIcons } from 'ionicons';
@@ -36,6 +37,7 @@ export class HomePage {
   constructor(
     private supabaseService: SupabaseService,
     private contenidoService: ContenidoService,
+    private notificationsService: NotificationsService,
     private router: Router
   ) {}
 
@@ -71,6 +73,13 @@ export class HomePage {
         0
       );
       this.ultimaCarga = Date.now();
+
+      // No se espera esta llamada: si el permiso está "prompt" puede mostrar
+      // el diálogo del sistema, y no queremos retrasar el resto de la carga
+      // de Home por eso.
+      this.notificationsService
+        .sincronizar(stats.vidas ?? 0, this.contenidoService.minutosParaProximaVida(stats), stats.racha_actual ?? 0)
+        .catch(() => {});
     } catch (e: any) {
       this.error = 'No se pudo cargar tu progreso. Revisa tu conexión.';
       console.error(e);
@@ -104,6 +113,7 @@ export class HomePage {
   }
 
   async cerrarSesion() {
+    await this.notificationsService.cancelarTodo();
     await this.supabaseService.signOut();
     this.router.navigate(['/auth/login']);
   }

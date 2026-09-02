@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { SupabaseService } from './supabase';
 import {
   Nivel, Subnivel, Sena, ProgresoNivelUsuario, ProgresoSubnivelUsuario,
-  UserStats, PracticaFallo, Logro, NivelConEstado
+  UserStats, PracticaFallo, Logro, NivelConEstado, RachaHistorialDia
 } from '../data/db-types';
 
 @Injectable({ providedIn: 'root' })
@@ -204,10 +204,17 @@ export class ContenidoService {
   private static readonly VIDA_REGEN_MS = 4 * 60 * 60 * 1000; // 4 horas
   private static readonly VIDAS_MAX = 5;
 
+  /** Cada cuántos días de racha se gana 1 congelador, y el tope acumulable. */
+  private static readonly RACHA_CONGELADORES_CADA = 5;
+  private static readonly RACHA_CONGELADORES_MAX = 2;
+
   async getMisStats(userId: string): Promise<UserStats> {
     const { data, error } = await this.db.from('user_stats').select('*').eq('user_id', userId).maybeSingle();
     if (error) throw error;
-    if (data) return this.regenerarVidasSiCorresponde(userId, data);
+    if (data) {
+      const conVidas = await this.regenerarVidasSiCorresponde(userId, data);
+      return this.evaluarRachaSiCorresponde(userId, conVidas);
+    }
 
     // Primera vez del usuario: se crea su fila de estadísticas iniciales
     const inicial: UserStats = {
@@ -218,6 +225,8 @@ export class ContenidoService {
       puntos_experiencia: 0,
       vidas: 5,
       ultima_vida_perdida: null,
+      racha_congeladores: 0,
+      racha_evaluada_hasta: null,
       updated_at: new Date().toISOString(),
     };
     const { error: insertError } = await this.db.from('user_stats').insert(inicial);
@@ -265,33 +274,142 @@ export class ContenidoService {
     return { ...stats, ...actualizado };
   }
 
+  // ---------- Fechas (día calendario LOCAL del dispositivo, no UTC) ----------
+  // OJO: nunca usar `new Date().toISOString().slice(0,10)` para "hoy" — eso
+  // da la fecha en UTC, y en Chile (UTC-3/-4) pasadas ~20-21h ya muestra el
+  // día siguiente. Todo lo de racha tiene que ir en fecha LOCAL.
+  fechaHoy(): string {
+    return this.formatearFechaLocal(new Date());
+  }
+
+  sumarDias(fecha: string, dias: number): string {
+    const [y, m, d] = fecha.split('-').map(Number);
+    // Mediodía local (no medianoche) para no toparse con el cambio de
+    // horario de verano al sumar/restar días.
+    const dt = new Date(y, m - 1, d, 12, 0, 0);
+    dt.setDate(dt.getDate() + dias);
+    return this.formatearFechaLocal(dt);
+  }
+
+  private diasEntreFechas(desde: string, hasta: string): number {
+    const [y1, m1, d1] = desde.split('-').map(Number);
+    const [y2, m2, d2] = hasta.split('-').map(Number);
+    const msDesde = new Date(y1, m1 - 1, d1, 12, 0, 0).getTime();
+    const msHasta = new Date(y2, m2 - 1, d2, 12, 0, 0).getTime();
+    return Math.round((msHasta - msDesde) / 86400000);
+  }
+
+  private formatearFechaLocal(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dia = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dia}`;
+  }
+
+  /**
+   * Revisa si pasaron días sin practicar desde la última vez y, si es así,
+   * "cierra" esos días: los cubre con congeladores si hay suficientes
+   * disponibles (la racha sigue viva) o, si no alcanzan, corta la racha a 0.
+   * Sin esto la racha quedaba "colgada" con el número viejo hasta la
+   * siguiente lección, como si nunca se pudiera perder.
+   *
+   * Idempotente por día: `racha_evaluada_hasta` evita procesar el mismo
+   * hueco dos veces si el usuario abre la app varias veces el mismo día.
+   */
+  private async evaluarRachaSiCorresponde(userId: string, stats: UserStats): Promise<UserStats> {
+    const hoy = this.fechaHoy();
+    if (!stats.ultima_fecha_practica || stats.ultima_fecha_practica === hoy) return stats;
+    if (stats.racha_evaluada_hasta === hoy) return stats;
+
+    const diasSinPracticar = this.diasEntreFechas(stats.ultima_fecha_practica, hoy);
+
+    // Practicó ayer (dentro de la ventana normal) o ya no tenía racha que
+    // proteger: no hay nada que congelar ni que cortar, solo se marca el día.
+    if (diasSinPracticar <= 1 || (stats.racha_actual ?? 0) === 0) {
+      const actualizado: Partial<UserStats> = { racha_evaluada_hasta: hoy };
+      await this.db.from('user_stats').update(actualizado).eq('user_id', userId);
+      return { ...stats, ...actualizado };
+    }
+
+    const diasPerdidos = diasSinPracticar - 1;
+    const congeladoresDisponibles = stats.racha_congeladores ?? 0;
+    const seCubreConCongeladores = congeladoresDisponibles >= diasPerdidos;
+
+    const filasHistorial = Array.from({ length: diasPerdidos }, (_, i) => ({
+      user_id: userId,
+      fecha: this.sumarDias(stats.ultima_fecha_practica!, i + 1),
+      estado: seCubreConCongeladores ? 'congelado' : 'perdido',
+    }));
+
+    const { error: errorHistorial } = await this.db
+      .from('racha_historial')
+      .upsert(filasHistorial, { onConflict: 'user_id,fecha' });
+    if (errorHistorial) console.error(errorHistorial);
+
+    const actualizado: Partial<UserStats> = seCubreConCongeladores
+      ? { racha_congeladores: congeladoresDisponibles - diasPerdidos, racha_evaluada_hasta: hoy }
+      : { racha_actual: 0, racha_evaluada_hasta: hoy };
+
+    const { error } = await this.db.from('user_stats').update(actualizado).eq('user_id', userId);
+    if (error) throw error;
+
+    return { ...stats, ...actualizado };
+  }
+
+  /** Historial de días para el calendario de racha en el perfil. */
+  async obtenerHistorialRacha(userId: string, dias = 28): Promise<RachaHistorialDia[]> {
+    const desde = this.sumarDias(this.fechaHoy(), -dias);
+    const { data, error } = await this.db
+      .from('racha_historial')
+      .select('fecha, estado')
+      .eq('user_id', userId)
+      .gte('fecha', desde)
+      .order('fecha', { ascending: true });
+    if (error) throw error;
+    return data ?? [];
+  }
+
   /** Actualiza racha y XP al terminar una lección. Regla simple: si ya
    * practicaste hoy, la racha no cambia; si practicaste ayer, sube +1; si
-   * no, se reinicia en 1. */
+   * no, se reinicia en 1. `getMisStats` (llamado arriba) ya corrió la
+   * evaluación de racha con congeladores, así que `stats.racha_actual` ya
+   * refleja si la racha sigue viva — no hace falta comparar fechas de nuevo
+   * acá (si se comparara de nuevo, un día cubierto por un congelador se
+   * vería como "no fue ayer" y cortaría la racha igual, aunque el
+   * congelador ya la haya protegido). Cada 5 días de racha se gana 1
+   * congelador (tope 2) para no perderla si algún día se pasa por alto. */
   async actualizarStatsTrasLeccion(userId: string, xpGanado: number): Promise<UserStats> {
     const stats = await this.getMisStats(userId);
-    const hoy = new Date().toISOString().slice(0, 10);
-    const ayer = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const hoy = this.fechaHoy();
 
-    let nuevaRacha = stats.racha_actual ?? 0;
-    if (stats.ultima_fecha_practica === hoy) {
-      // ya practicó hoy, no cambia
-    } else if (stats.ultima_fecha_practica === ayer) {
-      nuevaRacha += 1;
-    } else {
-      nuevaRacha = 1;
-    }
+    const nuevaRacha = stats.ultima_fecha_practica === hoy
+      ? stats.racha_actual ?? 0 // ya practicó hoy, no cambia
+      : (stats.racha_actual ?? 0) + 1;
+
+    const ganaCongelador = nuevaRacha > 0 && nuevaRacha % ContenidoService.RACHA_CONGELADORES_CADA === 0;
+    const congeladoresFinal = Math.min(
+      ContenidoService.RACHA_CONGELADORES_MAX,
+      (stats.racha_congeladores ?? 0) + (ganaCongelador ? 1 : 0)
+    );
 
     const actualizado: Partial<UserStats> = {
       racha_actual: nuevaRacha,
       max_racha: Math.max(stats.max_racha ?? 0, nuevaRacha),
       puntos_experiencia: (stats.puntos_experiencia ?? 0) + xpGanado,
       ultima_fecha_practica: hoy,
+      racha_evaluada_hasta: hoy,
+      racha_congeladores: congeladoresFinal,
       updated_at: new Date().toISOString(),
     };
 
     const { error } = await this.db.from('user_stats').update(actualizado).eq('user_id', userId);
     if (error) throw error;
+
+    const { error: errorHistorial } = await this.db
+      .from('racha_historial')
+      .upsert({ user_id: userId, fecha: hoy, estado: 'practicado' }, { onConflict: 'user_id,fecha' });
+    if (errorHistorial) console.error(errorHistorial);
+
     return { ...stats, ...actualizado };
   }
 

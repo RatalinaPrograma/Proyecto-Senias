@@ -94,6 +94,120 @@
   }
 }
 
+.streak-card {
+  background: var(--signy-card);
+  border-radius: var(--signy-radius);
+  margin: 0 20px 20px;
+  padding: 18px;
+}
+
+.streak-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  h2 {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--signy-cream);
+    margin: 0;
+  }
+}
+
+.congeladores-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(44, 166, 164, 0.18);
+  color: var(--signy-mint);
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+
+  ion-icon { font-size: 14px; }
+}
+
+.streak-card-hint {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  color: var(--signy-muted);
+  line-height: 1.5;
+  margin: 8px 0 16px;
+}
+
+.streak-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.streak-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--signy-muted);
+  background: var(--signy-locked);
+
+  &.estado-practicado {
+    background: var(--signy-fox);
+    color: #4A2100;
+  }
+  &.estado-congelado {
+    background: var(--signy-mint);
+    color: #06322F;
+  }
+  &.estado-perdido {
+    background: var(--signy-error);
+    color: #3B0A05;
+    opacity: 0.85;
+  }
+  &.estado-hoy {
+    background: var(--signy-card-hover);
+    color: var(--signy-fox);
+    border: 2px solid var(--signy-fox);
+  }
+  &.estado-sin-datos {
+    opacity: 0.35;
+  }
+}
+
+.streak-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+
+  span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: 'Manrope', sans-serif;
+    font-size: 11px;
+    color: var(--signy-muted);
+  }
+}
+
+.streak-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+
+  &.dot-practicado { background: var(--signy-fox); }
+  &.dot-congelado { background: var(--signy-mint); }
+  &.dot-perdido { background: var(--signy-error); }
+}
+
 .follow-row {
   display: flex;
   gap: 12px;

@@ -104,6 +104,60 @@
       </ion-button>
     </section>
 
+    <!-- ===== NOTIFICACIONES ===== -->
+    <section class="card-section" *ngIf="notifDisponible">
+      <h2><ion-icon name="notifications-outline"></ion-icon> Notificaciones</h2>
+
+      <p class="section-hint">
+        Signy te avisa para que no pierdas la costumbre de practicar, y cuando recuperes vidas para poder seguir jugando.
+      </p>
+
+      <ion-text class="form-error" *ngIf="notifPermisoDenegado">
+        <p>Desactivaste los permisos de notificación para Signy. Actívalos desde los ajustes del sistema de tu teléfono para recibir estos avisos.</p>
+      </ion-text>
+
+      <ion-item lines="none" class="tts-toggle-row">
+        <ion-label>Recordatorio diario</ion-label>
+        <ion-toggle
+          [checked]="recordatorioActivado"
+          [disabled]="guardandoNotif"
+          (ionChange)="cambiarRecordatorio($event)"
+          aria-label="Activar recordatorio diario">
+        </ion-toggle>
+      </ion-item>
+
+      <ion-item lines="none" class="tts-toggle-row" *ngIf="recordatorioActivado">
+        <ion-label>Hora del recordatorio</ion-label>
+        <ion-select
+          [value]="horaRecordatorio"
+          [disabled]="guardandoNotif"
+          interface="action-sheet"
+          (ionChange)="cambiarHoraRecordatorio($event)">
+          <ion-select-option *ngFor="let h of horasDisponibles" [value]="h">
+            {{ labelHora(h) }}
+          </ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <ion-item lines="none" class="tts-toggle-row">
+        <ion-label>Aviso de vidas recuperadas</ion-label>
+        <ion-toggle
+          [checked]="avisoVidasActivado"
+          [disabled]="guardandoNotif"
+          (ionChange)="cambiarAvisoVidas($event)"
+          aria-label="Activar aviso de vidas recuperadas">
+        </ion-toggle>
+      </ion-item>
+
+      <ion-button
+        expand="block"
+        fill="outline"
+        (click)="probarNotificacion()"
+        class="btn-outline-mint">
+        Probar
+      </ion-button>
+    </section>
+
     <!-- ===== CAMBIAR CONTRASEÑA ===== -->
     <section class="card-section">
       <h2>Cambiar contraseña</h2>

@@ -7,6 +7,12 @@ const config: CapacitorConfig = {
   android: {
     statusBarOverlaysWebView: true,
     webContentsDebuggingEnabled: false
+  },
+  plugins: {
+    LocalNotifications: {
+      smallIcon: 'ic_stat_signy',
+      iconColor: '#F2701A'
+    }
   }
 };
 

@@ -5,11 +5,14 @@ import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
 import { TtsService } from '../services/tts';
+import { ContenidoService } from '../services/contenido';
+import { NotificationsService, NotifConfig } from '../services/notifications';
+import { PermissionState } from '@capacitor/core';
 import { SpeechSynthesisVoice } from '@capacitor-community/text-to-speech';
 import { passwordStrengthValidator, passwordsMatchValidator } from '../shared/validators';
 import { Profile } from '../data/db-types';
 import { addIcons } from 'ionicons';
-import { arrowBack, paw, cameraOutline, shieldCheckmark, trashOutline, volumeHigh } from 'ionicons/icons';
+import { arrowBack, paw, cameraOutline, shieldCheckmark, trashOutline, volumeHigh, notificationsOutline } from 'ionicons/icons';
 
 addIcons({
   'arrow-back': arrowBack,
@@ -18,6 +21,7 @@ addIcons({
   'shield-checkmark': shieldCheckmark,
   'trash-outline': trashOutline,
   'volume-high': volumeHigh,
+  'notifications-outline': notificationsOutline,
 });
 
 @Component({
@@ -65,6 +69,15 @@ export class SettingsPage implements OnInit {
   vozSeleccionada: string | null = null;
   guardandoVoz = false;
 
+  // ---- notificaciones ----
+  notifDisponible = true;
+  notifPermiso: PermissionState = 'prompt';
+  recordatorioActivado = true;
+  horaRecordatorio = '19:00';
+  avisoVidasActivado = true;
+  guardandoNotif = false;
+  horasDisponibles = Array.from({ length: 16 }, (_, i) => `${String(i + 7).padStart(2, '0')}:00`);
+
   // ---- 2FA ----
   mfaActivado = false;
   private factorIdActivo: string | null = null;
@@ -87,6 +100,8 @@ export class SettingsPage implements OnInit {
     private fb: FormBuilder,
     private supabaseService: SupabaseService,
     private ttsService: TtsService,
+    private contenidoService: ContenidoService,
+    private notificationsService: NotificationsService,
     private router: Router
   ) {}
 
@@ -116,6 +131,15 @@ export class SettingsPage implements OnInit {
     const verificado = factores?.totp?.find(f => f.status === 'verified');
     this.mfaActivado = !!verificado;
     this.factorIdActivo = verificado?.id ?? null;
+
+    this.notifDisponible = this.notificationsService.disponible();
+    if (this.notifDisponible) {
+      const config = await this.notificationsService.obtenerConfiguracion();
+      this.recordatorioActivado = config.recordatorioActivado;
+      this.horaRecordatorio = config.horaRecordatorio;
+      this.avisoVidasActivado = config.avisoVidasActivado;
+      this.notifPermiso = await this.notificationsService.verificarPermiso();
+    }
 
     this.cargando = false;
   }
@@ -207,6 +231,71 @@ export class SettingsPage implements OnInit {
     if (error) {
       this.vozSeleccionada = anterior; // revertir
     }
+  }
+
+  // ========== NOTIFICACIONES ==========
+  get notifPermisoDenegado(): boolean {
+    return this.notifPermiso === 'denied';
+  }
+
+  labelHora(hora: string): string {
+    const h = Number(hora.split(':')[0]);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:00 ${ampm}`;
+  }
+
+  async cambiarRecordatorio(evento: any) {
+    const valor: boolean = evento.detail.checked;
+    this.recordatorioActivado = valor; // optimista
+    await this.guardarConfigNotif({ recordatorioActivado: valor });
+  }
+
+  async cambiarHoraRecordatorio(evento: any) {
+    const valor: string = evento.detail.value;
+    const anterior = this.horaRecordatorio;
+    this.horaRecordatorio = valor; // optimista
+    const ok = await this.guardarConfigNotif({ horaRecordatorio: valor });
+    if (!ok) this.horaRecordatorio = anterior;
+  }
+
+  async cambiarAvisoVidas(evento: any) {
+    const valor: boolean = evento.detail.checked;
+    this.avisoVidasActivado = valor; // optimista
+    await this.guardarConfigNotif({ avisoVidasActivado: valor });
+  }
+
+  /** Guarda la config y reprograma de inmediato (no espera a que el usuario
+   * vuelva a Home). Devuelve false si algo falló, para poder revertir el
+   * cambio optimista en la UI. */
+  private async guardarConfigNotif(cambios: Partial<NotifConfig>): Promise<boolean> {
+    this.guardandoNotif = true;
+    try {
+      await this.notificationsService.guardarConfiguracion(cambios);
+      const stats = await this.contenidoService.getMisStats(this.userId);
+      await this.notificationsService.sincronizar(
+        stats.vidas ?? 0,
+        this.contenidoService.minutosParaProximaVida(stats),
+        stats.racha_actual ?? 0
+      );
+      this.notifPermiso = await this.notificationsService.verificarPermiso();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      this.guardandoNotif = false;
+    }
+  }
+
+  async probarNotificacion() {
+    let permiso = await this.notificationsService.verificarPermiso();
+    if (permiso === 'prompt' || permiso === 'prompt-with-rationale') {
+      permiso = await this.notificationsService.pedirPermiso();
+    }
+    this.notifPermiso = permiso;
+    if (permiso !== 'granted') return;
+    const stats = await this.contenidoService.getMisStats(this.userId);
+    await this.notificationsService.notificacionDePrueba(stats.racha_actual ?? 0);
   }
 
   // ========== CONTRASEÑA ==========
@@ -313,6 +402,7 @@ export class SettingsPage implements OnInit {
       return;
     }
 
+    await this.notificationsService.cancelarTodo();
     await this.supabaseService.signOut();
     this.router.navigate(['/onboarding']);
   }

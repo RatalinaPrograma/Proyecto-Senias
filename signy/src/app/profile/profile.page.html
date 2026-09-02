@@ -40,6 +40,36 @@
       </div>
     </div>
 
+    <div class="streak-card">
+      <div class="streak-card-header">
+        <h2>Tu racha</h2>
+        <span class="congeladores-badge" *ngIf="(stats?.racha_congeladores ?? 0) > 0">
+          <ion-icon name="snow-outline"></ion-icon>
+          {{ stats?.racha_congeladores }} {{ stats?.racha_congeladores === 1 ? 'congelador' : 'congeladores' }}
+        </span>
+      </div>
+      <p class="streak-card-hint">
+        Cada 5 días de racha ganas un congelador ❄️ (máx. 2) que te cubre automáticamente si un día se te pasa por alto.
+      </p>
+
+      <div class="streak-calendar">
+        <div
+          *ngFor="let d of diasCalendario"
+          class="streak-day"
+          [ngClass]="'estado-' + d.estado"
+          [class.es-hoy]="d.esHoy"
+          [title]="d.fecha">
+          {{ d.numero }}
+        </div>
+      </div>
+
+      <div class="streak-legend">
+        <span><i class="streak-dot dot-practicado"></i> Practicado</span>
+        <span><i class="streak-dot dot-congelado"></i> Congelado</span>
+        <span><i class="streak-dot dot-perdido"></i> Perdido</span>
+      </div>
+    </div>
+
     <div class="follow-row">
       <button class="follow-box" (click)="irASeguidores()">
         <strong>{{ seguidores }}</strong>

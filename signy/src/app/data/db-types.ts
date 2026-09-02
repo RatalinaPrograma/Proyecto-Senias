@@ -61,7 +61,16 @@ export interface UserStats {
   puntos_experiencia: number | null;
   vidas: number | null;
   ultima_vida_perdida: string | null;
+  racha_congeladores: number | null;
+  racha_evaluada_hasta: string | null;
   updated_at: string | null;
+}
+
+export type EstadoDiaRacha = 'practicado' | 'congelado' | 'perdido';
+
+export interface RachaHistorialDia {
+  fecha: string;
+  estado: EstadoDiaRacha;
 }
 
 export interface PracticaFallo {
