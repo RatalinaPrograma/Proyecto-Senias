@@ -106,12 +106,12 @@ export class SettingsPage implements OnInit {
   ) {}
 
   async ngOnInit() {
-    const { data: userData } = await this.supabaseService.getUser();
-    if (!userData?.user) { this.router.navigate(['/auth/login']); return; }
-    this.userId = userData.user.id;
-    this.email = userData.user.email ?? '';
+    const { user } = await this.supabaseService.getUsuarioLocal();
+    if (!user) { this.router.navigate(['/auth/login']); return; }
+    this.userId = user.id;
+    this.email = user.email ?? '';
 
-    const nombreFallback = userData.user.user_metadata?.['full_name'] ?? 'Usuario Signy';
+    const nombreFallback = user.user_metadata?.['full_name'] ?? 'Usuario Signy';
     this.perfil = await this.supabaseService.getOCrearProfile(this.userId, nombreFallback);
     this.avatarUrlActual = this.perfil.avatar_url;
 

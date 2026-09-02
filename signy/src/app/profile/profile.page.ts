@@ -56,11 +56,11 @@ export class ProfilePage {
   // vez. Sin esto, si volvías a Perfil después de hacer una lección, seguías
   // viendo la racha/calendario/stats de la visita anterior.
   async ionViewWillEnter() {
-    const { data: userData } = await this.supabaseService.getUser();
-    if (!userData?.user) { this.router.navigate(['/auth/login']); return; }
-    this.userId = userData.user.id;
+    const { user } = await this.supabaseService.getUsuarioLocal();
+    if (!user) { this.router.navigate(['/auth/login']); return; }
+    this.userId = user.id;
 
-    const nombreFallback = userData.user.user_metadata?.['full_name'] ?? 'Usuario Signy';
+    const nombreFallback = user.user_metadata?.['full_name'] ?? 'Usuario Signy';
 
     const [perfil, stats, seguidores, seguidos, historialRacha] = await Promise.all([
       this.supabaseService.getOCrearProfile(this.userId, nombreFallback),

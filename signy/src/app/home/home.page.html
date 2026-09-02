@@ -59,6 +59,17 @@
       <span>{{ subnivelesCompletados }} / {{ totalSubniveles }} lecciones</span>
     </div>
 
+    <!-- Aviso chico y no-bloqueante: se puede seguir navegando mientras esto corre -->
+    <div class="vocab-precarga" *ngIf="precargandoVocabulario">
+      <ion-icon name="refresh" class="vocab-precarga-icon"></ion-icon>
+      <div class="vocab-precarga-texto">
+        <span>Preparando señas para uso sin conexión…</span>
+        <div class="vocab-precarga-track">
+          <div class="vocab-precarga-fill" [style.width.%]="progresoVocabulario"></div>
+        </div>
+      </div>
+    </div>
+
     <ng-container *ngFor="let nivel of niveles; trackBy: trackNivel">
       <div class="unit-banner" [class.locked]="!nivel.accesible" [style.background]="nivel.color || 'var(--signy-card)'" [style.boxShadow]="'0 4px 0 ' + (nivel.color_oscuro || 'var(--signy-locked)')">
         <div>
