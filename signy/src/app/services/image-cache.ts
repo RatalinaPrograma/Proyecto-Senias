@@ -24,6 +24,54 @@ export class ImageCacheService {
   private memoryUrls = new Map<string, string>();
   private blobUrls = new Set<string>();
 
+  // ---- precarga total en segundo plano ----
+  // Guardas a nivel de servicio (no de componente): Home y Onboarding
+  // pueden llamar a precargarTodo() sin coordinarse entre ellos y nunca se
+  // dispara dos veces en paralelo ni se repite si ya terminó en esta sesión.
+  private precargaTotalEnCurso = false;
+  private precargaTotalCompleta = false;
+
+  /**
+   * Deja `url` guardado en disco, y si ya estaba, revisa que siga siendo
+   * la versión vigente. La revisión es barata: un `HEAD` (sin bajar el
+   * archivo completo) comparando ETag/Last-Modified/tamaño contra lo que
+   * ya está guardado. Solo si cambió de verdad se vuelve a descargar el
+   * contenido completo, reemplazando lo viejo.
+   *
+   * Esto es lo que resuelve el caso real que encontramos: antes, si se
+   * corregía o reemplazaba un archivo en Supabase con el mismo nombre
+   * (misma URL), el teléfono seguía mostrando la versión vieja para
+   * siempre porque nunca volvía a preguntar. Ahora sí se entera, la
+   * próxima vez que haya red.
+   *
+   * Si no hay conexión (modo avión, sin señal), el `HEAD` simplemente
+   * falla y se sigue usando lo que ya está en disco sin quejarse -- eso es
+   * justo lo que hace que la app funcione offline.
+   */
+  private async actualizarSiCambio(url: string, cache: Cache): Promise<void> {
+    const enDisco = await cache.match(url);
+
+    if (!enDisco) {
+      await cache.add(url);
+      return;
+    }
+
+    try {
+      const head = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+      if (!head.ok) return; // no se pudo confirmar por ahora: se deja lo que ya hay
+
+      if (this.firmaDeRespuesta(head) !== this.firmaDeRespuesta(enDisco)) {
+        await cache.add(url); // cambió de verdad: se vuelve a bajar completo y reemplaza
+      }
+    } catch {
+      // sin conexión o falló el HEAD: se sigue usando lo que ya está en disco
+    }
+  }
+
+  private firmaDeRespuesta(r: Response): string {
+    return r.headers.get('etag') ?? r.headers.get('last-modified') ?? r.headers.get('content-length') ?? '';
+  }
+
   /**
    * Precarga en segundo plano todos los recursos multimedia (GIFs/WebP/MP4)
    * del subnivel actual. Si un recurso ya está en disco (visto en una sesión
@@ -44,13 +92,8 @@ export class ImageCacheService {
           if (!url) { completados++; onProgress?.(completados, total); return; }
 
           try {
-            let response = await cache.match(url);
-            if (!response) {
-              // Primera vez que se ve esta seña: se descarga y queda en
-              // disco de forma permanente, no se vuelve a pedir nunca más.
-              await cache.add(url);
-              response = await cache.match(url);
-            }
+            await this.actualizarSiCambio(url, cache);
+            const response = await cache.match(url);
 
             if (response) {
               const blob = await response.blob();
@@ -68,6 +111,63 @@ export class ImageCacheService {
       );
     } catch (e) {
       console.warn('ImageCache: Error durante la precarga del subnivel:', e);
+    }
+  }
+
+  /**
+   * Deja instalado en disco TODO el vocabulario (no solo el subnivel
+   * actual), para que la app funcione sin conexión aunque el usuario nunca
+   * haya visitado una lección. Es deliberadamente NO bloqueante: se llama
+   * en segundo plano (sin `await` desde quien la invoca) apenas el usuario
+   * entra a Home.
+   *
+   * Todo local, sin infraestructura en la nube: cada archivo se descarga
+   * individual (con `concurrencia` descargas en paralelo como máximo) y
+   * queda guardado para siempre en la misma caché permanente de
+   * `precargarSubnivel()`. Si ya estaba guardado, se revisa que siga
+   * vigente (ver `actualizarSiCambio`) en vez de confiar ciegamente para
+   * siempre; así una seña nueva o corregida se cachea sola, sin que nadie
+   * tenga que regenerar nada ni subir versión de la app.
+   */
+  async precargarTodo(
+    urls: string[],
+    onProgress?: (completados: number, total: number) => void,
+    concurrencia = 4
+  ): Promise<void> {
+    if (!('caches' in window) || this.precargaTotalEnCurso || this.precargaTotalCompleta) return;
+
+    const unicas = Array.from(new Set((urls || []).filter((u): u is string => !!u)));
+    if (!unicas.length) return;
+
+    this.precargaTotalEnCurso = true;
+    const total = unicas.length;
+    let completados = 0;
+    let indice = 0;
+
+    try {
+      const cache = await caches.open(MEDIA_CACHE_NAME);
+
+      const trabajador = async () => {
+        while (indice < unicas.length) {
+          const url = unicas[indice++];
+          try {
+            await this.actualizarSiCambio(url, cache);
+          } catch (err) {
+            console.warn('ImageCache: No se pudo precargar en segundo plano:', url, err);
+          } finally {
+            completados++;
+            onProgress?.(completados, total);
+          }
+        }
+      };
+
+      const trabajadores = Array.from({ length: Math.min(concurrencia, unicas.length) }, () => trabajador());
+      await Promise.all(trabajadores);
+      this.precargaTotalCompleta = true;
+    } catch (e) {
+      console.warn('ImageCache: Error durante la precarga total en segundo plano:', e);
+    } finally {
+      this.precargaTotalEnCurso = false;
     }
   }
 

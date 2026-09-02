@@ -70,8 +70,8 @@ export class OnboardingPage implements OnInit {
   // Manda a /home si hay sesión, a /auth/login si no. Los guards de cada
   // ruta revalidan igual; esto solo evita el rebote login -> home.
   private async irADestino() {
-    const { data } = await this.supabaseService.getUser();
-    const destino = data?.user ? '/home' : '/auth/login';
+    const { user } = await this.supabaseService.getUsuarioLocal();
+    const destino = user ? '/home' : '/auth/login';
     this.router.navigate([destino], { replaceUrl: true });
   }
 

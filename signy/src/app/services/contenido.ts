@@ -75,6 +75,16 @@ export class ContenidoService {
     return data ?? [];
   }
 
+  /** Todas las URLs de medios (GIF/WebP/MP4) de todas las señas que ya
+   * tienen contenido cargado, sin importar el subnivel. Se usa para la
+   * precarga total en segundo plano (dejar la app lista para uso sin
+   * conexión) sin tener que recorrer subnivel por subnivel. */
+  async getTodosLosVideoUrls(): Promise<string[]> {
+    const { data, error } = await this.db.from('senas').select('video_url').not('video_url', 'is', null);
+    if (error) throw error;
+    return (data ?? []).map(r => r.video_url).filter((u): u is string => !!u);
+  }
+
   // ---------- Progreso (propio del usuario) ----------
   async getMisProgresosNivel(userId: string): Promise<ProgresoNivelUsuario[]> {
     const { data, error } = await this.db.from('progreso_nivel_usuario').select('*').eq('user_id', userId);
@@ -91,6 +101,8 @@ export class ContenidoService {
   /** Junta niveles + subniveles + progreso real del usuario en un solo
    * árbol listo para pintar en Home, con el estado de cada subnivel ya
    * calculado (completado / actual / bloqueado). */
+  private ultimoMapaAprendizaje: { userId: string; mapa: NivelConEstado[] } | null = null;
+
   async obtenerMapaDeAprendizaje(userId: string): Promise<NivelConEstado[]> {
     const [niveles, progresoNiveles, progresoSubniveles, todosLosSubniveles, subnivelesConContenido] = await Promise.all([
       this.getNiveles(),
@@ -150,7 +162,19 @@ export class ContenidoService {
       resultado.push({ ...nivel, accesible, completado: completadoNivel, subniveles: subnivelesConEstado });
     }
 
+    this.ultimoMapaAprendizaje = { userId, mapa: resultado };
     return resultado;
+  }
+
+  /**
+   * Último mapa de aprendizaje que se cargó con éxito para este usuario,
+   * sin ir a la red. Es el respaldo que usa `lessonGuard` cuando no hay
+   * conexión -- evita bloquear en silencio el acceso a una lección que la
+   * persona ya venía viendo en Home hace un momento, solo porque el guard
+   * no pudo reconfirmar el estado por red en ese instante.
+   */
+  obtenerMapaDeAprendizajeEnMemoria(userId: string): NivelConEstado[] | null {
+    return this.ultimoMapaAprendizaje?.userId === userId ? this.ultimoMapaAprendizaje.mapa : null;
   }
 
   async marcarSubnivelCompletado(userId: string, subnivelId: number, puntaje: number) {

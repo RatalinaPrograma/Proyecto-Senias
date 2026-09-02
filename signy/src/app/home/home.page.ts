@@ -4,6 +4,7 @@ import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
 import { ContenidoService } from '../services/contenido';
+import { ImageCacheService } from '../services/image-cache';
 import { NotificationsService } from '../services/notifications';
 import { NivelConEstado, SubnivelConEstado, UserStats } from '../data/db-types';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
@@ -34,9 +35,17 @@ export class HomePage {
 
   private ultimaCarga = 0;
 
+  // ---- precarga total en segundo plano (dejar la app usable sin conexión) ----
+  // No bloquea nada: es solo una barrita chica y opcional en el HUD.
+  // Si el usuario abre una lección mientras esto corre, la lección se
+  // precarga igual como siempre (precargarSubnivel de toda la vida).
+  precargandoVocabulario = false;
+  progresoVocabulario = 0;
+
   constructor(
     private supabaseService: SupabaseService,
     private contenidoService: ContenidoService,
+    private imageCacheService: ImageCacheService,
     private notificationsService: NotificationsService,
     private router: Router
   ) {}
@@ -55,13 +64,19 @@ export class HomePage {
     if (!this.niveles.length) this.cargando = true;
     this.error = '';
     try {
-      const { data: userData } = await this.supabaseService.getUser();
-      if (!userData?.user) return;
+      // getUsuarioLocal() lee la sesión guardada en el disco del teléfono,
+      // sin ir a la red -- getUser() (lo que había antes acá) siempre
+      // revalida contra el servidor y por eso fallaba apenas no había
+      // conexión, dejando Home en blanco (0/0 lecciones) sin explicar por
+      // qué. Los guards ya usaban este mismo método; a Home se le había
+      // quedado pendiente.
+      const { user } = await this.supabaseService.getUsuarioLocal();
+      if (!user) return;
 
       const [niveles, stats, { data: perfil }] = await Promise.all([
-        this.contenidoService.obtenerMapaDeAprendizaje(userData.user.id),
-        this.contenidoService.getMisStats(userData.user.id),
-        this.supabaseService.getProfile(userData.user.id),
+        this.contenidoService.obtenerMapaDeAprendizaje(user.id),
+        this.contenidoService.getMisStats(user.id),
+        this.supabaseService.getProfile(user.id),
       ]);
       this.niveles = niveles;
       this.stats = stats;
@@ -80,11 +95,34 @@ export class HomePage {
       this.notificationsService
         .sincronizar(stats.vidas ?? 0, this.contenidoService.minutosParaProximaVida(stats), stats.racha_actual ?? 0)
         .catch(() => {});
+
+      // Se dispara sin "await" a propósito: corre en segundo plano y no
+      // debe retrasar ni bloquear la pantalla de Home para nada.
+      this.iniciarPrecargaVocabularioEnSegundoPlano();
     } catch (e: any) {
       this.error = 'No se pudo cargar tu progreso. Revisa tu conexión.';
       console.error(e);
     } finally {
       this.cargando = false;
+    }
+  }
+
+  /** Deja instalado en disco todo el vocabulario disponible para que la
+   * app funcione sin conexión, sin bloquear la navegación. El servicio ya
+   * se encarga de no repetirse si esto ya corrió antes en la sesión. */
+  private async iniciarPrecargaVocabularioEnSegundoPlano() {
+    try {
+      const urls = await this.contenidoService.getTodosLosVideoUrls();
+      if (!urls.length) return;
+
+      this.precargandoVocabulario = true;
+      await this.imageCacheService.precargarTodo(urls, (completados, total) => {
+        this.progresoVocabulario = Math.round((completados / total) * 100);
+      });
+    } catch (e) {
+      console.warn('No se pudo precargar el vocabulario en segundo plano:', e);
+    } finally {
+      this.precargandoVocabulario = false;
     }
   }
 
@@ -113,8 +151,25 @@ export class HomePage {
   }
 
   async cerrarSesion() {
-    await this.notificationsService.cancelarTodo();
-    await this.supabaseService.signOut();
-    this.router.navigate(['/auth/login']);
+    try {
+      // cancelarTodo() es local (no necesita red), así que va antes y
+      // fuera del try de signOut() -- si falla igual queremos intentar
+      // cerrar sesión.
+      await this.notificationsService.cancelarTodo();
+    } catch (e) {
+      console.warn('No se pudieron cancelar las notificaciones locales:', e);
+    }
+
+    try {
+      await this.supabaseService.signOut();
+      this.router.navigate(['/auth/login']);
+    } catch (e) {
+      // Sin conexión, signOut() no puede avisarle al servidor que invalide
+      // la sesión. Se deja todo como estaba (sigues conectado) en vez de
+      // dejar el error sin manejar -- eso era lo que se veía como "Failed
+      // to fetch".
+      console.warn('No se pudo cerrar sesión (probablemente sin conexión):', e);
+      alert('No se pudo cerrar sesión sin conexión a internet. Vuelve a intentarlo cuando tengas internet.');
+    }
   }
 }

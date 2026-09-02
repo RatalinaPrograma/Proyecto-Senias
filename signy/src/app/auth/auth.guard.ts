@@ -71,7 +71,23 @@ export const lessonGuard: CanActivateFn = async (route) => {
   }
 
   const subnivelId = Number(route.paramMap.get('subnivelId'));
-  const mapa = await contenidoService.obtenerMapaDeAprendizaje(user.id);
+
+  let mapa: Awaited<ReturnType<typeof contenidoService.obtenerMapaDeAprendizaje>>;
+  try {
+    mapa = await contenidoService.obtenerMapaDeAprendizaje(user.id);
+  } catch (e) {
+    // Sin conexión: en vez de bloquear en silencio (que se ve como un
+    // botón que "no hace nada"), se usa el último mapa que Home ya cargó
+    // con éxito en esta sesión, si lo hay.
+    console.warn('lessonGuard: no se pudo verificar por red, se usa el último mapa conocido:', e);
+    const respaldo = contenidoService.obtenerMapaDeAprendizajeEnMemoria(user.id);
+    if (!respaldo) {
+      router.navigate(['/home']);
+      return false;
+    }
+    mapa = respaldo;
+  }
+
   const todosLosSubniveles = mapa.reduce<typeof mapa[number]['subniveles']>((acc, n) => acc.concat(n.subniveles), []);
   const subnivel = todosLosSubniveles.find(s => s.id === subnivelId);
 

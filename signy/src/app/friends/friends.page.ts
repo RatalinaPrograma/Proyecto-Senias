@@ -45,9 +45,9 @@ export class FriendsPage implements OnInit {
   ) {}
 
   async ngOnInit() {
-    const { data: userData } = await this.supabaseService.getUser();
-    if (!userData?.user) { this.router.navigate(['/auth/login']); return; }
-    this.userId = userData.user.id;
+    const { user } = await this.supabaseService.getUsuarioLocal();
+    if (!user) { this.router.navigate(['/auth/login']); return; }
+    this.userId = user.id;
 
     const tabInicial = this.route.snapshot.queryParamMap.get('tab');
     if (tabInicial === 'seguidores' || tabInicial === 'seguidos' || tabInicial === 'buscar') {
