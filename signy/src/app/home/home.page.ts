@@ -104,6 +104,15 @@ export class HomePage {
   get xp(): number { return this.stats?.puntos_experiencia ?? 0; }
   get vidas(): number { return this.stats?.vidas ?? 5; }
 
+  /** true si hay una racha activa y todavía no se practicó hoy — para el
+   * pulso de aviso en la píldora de racha del Home. Mismo cálculo que ya
+   * se usa para las notificaciones de "vas a perder la racha esta noche",
+   * solo que acá es un recordatorio silencioso dentro de la propia app. */
+  get rachaEnRiesgo(): boolean {
+    if (!this.stats || this.racha <= 0) return false;
+    return this.stats.ultima_fecha_practica !== this.contenidoService.fechaHoy();
+  }
+
   abrirLeccion(subnivel: SubnivelConEstado) {
     if (subnivel.estado === 'bloqueado' || subnivel.estado === 'proximamente') return;
     this.router.navigate(['/lesson', subnivel.id]);

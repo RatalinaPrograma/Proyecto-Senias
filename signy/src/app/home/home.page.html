@@ -33,7 +33,7 @@
 
       <div class="hud-right">
         <div class="hud-stats">
-          <div class="stat-pill stat-fire">
+          <div class="stat-pill stat-fire" [class.stat-fire-riesgo]="rachaEnRiesgo" [title]="rachaEnRiesgo ? 'Todavía no practicas hoy' : ''">
             <ion-icon name="flame"></ion-icon>
             <span>{{ racha }}</span>
           </div>

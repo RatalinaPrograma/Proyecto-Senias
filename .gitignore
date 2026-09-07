@@ -1,0 +1,13 @@
+# .gitignore de la RAÍZ del repo (antes no existía uno acá -- el de
+# signy/.gitignore solo cubre esa carpeta, no a supabase/ que vive al
+# mismo nivel).
+
+# Supabase CLI: caché de sesión local (project ref, org id, url del
+# pooler de Postgres). No es una clave secreta -- no incluye contraseña --
+# pero no debería estar en el repo, es estado local de quien corrió
+# `supabase link`, no algo para versionar. Estaba comitteado hasta ahora
+# porque no había ningún .gitignore que lo cubriera.
+supabase/.temp/
+
+.DS_Store
+Thumbs.db

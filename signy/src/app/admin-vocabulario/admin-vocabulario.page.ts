@@ -37,6 +37,13 @@ addIcons({
   'alert-circle-outline': alertCircleOutline,
 });
 
+/** El input ya filtra por accept="image/*,video/mp4", pero eso es solo una
+ * sugerencia para el selector de archivos del sistema operativo — no
+ * bloquea nada por sí solo. Esta lista sí se revisa en código antes de
+ * subir cualquier archivo al bucket. */
+const TIPOS_MEDIA_PERMITIDOS = ['image/gif', 'image/webp', 'image/png', 'image/jpeg', 'video/mp4'];
+const TAMANO_MAX_ARCHIVO = 20 * 1024 * 1024; // 20 MB
+
 /** Atajos rápidos para el campo "ícono de concepto" del formulario de
  * señas — no pretende cubrir toda palabra posible, es solo un punto de
  * partida común. Para cualquier otra cosa, el admin puede escribir/pegar
@@ -414,7 +421,23 @@ export class AdminVocabularioPage implements OnInit {
 
   onArchivoSeleccionado(evento: Event) {
     const input = evento.target as HTMLInputElement;
-    this.archivoSeleccionado = input.files?.[0] ?? null;
+    const file = input.files?.[0] ?? null;
+    this.errorForm = null;
+
+    if (file && !TIPOS_MEDIA_PERMITIDOS.includes(file.type)) {
+      this.errorForm = 'Ese tipo de archivo no está permitido. Usa GIF, WebP, PNG, JPG o MP4.';
+      input.value = '';
+      this.archivoSeleccionado = null;
+      return;
+    }
+    if (file && file.size > TAMANO_MAX_ARCHIVO) {
+      this.errorForm = 'El archivo pesa más de 20 MB — comprímelo antes de subirlo.';
+      input.value = '';
+      this.archivoSeleccionado = null;
+      return;
+    }
+
+    this.archivoSeleccionado = file;
   }
 
   elegirIcono(emoji: string) {

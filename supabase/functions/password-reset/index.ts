@@ -22,12 +22,27 @@ const corsHeaders = {
 
 const CODE_TTL_MINUTOS = 15;
 const MAX_INTENTOS = 5;
+// Tiempo mínimo entre dos pedidos de código para el mismo correo -- sin
+// esto, cualquiera podía llamar action:"request" en bucle y usar este
+// endpoint para bombardear el correo de otra persona con códigos.
+const COOLDOWN_SEGUNDOS = 60;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+/** Mismas reglas que `passwordStrengthValidator` en el frontend
+ * (src/app/shared/validators.ts) -- se repiten acá porque esta función
+ * corre en el servidor y se puede llamar directo (sin pasar por la app),
+ * así que la validación del cliente sola no alcanza. */
+function passwordDebil(password: string): string | null {
+  if (password.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
+  if (!/[A-Z]/.test(password)) return 'La contraseña debe incluir al menos una mayúscula.';
+  if (!/[0-9]/.test(password)) return 'La contraseña debe incluir al menos un número.';
+  return null;
 }
 
 async function enviarCodigoPorEmailJS(email: string, code: string) {
@@ -77,6 +92,23 @@ Deno.serve(async (req: Request) => {
       const email = String(body.email ?? '').trim().toLowerCase();
       if (!email) return json({ error: 'Falta el email' }, 400);
 
+      // Enfriamiento: no se puede pedir un código nuevo si el anterior se
+      // emitió hace menos de COOLDOWN_SEGUNDOS, aunque siga vigente.
+      const { data: filaExistente } = await admin
+        .from('password_reset_codes')
+        .select('expires_at')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (filaExistente) {
+        const emitidoEnMs = new Date(filaExistente.expires_at).getTime() - CODE_TTL_MINUTOS * 60_000;
+        const segundosDesdeEmitido = (Date.now() - emitidoEnMs) / 1000;
+        if (segundosDesdeEmitido < COOLDOWN_SEGUNDOS) {
+          const faltan = Math.ceil(COOLDOWN_SEGUNDOS - segundosDesdeEmitido);
+          return json({ error: `Espera ${faltan} segundos antes de pedir otro código.` }, 429);
+        }
+      }
+
       const code = String(Math.floor(100000 + Math.random() * 900000));
       const expires_at = new Date(Date.now() + CODE_TTL_MINUTOS * 60_000).toISOString();
 
@@ -116,6 +148,9 @@ Deno.serve(async (req: Request) => {
 
       const userId = await buscarUserIdPorEmail(admin, email);
       if (!userId) return invalido();
+
+      const debil = passwordDebil(newPassword);
+      if (debil) return json({ error: debil }, 400);
 
       const { error: updateError } = await admin.auth.admin.updateUserById(userId, { password: newPassword });
       if (updateError) return json({ error: updateError.message }, 500);

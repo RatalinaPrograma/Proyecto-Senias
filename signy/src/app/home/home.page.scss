@@ -113,6 +113,15 @@
   50% { box-shadow: 0 3px 0 #A6301F, 0 0 0 4px rgba(225, 79, 61, 0.35); }
 }
 
+.stat-fire-riesgo {
+  animation: stat-fire-warn 1.6s ease-in-out infinite;
+}
+
+@keyframes stat-fire-warn {
+  0%, 100% { box-shadow: 0 3px 0 var(--signy-fox-deep); }
+  50% { box-shadow: 0 3px 0 var(--signy-fox-deep), 0 0 0 4px rgba(242, 112, 26, 0.35); }
+}
+
 .logout-btn {
   background: transparent;
   border: none;
@@ -328,7 +337,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .node-ring, .stat-heart-low, .path-row, .unit-banner {
+  .node-ring, .stat-heart-low, .stat-fire-riesgo, .path-row, .unit-banner {
     animation: none !important;
     opacity: 1 !important;
   }
