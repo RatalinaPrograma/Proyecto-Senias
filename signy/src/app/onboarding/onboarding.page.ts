@@ -5,11 +5,24 @@ import { Router } from '@angular/router';
 import { Preferences } from '@capacitor/preferences';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { SupabaseService } from '../services/supabase';
+import { addIcons } from 'ionicons';
+import { paw, people, settingsOutline } from 'ionicons/icons';
+
+addIcons({ paw, people, 'settings-outline': settingsOutline });
+
+interface ItemMenu {
+  icono: string;
+  etiqueta: string;
+}
 
 interface Slide {
-  imagen: string;
+  /** Ilustración grande de la mascota. Se omite (null) en la diapositiva
+   * que muestra el menú de navegación, para no competir con esos íconos. */
+  imagen: string | null;
   titulo: string;
   texto: string;
+  /** Solo la diapositiva de "cómo moverte en la app" la usa. */
+  menu?: ItemMenu[];
 }
 
 const STORAGE_KEY = 'signy_onboarding_visto';
@@ -42,6 +55,16 @@ export class OnboardingPage implements OnInit {
       imagen: 'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png',
       titulo: 'Practica con tu cámara',
       texto: 'Al final de cada lección, activa tu cámara y practica el gesto. Signy te da retroalimentación al momento.',
+    },
+    {
+      imagen: null,
+      titulo: 'Fácil de moverte',
+      texto: 'Tu foto arriba a la izquierda: tu perfil. El ícono de personas: agregar amigos. El engranaje: configuración.',
+      menu: [
+        { icono: 'paw', etiqueta: 'Perfil' },
+        { icono: 'people', etiqueta: 'Amigos' },
+        { icono: 'settings-outline', etiqueta: 'Ajustes' },
+      ],
     },
     {
       imagen: 'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/registro.png',

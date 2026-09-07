@@ -58,7 +58,10 @@
           <video *ngIf="senas[flashIndex].video_url && esVideoMp4(senas[flashIndex].video_url)" [appCachedSrc]="senas[flashIndex].video_url" class="real-media" autoplay loop muted playsinline></video>
           <img *ngIf="senas[flashIndex].video_url && !esVideoMp4(senas[flashIndex].video_url)" [appCachedSrc]="senas[flashIndex].video_url" [alt]="senas[flashIndex].palabra" class="real-media" decoding="async" />
         </ng-container>
-        <div class="flash-word" *ngIf="flipped">{{ senas[flashIndex].palabra }}</div>
+        <div class="flash-word" *ngIf="flipped">
+          <span class="flash-icon" *ngIf="senas[flashIndex].icono">{{ senas[flashIndex].icono }}</span>
+          {{ senas[flashIndex].palabra }}
+        </div>
         <span class="flash-hint">toca para {{ flipped ? 'ver la seña' : 'revelar la palabra' }}</span>
       </button>
 
@@ -107,6 +110,7 @@
             [class.selected]="selPalabra === p.palabra && !matchMal"
             [class.wrong]="selPalabra === p.palabra && matchMal"
             (click)="elegirPalabra(p.palabra)">
+            <span class="match-icon" *ngIf="iconoDe(p.palabra)">{{ iconoDe(p.palabra) }}</span>
             {{ p.palabra }}
           </button>
         </div>
@@ -138,6 +142,7 @@
           [class.ok]="estado && opt === preguntaActual.palabra"
           [class.bad]="estado === 'incorrecto' && seleccionada === opt"
           (click)="elegirOpcion(opt)">
+          <span class="option-icon" *ngIf="iconoDe(opt)">{{ iconoDe(opt) }}</span>
           {{ opt }}
         </button>
       </div>

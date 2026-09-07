@@ -190,6 +190,7 @@
           <video *ngIf="s.video_url && esVideoMp4(s.video_url)" [src]="s.video_url" class="item-thumb" muted playsinline preload="metadata"></video>
           <img *ngIf="s.video_url && !esVideoMp4(s.video_url)" [src]="s.video_url" [alt]="s.palabra" class="item-thumb" loading="lazy" decoding="async" />
           <div class="item-thumb placeholder" *ngIf="!s.video_url"><ion-icon name="image-outline"></ion-icon></div>
+          <span class="item-icono-badge" *ngIf="s.icono">{{ s.icono }}</span>
         </div>
         <div class="item-info">
           <p class="item-title">{{ s.palabra }}</p>
@@ -227,6 +228,23 @@
 
         <ion-textarea label="Descripción (opcional)" labelPlacement="floating" fill="outline" autoGrow="true"
           [(ngModel)]="formSena.descripcion" class="signy-input"></ion-textarea>
+
+        <ion-input label="Ícono de concepto (emoji, opcional)" labelPlacement="floating" fill="outline"
+          placeholder="Ej: 🐱 para &quot;gato&quot;"
+          [(ngModel)]="formSena.icono" class="signy-input"></ion-input>
+        <p class="field-hint">
+          Ayuda a personas cuya primera lengua es LSCh a reconocer la palabra por dibujo, no solo por texto. No reemplaza el video de la seña real.
+        </p>
+        <div class="icono-picker">
+          <button
+            type="button"
+            *ngFor="let e of sugerenciasIcono"
+            class="icono-opt"
+            [class.selected]="formSena.icono === e"
+            (click)="elegirIcono(e)">
+            {{ e }}
+          </button>
+        </div>
 
         <div class="media-mode">
           <button class="mode-btn" [class.active]="modoMedia === 'url'" (click)="modoMedia = 'url'">

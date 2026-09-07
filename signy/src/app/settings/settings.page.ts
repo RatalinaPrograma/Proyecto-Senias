@@ -12,7 +12,7 @@ import { SpeechSynthesisVoice } from '@capacitor-community/text-to-speech';
 import { passwordStrengthValidator, passwordsMatchValidator } from '../shared/validators';
 import { Profile } from '../data/db-types';
 import { addIcons } from 'ionicons';
-import { arrowBack, paw, cameraOutline, shieldCheckmark, trashOutline, volumeHigh, notificationsOutline } from 'ionicons/icons';
+import { arrowBack, paw, cameraOutline, shieldCheckmark, trashOutline, volumeHigh, notificationsOutline, personCircleOutline, keyOutline } from 'ionicons/icons';
 
 addIcons({
   'arrow-back': arrowBack,
@@ -22,6 +22,8 @@ addIcons({
   'trash-outline': trashOutline,
   'volume-high': volumeHigh,
   'notifications-outline': notificationsOutline,
+  'person-circle-outline': personCircleOutline,
+  'key-outline': keyOutline,
 });
 
 @Component({

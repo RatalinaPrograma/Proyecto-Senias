@@ -6,8 +6,15 @@
   </div>
 
   <div class="onboarding-wrap">
-    <div class="slide-image-wrap">
+    <div class="slide-image-wrap" *ngIf="slides[paso].imagen">
       <img [appCachedSrc]="slides[paso].imagen" [alt]="slides[paso].titulo" class="slide-image" />
+    </div>
+
+    <div class="slide-menu-wrap" *ngIf="slides[paso].menu as menu">
+      <div class="slide-menu-item" *ngFor="let item of menu">
+        <span class="slide-menu-icon"><ion-icon [name]="item.icono"></ion-icon></span>
+        <span class="slide-menu-label">{{ item.etiqueta }}</span>
+      </div>
     </div>
 
     <div class="slide-text">

@@ -63,10 +63,12 @@ export class ContenidoService {
     return data;
   }
 
-  async getPoolDePalabras(limite = 200): Promise<string[]> {
-    const { data, error } = await this.db.from('senas').select('palabra').limit(limite);
+  /** Pool de palabras (con su ícono de concepto, si tiene) para armar los
+   * distractores del quiz — no solo las de la lección actual. */
+  async getPoolDePalabras(limite = 200): Promise<{ palabra: string; icono: string | null }[]> {
+    const { data, error } = await this.db.from('senas').select('palabra, icono').limit(limite);
     if (error) throw error;
-    return (data ?? []).map(r => r.palabra);
+    return data ?? [];
   }
 
   async getSenas(subnivelId: number): Promise<Sena[]> {

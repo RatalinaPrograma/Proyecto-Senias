@@ -37,6 +37,21 @@ addIcons({
   'alert-circle-outline': alertCircleOutline,
 });
 
+/** Atajos rápidos para el campo "ícono de concepto" del formulario de
+ * señas — no pretende cubrir toda palabra posible, es solo un punto de
+ * partida común. Para cualquier otra cosa, el admin puede escribir/pegar
+ * cualquier emoji directo desde el teclado del celular o computador. */
+const SUGERENCIAS_ICONO = [
+  '👋', '🤝', '❤️', '😊', '😢', '😡',
+  '👨‍👩‍👧', '👶', '🏠',
+  '🐶', '🐱', '🐦', '🐟',
+  '🍎', '🍞', '🥛', '💧',
+  '🔴', '🔵', '🟢', '🟡',
+  '☀️', '🌙', '⭐', '🌳',
+  '🚗', '🚌', '✈️',
+  '📚', '✏️', '🏫',
+];
+
 type Vista = 'niveles' | 'subniveles' | 'senas';
 type ModoMedia = 'url' | 'subir';
 
@@ -92,6 +107,7 @@ export class AdminVocabularioPage implements OnInit {
   modoMedia: ModoMedia = 'url';
   archivoSeleccionado: File | null = null;
   subiendoArchivo = false;
+  sugerenciasIcono = SUGERENCIAS_ICONO;
 
   guardando = false;
   errorForm: string | null = null;
@@ -401,6 +417,10 @@ export class AdminVocabularioPage implements OnInit {
     this.archivoSeleccionado = input.files?.[0] ?? null;
   }
 
+  elegirIcono(emoji: string) {
+    this.formSena.icono = emoji;
+  }
+
   /** true si la URL/nombre de archivo apunta a un video (.mp4), para decidir
    * si la vista previa se muestra con <video> en vez de <img>. */
   esVideoMp4(url: string | null | undefined): boolean {
@@ -455,6 +475,7 @@ export class AdminVocabularioPage implements OnInit {
       subnivel_id: this.formSena.subnivel_id!,
       palabra: this.formSena.palabra!.trim(),
       descripcion: this.formSena.descripcion?.trim() || null,
+      icono: this.formSena.icono?.trim() || null,
       video_url: videoUrl,
     };
 

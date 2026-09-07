@@ -32,6 +32,11 @@ export interface Sena {
   palabra: string;
   descripcion: string | null;
   video_url: string | null;
+  /** Emoji que representa el CONCEPTO/objeto de la palabra (ej. 🐱 para
+   * "gato"), no la seña en sí — ayuda a asociar la palabra escrita con su
+   * significado a personas cuya primera lengua es LSCh y no el español.
+   * Nunca reemplaza al video real de la seña. */
+  icono: string | null;
   landmarks_referencia: unknown | null;
   created_at: string | null;
 }

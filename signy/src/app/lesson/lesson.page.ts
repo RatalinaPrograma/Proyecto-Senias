@@ -91,6 +91,10 @@ export class LessonPage implements OnInit, OnDestroy {
   seleccionada: string | null = null;
   estado: 'correcto' | 'incorrecto' | null = null;
 
+  /** palabra -> ícono de concepto (emoji), para mostrar junto al texto en
+   * emparejar y en las opciones del quiz. Ver comentario en Sena.icono. */
+  private mapaIconos = new Map<string, string | null>();
+
   // ---- repaso: preguntas falladas en la ronda principal, que hay que
   // volver a responder al final hasta acertarlas ----
   modoRepaso = false;
@@ -209,6 +213,14 @@ export class LessonPage implements OnInit, OnDestroy {
       this.preguntas = this.construirPreguntas(pool);
       this.cargaProgreso = 100;
 
+      // Mapa palabra -> ícono de concepto para mostrarlo junto al texto en
+      // emparejar y en las opciones del quiz (las de la lección actual
+      // pisan al pool por si acaso, ya que son la fuente más al día).
+      this.mapaIconos = new Map(pool.map(p => [p.palabra, p.icono]));
+      for (const s of senas) {
+        if (s.icono) this.mapaIconos.set(s.palabra, s.icono);
+      }
+
       this.fase = this.vidas <= 0 ? 'sinvidas' : 'flash';
     } catch (e) {
       console.error(e);
@@ -230,12 +242,21 @@ export class LessonPage implements OnInit, OnDestroy {
   // Sin esto, cada cambio de ronda recrea (y redecodifica el GIF de) los 4 tiles.
   trackPar = (_: number, p: Par) => p.senaId;
 
-  private construirPreguntas(pool: string[]): Pregunta[] {
+  private construirPreguntas(pool: { palabra: string; icono: string | null }[]): Pregunta[] {
+    const palabras = pool.map(p => p.palabra);
     return this.senas.map((s, i) => {
-      const distractores = this.mezclar(pool.filter(w => w !== s.palabra)).slice(0, 3);
+      const distractores = this.mezclar(palabras.filter(w => w !== s.palabra)).slice(0, 3);
       const opciones = this.mezclar([...distractores, s.palabra]);
       return { palabra: s.palabra, senaId: s.id, opciones, seed: i, videoUrl: s.video_url };
     });
+  }
+
+  /** Ícono de concepto (emoji) para una palabra, si tiene uno cargado.
+   * Se usa en emparejar y en las opciones del quiz para que alguien cuya
+   * primera lengua es LSCh (y no el español) pueda reconocer el significado
+   * por el dibujo, no solo por el texto escrito. */
+  iconoDe(palabra: string): string | null {
+    return this.mapaIconos.get(palabra) ?? null;
   }
 
   get preguntaActual(): Pregunta {
