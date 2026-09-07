@@ -30,10 +30,11 @@
     </div>
 
     <p class="empty-hint" *ngIf="!buscando && query && resultadosBusqueda.length === 0">
+      <ion-icon name="people-outline"></ion-icon>
       No encontramos a nadie con "{{ query }}"
     </p>
 
-    <div class="person-row" *ngFor="let persona of resultadosBusqueda">
+    <div class="person-row" *ngFor="let persona of resultadosBusqueda; let i = index" [style.animation-delay.ms]="i * 45">
       <div class="person-avatar">
         <img *ngIf="persona.avatar_url" [src]="persona.avatar_url" [alt]="persona.full_name || ''" />
         <ion-icon *ngIf="!persona.avatar_url" name="paw"></ion-icon>
@@ -56,10 +57,11 @@
     </div>
 
     <p class="empty-hint" *ngIf="!cargandoListas && seguidores.length === 0">
+      <ion-icon name="people-outline"></ion-icon>
       Todavía no tienes seguidores. ¡Comparte tu usuario con tus amigos!
     </p>
 
-    <div class="person-row" *ngFor="let persona of seguidores">
+    <div class="person-row" *ngFor="let persona of seguidores; let i = index" [style.animation-delay.ms]="i * 45">
       <div class="person-avatar">
         <img *ngIf="persona.avatar_url" [src]="persona.avatar_url" [alt]="persona.full_name || ''" />
         <ion-icon *ngIf="!persona.avatar_url" name="paw"></ion-icon>
@@ -82,10 +84,11 @@
     </div>
 
     <p class="empty-hint" *ngIf="!cargandoListas && seguidos.length === 0">
+      <ion-icon name="people-outline"></ion-icon>
       Aún no sigues a nadie. Búscalos en la pestaña "Buscar".
     </p>
 
-    <div class="person-row" *ngFor="let persona of seguidos">
+    <div class="person-row" *ngFor="let persona of seguidos; let i = index" [style.animation-delay.ms]="i * 45">
       <div class="person-avatar">
         <img *ngIf="persona.avatar_url" [src]="persona.avatar_url" [alt]="persona.full_name || ''" />
         <ion-icon *ngIf="!persona.avatar_url" name="paw"></ion-icon>

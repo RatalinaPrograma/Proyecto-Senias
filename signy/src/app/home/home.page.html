@@ -41,7 +41,7 @@
             <ion-icon name="star"></ion-icon>
             <span>{{ xp }}</span>
           </div>
-          <div class="stat-pill stat-heart">
+          <div class="stat-pill stat-heart" [class.stat-heart-low]="vidas <= 1">
             <ion-icon name="heart"></ion-icon>
             <span>{{ vidas }}</span>
           </div>
@@ -73,7 +73,11 @@
 
       <div class="path">
         <ng-container *ngFor="let sub of nivel.subniveles; let i = index; let last = last; trackBy: trackSub">
-          <div class="path-row" [class.align-left]="i % 2 === 0" [class.align-right]="i % 2 !== 0">
+          <div
+            class="path-row"
+            [class.align-left]="i % 2 === 0"
+            [class.align-right]="i % 2 !== 0"
+            [style.animation-delay.ms]="i * 70">
             <button
               class="node"
               [class.node-completado]="sub.estado === 'completado'"

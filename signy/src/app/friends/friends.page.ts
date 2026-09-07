@@ -6,7 +6,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
 import { Profile } from '../data/db-types';
 import { addIcons } from 'ionicons';
-import { arrowBack, search, paw, personAdd, checkmarkCircle } from 'ionicons/icons';
+import { arrowBack, search, paw, personAdd, checkmarkCircle, peopleOutline } from 'ionicons/icons';
 
 addIcons({
   'arrow-back': arrowBack,
@@ -14,6 +14,7 @@ addIcons({
   paw,
   'person-add': personAdd,
   'checkmark-circle': checkmarkCircle,
+  'people-outline': peopleOutline,
 });
 
 @Component({

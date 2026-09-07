@@ -3,22 +3,55 @@
 }
 
 .auth-wrap {
+  position: relative;
+  overflow: hidden;
   min-height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
   padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
+
+  &::before, &::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(50px);
+    opacity: 0.35;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  &::before {
+    width: 220px;
+    height: 220px;
+    background: var(--signy-fox);
+    top: -60px;
+    right: -60px;
+  }
+
+  &::after {
+    width: 200px;
+    height: 200px;
+    background: var(--signy-mint);
+    bottom: -50px;
+    left: -70px;
+  }
 }
 
 .auth-header {
+  position: relative;
+  z-index: 1;
   text-align: center;
   margin-bottom: 32px;
+  animation: auth-fade-up 0.5s ease-out backwards;
 
   .auth-mascot {
-    width: 240px; 
+    width: 96px;
     height: auto;
     margin-bottom: 12px;
     object-fit: contain;
+    filter: drop-shadow(0 0 18px rgba(242, 112, 26, 0.45));
+    animation: auth-mascot-glow 2.4s ease-in-out infinite;
   }
 
   h1 {
@@ -38,9 +71,12 @@
 }
 
 .auth-form {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  animation: auth-fade-up 0.5s 0.12s ease-out backwards;
 }
 
 .signy-input {
@@ -84,6 +120,11 @@
   font-size: 16px;
   height: 52px;
   margin-top: 12px;
+  transition: transform 0.12s ease;
+
+  &:active {
+    transform: scale(0.97);
+  }
 }
 
 .btn-link {
@@ -94,5 +135,22 @@
 
   strong {
     color: var(--signy-fox);
+  }
+}
+
+@keyframes auth-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes auth-mascot-glow {
+  0%, 100% { filter: drop-shadow(0 0 14px rgba(242, 112, 26, 0.35)); }
+  50% { filter: drop-shadow(0 0 24px rgba(242, 112, 26, 0.6)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-wrap::before, .auth-wrap::after,
+  .auth-header, .auth-form, .auth-mascot {
+    animation: none !important;
   }
 }
