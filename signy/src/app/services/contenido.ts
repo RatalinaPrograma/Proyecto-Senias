@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { SupabaseService } from './supabase';
 import {
   Nivel, Subnivel, Sena, ProgresoNivelUsuario, ProgresoSubnivelUsuario,
-  UserStats, PracticaFallo, Logro, NivelConEstado, RachaHistorialDia, EventoRacha
+  UserStats, PracticaFallo, Logro, NivelConEstado, RachaHistorialDia, EventoRacha, RankingEntry
 } from '../data/db-types';
 
 @Injectable({ providedIn: 'root' })
@@ -511,6 +511,40 @@ export class ContenidoService {
       icono: row.senas?.icono ?? null,
       cantidad_fallos: row.cantidad_fallos ?? 0,
     }));
+  }
+
+  // ---------- Ranking entre amigos ----------
+  /** Racha y XP de ti mismo + de todas las personas que sigues, ordenado
+   * de mayor a menor racha (XP como desempate). Requiere la política RLS
+   * "usuarios ven stats de a quienes siguen" en user_stats -- sin ella,
+   * esta consulta solo trae tu propia fila (RLS filtra en silencio, no
+   * tira error) y el ranking se ve vacío para todos menos para ti. */
+  async getRanking(userId: string): Promise<RankingEntry[]> {
+    const idsSeguidos = await this.supabaseService.idsSeguidos(userId);
+    const idsTotales = Array.from(new Set([userId, ...idsSeguidos]));
+
+    const [{ data: perfiles, error: errorPerfiles }, { data: stats, error: errorStats }] = await Promise.all([
+      this.db.from('profiles').select('id, full_name, avatar_url').in('id', idsTotales),
+      this.db.from('user_stats').select('user_id, racha_actual, puntos_experiencia').in('user_id', idsTotales),
+    ]);
+    if (errorPerfiles) throw errorPerfiles;
+    if (errorStats) throw errorStats;
+
+    const mapaStats = new Map((stats ?? []).map(s => [s.user_id, s]));
+
+    const entradas: RankingEntry[] = (perfiles ?? []).map(p => {
+      const s = mapaStats.get(p.id);
+      return {
+        id: p.id,
+        full_name: p.full_name,
+        avatar_url: p.avatar_url,
+        racha_actual: s?.racha_actual ?? 0,
+        puntos_experiencia: s?.puntos_experiencia ?? 0,
+        esYo: p.id === userId,
+      };
+    });
+
+    return entradas.sort((a, b) => b.racha_actual - a.racha_actual || b.puntos_experiencia - a.puntos_experiencia);
   }
 
   // ---------- Logros ----------

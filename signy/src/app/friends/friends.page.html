@@ -12,6 +12,7 @@
     <button class="tab" [class.active]="tab === 'buscar'" (click)="cambiarTab('buscar')">Buscar</button>
     <button class="tab" [class.active]="tab === 'seguidores'" (click)="cambiarTab('seguidores')">Seguidores</button>
     <button class="tab" [class.active]="tab === 'seguidos'" (click)="cambiarTab('seguidos')">Seguidos</button>
+    <button class="tab" [class.active]="tab === 'ranking'" (click)="cambiarTab('ranking')">Ranking</button>
   </div>
 
   <!-- ===== BUSCAR ===== -->
@@ -36,7 +37,7 @@
 
     <div class="person-row" *ngFor="let persona of resultadosBusqueda; let i = index" [style.animation-delay.ms]="i * 45">
       <div class="person-avatar">
-        <img *ngIf="persona.avatar_url" [src]="persona.avatar_url" [alt]="persona.full_name || ''" />
+        <img *ngIf="persona.avatar_url" [appCachedSrc]="persona.avatar_url" [alt]="persona.full_name || ''" />
         <ion-icon *ngIf="!persona.avatar_url" name="paw"></ion-icon>
       </div>
       <div class="person-info">
@@ -63,7 +64,7 @@
 
     <div class="person-row" *ngFor="let persona of seguidores; let i = index" [style.animation-delay.ms]="i * 45">
       <div class="person-avatar">
-        <img *ngIf="persona.avatar_url" [src]="persona.avatar_url" [alt]="persona.full_name || ''" />
+        <img *ngIf="persona.avatar_url" [appCachedSrc]="persona.avatar_url" [alt]="persona.full_name || ''" />
         <ion-icon *ngIf="!persona.avatar_url" name="paw"></ion-icon>
       </div>
       <div class="person-info">
@@ -90,7 +91,7 @@
 
     <div class="person-row" *ngFor="let persona of seguidos; let i = index" [style.animation-delay.ms]="i * 45">
       <div class="person-avatar">
-        <img *ngIf="persona.avatar_url" [src]="persona.avatar_url" [alt]="persona.full_name || ''" />
+        <img *ngIf="persona.avatar_url" [appCachedSrc]="persona.avatar_url" [alt]="persona.full_name || ''" />
         <ion-icon *ngIf="!persona.avatar_url" name="paw"></ion-icon>
       </div>
       <div class="person-info">
@@ -101,6 +102,41 @@
         <ion-icon name="checkmark-circle"></ion-icon>
         Dejar de seguir
       </button>
+    </div>
+  </div>
+
+  <div class="tab-body" *ngIf="tab === 'ranking'">
+    <div *ngIf="cargandoListas" class="ion-text-center ion-padding">
+      <ion-spinner name="dots"></ion-spinner>
+    </div>
+
+    <p class="ranking-hint" *ngIf="!cargandoListas && ranking.length">
+      Tu racha comparada con la de las personas que sigues.
+    </p>
+
+    <p class="empty-hint" *ngIf="!cargandoListas && ranking.length <= 1">
+      <ion-icon name="people-outline"></ion-icon>
+      Sigue a más personas en la pestaña "Buscar" para ver cómo te comparas.
+    </p>
+
+    <div
+      class="ranking-row"
+      *ngFor="let r of ranking; let i = index"
+      [class.ranking-row-yo]="r.esYo"
+      [style.animation-delay.ms]="i * 45">
+      <span class="ranking-puesto">
+        <ion-icon *ngIf="i === 0" name="trophy" class="ranking-trofeo"></ion-icon>
+        <ng-container *ngIf="i !== 0">{{ i + 1 }}</ng-container>
+      </span>
+      <div class="person-avatar">
+        <img *ngIf="r.avatar_url" [appCachedSrc]="r.avatar_url" [alt]="r.full_name || ''" />
+        <ion-icon *ngIf="!r.avatar_url" name="paw"></ion-icon>
+      </div>
+      <div class="person-info">
+        <p class="person-name">{{ r.esYo ? 'Tú' : (r.full_name || 'Usuario Signy') }}</p>
+      </div>
+      <span class="ranking-stat ranking-racha"><ion-icon name="flame"></ion-icon>{{ r.racha_actual }}</span>
+      <span class="ranking-stat ranking-xp"><ion-icon name="star"></ion-icon>{{ r.puntos_experiencia }}</span>
     </div>
   </div>
 

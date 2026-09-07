@@ -4,9 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
 import { ActivatedRoute, Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
-import { Profile } from '../data/db-types';
+import { ContenidoService } from '../services/contenido';
+import { Profile, RankingEntry } from '../data/db-types';
+import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { addIcons } from 'ionicons';
-import { arrowBack, search, paw, personAdd, checkmarkCircle, peopleOutline } from 'ionicons/icons';
+import { arrowBack, search, paw, personAdd, checkmarkCircle, peopleOutline, flame, star, trophy } from 'ionicons/icons';
 
 addIcons({
   'arrow-back': arrowBack,
@@ -15,17 +17,20 @@ addIcons({
   'person-add': personAdd,
   'checkmark-circle': checkmarkCircle,
   'people-outline': peopleOutline,
+  flame,
+  star,
+  trophy,
 });
 
 @Component({
   selector: 'app-friends',
   standalone: true,
-  imports: [CommonModule, FormsModule, IonicModule],
+  imports: [CommonModule, FormsModule, IonicModule, CachedSrcDirective],
   templateUrl: './friends.page.html',
   styleUrls: ['./friends.page.scss'],
 })
 export class FriendsPage implements OnInit {
-  tab: 'buscar' | 'seguidores' | 'seguidos' = 'buscar';
+  tab: 'buscar' | 'seguidores' | 'seguidos' | 'ranking' = 'buscar';
   userId = '';
 
   query = '';
@@ -37,10 +42,13 @@ export class FriendsPage implements OnInit {
   seguidos: Profile[] = [];
   private idsQueSigo = new Set<string>();
 
+  ranking: RankingEntry[] = [];
+
   cargandoListas = false;
 
   constructor(
     private supabaseService: SupabaseService,
+    private contenidoService: ContenidoService,
     private route: ActivatedRoute,
     private router: Router
   ) {}
@@ -51,7 +59,7 @@ export class FriendsPage implements OnInit {
     this.userId = userData.user.id;
 
     const tabInicial = this.route.snapshot.queryParamMap.get('tab');
-    if (tabInicial === 'seguidores' || tabInicial === 'seguidos' || tabInicial === 'buscar') {
+    if (tabInicial === 'seguidores' || tabInicial === 'seguidos' || tabInicial === 'buscar' || tabInicial === 'ranking') {
       this.tab = tabInicial;
     }
 
@@ -59,7 +67,7 @@ export class FriendsPage implements OnInit {
     await this.cargarTabActual();
   }
 
-  cambiarTab(t: 'buscar' | 'seguidores' | 'seguidos') {
+  cambiarTab(t: 'buscar' | 'seguidores' | 'seguidos' | 'ranking') {
     this.tab = t;
     this.cargarTabActual();
   }
@@ -77,6 +85,10 @@ export class FriendsPage implements OnInit {
     } else if (this.tab === 'seguidos') {
       this.cargandoListas = true;
       this.seguidos = await this.supabaseService.listaSeguidos(this.userId);
+      this.cargandoListas = false;
+    } else if (this.tab === 'ranking') {
+      this.cargandoListas = true;
+      this.ranking = await this.contenidoService.getRanking(this.userId);
       this.cargandoListas = false;
     }
   }

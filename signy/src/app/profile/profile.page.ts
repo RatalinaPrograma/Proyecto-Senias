@@ -7,6 +7,7 @@ import { ContenidoService } from '../services/contenido';
 import { NotificationsService } from '../services/notifications';
 import { Profile, UserStats, RachaHistorialDia, Logro } from '../data/db-types';
 import { RachaCalendarComponent, DiaRachaVista } from '../shared/racha-calendar/racha-calendar.component';
+import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { addIcons } from 'ionicons';
 import { close, flame, star, people, settingsOutline, personAddOutline, paw, logOutOutline, snowOutline, lockClosed } from 'ionicons/icons';
 
@@ -36,7 +37,7 @@ interface FalloVista {
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [CommonModule, IonicModule, RachaCalendarComponent],
+  imports: [CommonModule, IonicModule, RachaCalendarComponent, CachedSrcDirective],
   templateUrl: './profile.page.html',
   styleUrls: ['./profile.page.scss'],
 })

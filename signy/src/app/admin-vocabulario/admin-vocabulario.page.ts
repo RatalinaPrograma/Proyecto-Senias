@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
@@ -68,7 +69,7 @@ const COLOR_OSCURO_DEFECTO = '#1F7E7C';
 @Component({
   selector: 'app-admin-vocabulario',
   standalone: true,
-  imports: [CommonModule, FormsModule, IonicModule],
+  imports: [CommonModule, FormsModule, IonicModule, CachedSrcDirective],
   templateUrl: './admin-vocabulario.page.html',
   styleUrls: ['./admin-vocabulario.page.scss'],
 })

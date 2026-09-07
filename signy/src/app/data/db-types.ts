@@ -165,3 +165,12 @@ export interface NivelConEstado extends Nivel {
   completado: boolean;
   subniveles: SubnivelConEstado[];
 }
+
+export interface RankingEntry {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  racha_actual: number;
+  puntos_experiencia: number;
+  esYo: boolean;
+}

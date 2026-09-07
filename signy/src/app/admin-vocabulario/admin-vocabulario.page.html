@@ -187,8 +187,8 @@
 
       <div class="item-card sena-card" *ngFor="let s of senasFiltradas; trackBy: trackById" (click)="editarSena(s)">
         <div class="item-thumb-wrap">
-          <video *ngIf="s.video_url && esVideoMp4(s.video_url)" [src]="s.video_url" class="item-thumb" muted playsinline preload="metadata"></video>
-          <img *ngIf="s.video_url && !esVideoMp4(s.video_url)" [src]="s.video_url" [alt]="s.palabra" class="item-thumb" loading="lazy" decoding="async" />
+          <video *ngIf="s.video_url && esVideoMp4(s.video_url)" [appCachedSrc]="s.video_url" class="item-thumb" muted playsinline preload="metadata"></video>
+          <img *ngIf="s.video_url && !esVideoMp4(s.video_url)" [appCachedSrc]="s.video_url" [alt]="s.palabra" class="item-thumb" loading="lazy" decoding="async" />
           <div class="item-thumb placeholder" *ngIf="!s.video_url"><ion-icon name="image-outline"></ion-icon></div>
           <span class="item-icono-badge" *ngIf="s.icono">{{ s.icono }}</span>
         </div>
@@ -264,8 +264,8 @@
           <p class="upload-hint" *ngIf="subiendoArchivo">Subiendo…</p>
         </div>
 
-        <video *ngIf="formSena.video_url && esVideoMp4(formSena.video_url)" [src]="formSena.video_url" class="preview-img" controls muted playsinline preload="metadata"></video>
-        <img *ngIf="formSena.video_url && !esVideoMp4(formSena.video_url)" [src]="formSena.video_url" alt="Vista previa" class="preview-img" decoding="async" />
+        <video *ngIf="formSena.video_url && esVideoMp4(formSena.video_url)" [appCachedSrc]="formSena.video_url" class="preview-img" controls muted playsinline preload="metadata"></video>
+        <img *ngIf="formSena.video_url && !esVideoMp4(formSena.video_url)" [appCachedSrc]="formSena.video_url" alt="Vista previa" class="preview-img" decoding="async" />
 
         <p class="form-error" *ngIf="errorForm">{{ errorForm }}</p>
 

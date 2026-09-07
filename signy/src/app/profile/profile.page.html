@@ -16,7 +16,7 @@
   <ng-container *ngIf="!cargando && perfil">
     <div class="profile-header">
       <div class="avatar-wrap">
-        <img *ngIf="perfil.avatar_url" [src]="perfil.avatar_url" [alt]="perfil.full_name || 'Avatar'" />
+        <img *ngIf="perfil.avatar_url" [appCachedSrc]="perfil.avatar_url" [alt]="perfil.full_name || 'Avatar'" />
         <ion-icon *ngIf="!perfil.avatar_url" name="paw"></ion-icon>
       </div>
 
