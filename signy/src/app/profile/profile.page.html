@@ -61,6 +61,30 @@
       </div>
     </div>
 
+    <div class="logros-card" *ngIf="logros.length">
+      <h2>Tus logros</h2>
+      <div class="logros-row">
+        <div class="logro-badge" *ngFor="let l of logros" [class.desbloqueado]="l.desbloqueado" [title]="l.descripcion || l.nombre">
+          <div class="logro-icono">
+            <span *ngIf="l.icono">{{ l.icono }}</span>
+            <ion-icon *ngIf="!l.icono" name="lock-closed"></ion-icon>
+            <ion-icon *ngIf="!l.desbloqueado" name="lock-closed" class="logro-candado"></ion-icon>
+          </div>
+          <span class="logro-nombre">{{ l.nombre }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="fallos-card" *ngIf="fallos.length">
+      <h2>Palabras para repasar</h2>
+      <p class="fallos-hint">Las que más se te han resistido en el quiz y en la cámara.</p>
+      <div class="fallo-row" *ngFor="let f of fallos">
+        <span class="fallo-icono" *ngIf="f.icono">{{ f.icono }}</span>
+        <span class="fallo-palabra">{{ f.palabra }}</span>
+        <span class="fallo-cuenta">{{ f.cantidad_fallos }}×</span>
+      </div>
+    </div>
+
     <div class="follow-row">
       <button class="follow-box" (click)="irASeguidores()">
         <strong>{{ seguidores }}</strong>

@@ -13,8 +13,14 @@
   background: transparent;
   border: none;
   color: var(--signy-muted);
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 22px;
   line-height: 0;
+  flex-shrink: 0;
 }
 
 .phase-track {
@@ -191,6 +197,7 @@
 }
 
 .match-tile {
+  position: relative;
   border-radius: 16px;
   border: 2px solid var(--signy-locked);
   background: var(--signy-card);
@@ -229,6 +236,18 @@
 .match-icon {
   font-size: 22px;
   line-height: 1;
+}
+
+.match-estado-icon {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-size: 20px;
+  background: var(--signy-ink);
+  border-radius: 50%;
+
+  &.ok { color: var(--signy-mint); }
+  &.bad { color: var(--signy-error); }
 }
 
 /* ---------- Quiz ---------- */

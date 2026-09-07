@@ -5,10 +5,10 @@ import { Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
 import { ContenidoService } from '../services/contenido';
 import { NotificationsService } from '../services/notifications';
-import { Profile, UserStats, RachaHistorialDia } from '../data/db-types';
+import { Profile, UserStats, RachaHistorialDia, Logro } from '../data/db-types';
 import { RachaCalendarComponent, DiaRachaVista } from '../shared/racha-calendar/racha-calendar.component';
 import { addIcons } from 'ionicons';
-import { close, flame, star, people, settingsOutline, personAddOutline, paw, logOutOutline, snowOutline } from 'ionicons/icons';
+import { close, flame, star, people, settingsOutline, personAddOutline, paw, logOutOutline, snowOutline, lockClosed } from 'ionicons/icons';
 
 addIcons({
   close,
@@ -20,7 +20,18 @@ addIcons({
   paw,
   'log-out-outline': logOutOutline,
   'snow-outline': snowOutline,
+  'lock-closed': lockClosed,
 });
+
+interface LogroVista extends Logro {
+  desbloqueado: boolean;
+}
+
+interface FalloVista {
+  palabra: string;
+  icono: string | null;
+  cantidad_fallos: number;
+}
 
 @Component({
   selector: 'app-profile',
@@ -37,6 +48,8 @@ export class ProfilePage {
   seguidos = 0;
   userId = '';
   diasCalendario: DiaRachaVista[] = [];
+  logros: LogroVista[] = [];
+  fallos: FalloVista[] = [];
 
   constructor(
     private supabaseService: SupabaseService,
@@ -56,12 +69,15 @@ export class ProfilePage {
 
     const nombreFallback = userData.user.user_metadata?.['full_name'] ?? 'Usuario Signy';
 
-    const [perfil, stats, seguidores, seguidos, historialRacha] = await Promise.all([
+    const [perfil, stats, seguidores, seguidos, historialRacha, logros, misLogrosIds, fallos] = await Promise.all([
       this.supabaseService.getOCrearProfile(this.userId, nombreFallback),
       this.contenidoService.getMisStats(this.userId),
       this.supabaseService.contarSeguidores(this.userId),
       this.supabaseService.contarSeguidos(this.userId),
       this.contenidoService.obtenerHistorialRacha(this.userId, 27),
+      this.contenidoService.getLogros(),
+      this.contenidoService.getMisLogrosIds(this.userId),
+      this.contenidoService.getMisFallos(this.userId, 5),
     ]);
 
     this.perfil = perfil;
@@ -69,6 +85,13 @@ export class ProfilePage {
     this.seguidores = seguidores;
     this.seguidos = seguidos;
     this.diasCalendario = this.construirCalendario(historialRacha);
+    // Desbloqueados primero, y dentro de cada grupo en el mismo orden que
+    // llegan de la base — así lo que ya ganaste queda siempre más visible
+    // que lo que falta, sin necesidad de que el admin las ordene a mano.
+    this.logros = logros
+      .map(l => ({ ...l, desbloqueado: misLogrosIds.has(l.id) }))
+      .sort((a, b) => Number(b.desbloqueado) - Number(a.desbloqueado));
+    this.fallos = fallos;
     this.cargando = false;
   }
 

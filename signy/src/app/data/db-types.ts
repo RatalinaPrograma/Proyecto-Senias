@@ -114,6 +114,11 @@ export interface Logro {
   nombre: string;
   descripcion: string | null;
   icono_url: string | null;
+  /** Emoji del logro (mismo criterio que Sena.icono: liviano, sin gastar
+   * caché/egress, sin depender de subir una imagen). icono_url queda
+   * reservado por si algún día se quiere una ilustración real en vez de
+   * un emoji. */
+  icono: string | null;
   created_at: string | null;
 }
 

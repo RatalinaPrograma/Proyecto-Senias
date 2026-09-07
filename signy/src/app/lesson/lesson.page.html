@@ -27,7 +27,7 @@
 
   <ng-container *ngIf="fase !== 'cargando' && fase !== 'error' && fase !== 'sinvidas' && fase !== 'complete' && fase !== 'racha'">
     <div class="lesson-topbar">
-      <button class="icon-btn" (click)="salir()"><ion-icon name="close"></ion-icon></button>
+      <button class="icon-btn" (click)="salir()" aria-label="Salir de la lección"><ion-icon name="close"></ion-icon></button>
 
       <div class="phase-track" *ngIf="fase !== 'quiz'">
         <div class="phase-dot" [class.active]="true"></div>
@@ -98,6 +98,8 @@
             (click)="elegirMano(m)">
             <app-gif-tile *ngIf="m.videoUrl" [url]="m.videoUrl" [activo]="selMano === m"></app-gif-tile>
             <app-sena-icon *ngIf="!m.videoUrl" [seed]="m.seed" [size]="36" [color]="nivel.color || '#F2701A'" [dark]="nivel.color_oscuro || '#C6560E'"></app-sena-icon>
+            <ion-icon *ngIf="emparejados.includes(m.palabra)" name="checkmark-circle" class="match-estado-icon ok"></ion-icon>
+            <ion-icon *ngIf="selMano === m && matchMal" name="close-circle" class="match-estado-icon bad"></ion-icon>
           </button>
         </div>
 
@@ -112,6 +114,8 @@
             (click)="elegirPalabra(p.palabra)">
             <span class="match-icon" *ngIf="iconoDe(p.palabra)">{{ iconoDe(p.palabra) }}</span>
             {{ p.palabra }}
+            <ion-icon *ngIf="emparejados.includes(p.palabra)" name="checkmark-circle" class="match-estado-icon ok"></ion-icon>
+            <ion-icon *ngIf="selPalabra === p.palabra && matchMal" name="close-circle" class="match-estado-icon bad"></ion-icon>
           </button>
         </div>
       </div>

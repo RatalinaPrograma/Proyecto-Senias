@@ -13,9 +13,9 @@ import { GifTileComponent } from '../shared/gif-tile/gif-tile.component';
 import { RachaCalendarComponent, DiaRachaVista } from '../shared/racha-calendar/racha-calendar.component';
 import { ImageCacheService } from '../services/image-cache';
 import { addIcons } from 'ionicons';
-import { close, heart, checkmarkCircle, camera, videocam, volumeHigh, snowOutline } from 'ionicons/icons';
+import { close, heart, checkmarkCircle, closeCircle, camera, videocam, volumeHigh, snowOutline } from 'ionicons/icons';
 
-addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, camera, videocam, 'volume-high': volumeHigh, 'snow-outline': snowOutline });
+addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, 'close-circle': closeCircle, camera, videocam, 'volume-high': volumeHigh, 'snow-outline': snowOutline });
 
 type Fase = 'cargando' | 'flash' | 'match' | 'quiz' | 'record' | 'complete' | 'racha' | 'sinvidas' | 'error';
 
@@ -514,6 +514,7 @@ export class LessonPage implements OnInit, OnDestroy {
     // pendiente). El campo en la base de datos ya está listo para cuando
     // se conecte el modelo real.
     await this.contenidoService.registrarIntento(this.userId, this.senaCamara.id, this.camPassed, this.camScore);
+    this.contenidoService.otorgarLogroPorCodigo(this.userId, 'practica_camara').catch(console.error);
   }
 
   private detenerCamara() {

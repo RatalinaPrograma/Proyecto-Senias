@@ -168,6 +168,24 @@ export class ContenidoService {
       { onConflict: 'user_id,subnivel_id' }
     );
     if (error) throw error;
+
+    const totalCompletadas = await this.contarLeccionesCompletadas(userId);
+    if (totalCompletadas >= 1) this.otorgarLogroPorCodigo(userId, 'primera_leccion').catch(console.error);
+    if (totalCompletadas >= 10) this.otorgarLogroPorCodigo(userId, 'diez_lecciones').catch(console.error);
+    if (totalCompletadas >= 50) this.otorgarLogroPorCodigo(userId, 'cincuenta_lecciones').catch(console.error);
+  }
+
+  /** Cuántas lecciones (subniveles) distintas ha completado el usuario en
+   * total, sin importar el nivel — la usan los logros de "10 lecciones",
+   * "50 lecciones", etc. */
+  async contarLeccionesCompletadas(userId: string): Promise<number> {
+    const { count, error } = await this.db
+      .from('progreso_subnivel_usuario')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('completado', true);
+    if (error) throw error;
+    return count ?? 0;
   }
 
   /** Si todos los subniveles de un nivel quedaron completados, marca el
@@ -189,6 +207,7 @@ export class ContenidoService {
       { user_id: userId, nivel_id: nivelId, completado: true, acceso: true, updated_at: new Date().toISOString() },
       { onConflict: 'user_id,nivel_id' }
     );
+    this.otorgarLogroPorCodigo(userId, 'nivel_completado').catch(console.error);
 
     const idx = niveles.findIndex(n => n.id === nivelId);
     const siguiente = niveles[idx + 1];
@@ -418,6 +437,14 @@ export class ContenidoService {
       .upsert({ user_id: userId, fecha: hoy, estado: 'practicado' }, { onConflict: 'user_id,fecha' });
     if (errorHistorial) console.error(errorHistorial);
 
+    // otorgarLogroPorCodigo hace upsert (no duplica ni revienta si ya lo
+    // tenía), así que no hace falta controlar "primera vez que cruza el
+    // umbral" acá: comparar >= es suficiente y más a prueba de saltos.
+    if (nuevaRacha >= 7) this.otorgarLogroPorCodigo(userId, 'racha_7').catch(console.error);
+    if (nuevaRacha >= 30) this.otorgarLogroPorCodigo(userId, 'racha_30').catch(console.error);
+    if (nuevaRacha >= 100) this.otorgarLogroPorCodigo(userId, 'racha_100').catch(console.error);
+    if (ganaCongelador) this.otorgarLogroPorCodigo(userId, 'congelador').catch(console.error);
+
     return { ...stats, ...actualizado };
   }
 
@@ -470,10 +497,10 @@ export class ContenidoService {
   }
 
   /** Palabras que más le cuestan al usuario, para la pantalla de Perfil. */
-  async getMisFallos(userId: string, limite = 5): Promise<{ palabra: string; cantidad_fallos: number }[]> {
+  async getMisFallos(userId: string, limite = 5): Promise<{ palabra: string; icono: string | null; cantidad_fallos: number }[]> {
     const { data, error } = await this.db
       .from('practica_fallos')
-      .select('cantidad_fallos, senas ( palabra )')
+      .select('cantidad_fallos, senas ( palabra, icono )')
       .eq('user_id', userId)
       .order('cantidad_fallos', { ascending: false })
       .limit(limite);
@@ -481,11 +508,14 @@ export class ContenidoService {
 
     return (data ?? []).map((row: any) => ({
       palabra: row.senas?.palabra ?? '—',
+      icono: row.senas?.icono ?? null,
       cantidad_fallos: row.cantidad_fallos ?? 0,
     }));
   }
 
   // ---------- Logros ----------
+  private logrosCache: Logro[] | null = null;
+
   async getLogros(): Promise<Logro[]> {
     const { data, error } = await this.db.from('logros').select('*');
     if (error) throw error;
@@ -502,5 +532,24 @@ export class ContenidoService {
     await this.db
       .from('usuario_logros')
       .upsert({ user_id: userId, logro_id: logroId, fecha_obtenido: new Date().toISOString() }, { onConflict: 'user_id,logro_id' });
+  }
+
+  /** Punto de entrada que usa el resto del código para otorgar logros: por
+   * código en vez de id, para no tener que hardcodear ids que Postgres
+   * asigna solo al insertar (ver MIGRACION.sql). La lista de logros se
+   * cachea en memoria (dura para toda la sesión) porque es chica y no
+   * cambia mientras el usuario tiene la app abierta — evita una consulta
+   * repetida cada vez que se completa una lección o sube la racha.
+   *
+   * Si el código no existe todavía (por ejemplo, el equipo no ha corrido
+   * el seed de logros en Supabase), no hace nada — nunca revienta el flujo
+   * principal (guardar progreso/racha) por un logro que falte. */
+  async otorgarLogroPorCodigo(userId: string, codigo: string) {
+    if (!this.logrosCache) {
+      this.logrosCache = await this.getLogros();
+    }
+    const logro = this.logrosCache.find(l => l.codigo === codigo);
+    if (!logro) return;
+    await this.otorgarLogro(userId, logro.id);
   }
 }
