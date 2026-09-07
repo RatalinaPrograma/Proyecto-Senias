@@ -52,16 +52,7 @@
         Cada 5 días de racha ganas un congelador ❄️ (máx. 2) que te cubre automáticamente si un día se te pasa por alto.
       </p>
 
-      <div class="streak-calendar">
-        <div
-          *ngFor="let d of diasCalendario"
-          class="streak-day"
-          [ngClass]="'estado-' + d.estado"
-          [class.es-hoy]="d.esHoy"
-          [title]="d.fecha">
-          {{ d.numero }}
-        </div>
-      </div>
+      <app-racha-calendar [dias]="diasCalendario" variante="mes"></app-racha-calendar>
 
       <div class="streak-legend">
         <span><i class="streak-dot dot-practicado"></i> Practicado</span>

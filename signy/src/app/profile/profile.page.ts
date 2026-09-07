@@ -6,6 +6,7 @@ import { SupabaseService } from '../services/supabase';
 import { ContenidoService } from '../services/contenido';
 import { NotificationsService } from '../services/notifications';
 import { Profile, UserStats, RachaHistorialDia } from '../data/db-types';
+import { RachaCalendarComponent, DiaRachaVista } from '../shared/racha-calendar/racha-calendar.component';
 import { addIcons } from 'ionicons';
 import { close, flame, star, people, settingsOutline, personAddOutline, paw, logOutOutline, snowOutline } from 'ionicons/icons';
 
@@ -21,17 +22,10 @@ addIcons({
   'snow-outline': snowOutline,
 });
 
-interface DiaCalendario {
-  fecha: string;
-  numero: number;
-  estado: RachaHistorialDia['estado'] | 'hoy' | 'sin-datos';
-  esHoy: boolean;
-}
-
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [CommonModule, IonicModule],
+  imports: [CommonModule, IonicModule, RachaCalendarComponent],
   templateUrl: './profile.page.html',
   styleUrls: ['./profile.page.scss'],
 })
@@ -42,7 +36,7 @@ export class ProfilePage {
   seguidores = 0;
   seguidos = 0;
   userId = '';
-  diasCalendario: DiaCalendario[] = [];
+  diasCalendario: DiaRachaVista[] = [];
 
   constructor(
     private supabaseService: SupabaseService,
@@ -81,10 +75,10 @@ export class ProfilePage {
   /** Últimos 28 días (27 + hoy) para el calendario de racha del perfil.
    * "Hoy" se muestra aparte porque puede que aún no se haya practicado y no
    * por eso significa que la racha ya se perdió. */
-  private construirCalendario(historial: RachaHistorialDia[]): DiaCalendario[] {
+  private construirCalendario(historial: RachaHistorialDia[]): DiaRachaVista[] {
     const mapa = new Map(historial.map(h => [h.fecha, h.estado]));
     const hoy = this.contenidoService.fechaHoy();
-    const dias: DiaCalendario[] = [];
+    const dias: DiaRachaVista[] = [];
     for (let i = 27; i >= 0; i--) {
       const fecha = this.contenidoService.sumarDias(hoy, -i);
       const esHoy = fecha === hoy;

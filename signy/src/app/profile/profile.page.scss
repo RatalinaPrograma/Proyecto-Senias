@@ -95,8 +95,10 @@
 }
 
 .streak-card {
-  background: var(--signy-card);
+  background: linear-gradient(165deg, var(--signy-card-hover), var(--signy-card));
+  border: 1px solid rgba(242, 112, 26, 0.14);
   border-radius: var(--signy-radius);
+  box-shadow: var(--signy-shadow-card);
   margin: 0 20px 20px;
   padding: 18px;
 }
@@ -138,47 +140,6 @@
   color: var(--signy-muted);
   line-height: 1.5;
   margin: 8px 0 16px;
-}
-
-.streak-calendar {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-}
-
-.streak-day {
-  aspect-ratio: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  font-family: 'Manrope', sans-serif;
-  font-weight: 700;
-  font-size: 11px;
-  color: var(--signy-muted);
-  background: var(--signy-locked);
-
-  &.estado-practicado {
-    background: var(--signy-fox);
-    color: #4A2100;
-  }
-  &.estado-congelado {
-    background: var(--signy-mint);
-    color: #06322F;
-  }
-  &.estado-perdido {
-    background: var(--signy-error);
-    color: #3B0A05;
-    opacity: 0.85;
-  }
-  &.estado-hoy {
-    background: var(--signy-card-hover);
-    color: var(--signy-fox);
-    border: 2px solid var(--signy-fox);
-  }
-  &.estado-sin-datos {
-    opacity: 0.35;
-  }
 }
 
 .streak-legend {

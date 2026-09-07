@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { Capacitor, PermissionState } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Preferences } from '@capacitor/preferences';
+import { EventoRacha } from '../data/db-types';
 
 export interface NotifConfig {
   recordatorioActivado: boolean;
@@ -50,6 +51,42 @@ const MENSAJES_VIDAS: MensajeNotif[] = [
   { title: 'Tu próxima vida ya está lista 🦊', body: '¡A darle de nuevo con tu lección!' },
 ];
 
+/** Primer aviso de la noche (más horas por delante todavía): urgente pero
+ * sin ser dramático — hay tiempo de sobra. `{n}` = racha, `{t}` = tiempo
+ * restante hasta medianoche ("3 horas", "45 minutos", etc). */
+const MENSAJES_RACHA_RIESGO_TEMPRANO: MensajeNotif[] = [
+  { title: '🔥 Tu racha de {n} días sigue esperando', body: 'Quedan {t} antes de medianoche. Una lección rapidita y la dejas segura.' },
+  { title: 'Ey, {n} días de racha... 👀', body: 'Todavía no has practicado hoy. Te quedan {t} para no perderla.' },
+  { title: 'Faltan unas horas ⏳', body: 'para que se acabe el día. Quedan {t} para que tu racha de {n} siga intacta.' },
+  { title: 'Tu racha te está esperando 🦊🔥', body: 'Quedan {t}. No hace falta apurarse todavía, pero no lo dejes para el final.' },
+];
+
+/** Última alerta antes de medianoche: tono dramático a propósito — es la
+ * última oportunidad real del día. */
+const MENSAJES_RACHA_RIESGO_URGENTE: MensajeNotif[] = [
+  { title: '¿Seguro que quieres perder tu racha? 😨', body: 'Quedan {t} para medianoche y tus {n} días de racha están en juego. Todavía alcanzas una lección.' },
+  { title: '🚨 Última llamada para tu racha de {n} días', body: 'En {t} se acaba el día. No dejes que se termine justo ahora.' },
+  { title: 'Tu racha está a punto de apagarse 🔥💨', body: 'Faltan {t}. Una lección rapidita y la salvas.' },
+  { title: 'Quedan {t}... ⏰', body: '¿de verdad vas a dejar que se corten tus {n} días? Todavía puedes evitarlo.' },
+];
+
+/** Un congelador cubrió automáticamente un día que se pasó por alto: la
+ * racha sigue viva, pero ya gastó protección — conviene practicar hoy para
+ * no depender del último que le queda. `{c}` = congeladores restantes. */
+const MENSAJES_CONGELADOR_USADO: MensajeNotif[] = [
+  { title: '❄️ Un congelador te salvó ', body: 'Ayer se te pasó, pero un congelador cubrió el día. Aún tienes {c} — activa tu racha hoy para no gastar el que queda.' },
+  { title: 'Tu racha de {n} días sigue viva gracias a un congelador ❄️', body: 'Se usó automáticamente para cubrir ayer. Practica hoy para no depender de otro.' },
+  { title: '¡Uf, por poco! ❄️🔥', body: 'Un congelador salvó tu racha de {n} días. Aún tienes {c} — actívala hoy para no gastarlos todos.' },
+];
+
+/** No alcanzaron los congeladores y la racha volvió a 0: tono empático, sin
+ * culpar — invitando a retomar hoy mismo. */
+const MENSAJES_RACHA_PERDIDA: MensajeNotif[] = [
+  { title: 'Tu racha volvió a 0 😔', body: 'No alcanzaron los congeladores para cubrir los días que pasaron. Hoy es un buen día para empezar una nueva.' },
+  { title: 'Se cortó la racha, pero no las ganas 🦊', body: 'A todos nos pasa alguna vez. Arranca hoy de nuevo con una lección.' },
+  { title: 'Racha reiniciada', body: 'No pasa nada — lo importante es volver. Haz tu lección de hoy y arranca una nueva racha.' },
+];
+
 /**
  * Notificaciones locales de la app (sin servidor / push): recordatorio diario
  * de práctica y aviso cuando se recupera una vida. Usa
@@ -65,6 +102,9 @@ export class NotificationsService {
   private static readonly ID_RECORDATORIO = 1001;
   private static readonly ID_VIDAS = 1002;
   private static readonly ID_PRUEBA = 1099;
+  private static readonly ID_RACHA_RIESGO_TEMPRANO = 1003;
+  private static readonly ID_RACHA_RIESGO_URGENTE = 1004;
+  private static readonly ID_RACHA_EVENTO = 1005;
 
   private canalesListos = false;
 
@@ -134,8 +174,12 @@ export class NotificationsService {
    * al día. Si nunca se pidió permiso y el usuario tiene algo activado, lo
    * pide acá (una sola vez: si lo rechaza, Android no vuelve a preguntar
    * solo porque llamemos requestPermissions() de nuevo).
+   *
+   * `yaPracticoHoy` es lo que activa o apaga las dos alertas de "vas a
+   * perder la racha esta noche" — sin esto no hay forma de saber si hoy ya
+   * está a salvo o todavía está en juego.
    */
-  async sincronizar(vidasActuales: number, minutosParaProximaVida: number, rachaActual = 0) {
+  async sincronizar(vidasActuales: number, minutosParaProximaVida: number, rachaActual = 0, yaPracticoHoy = false) {
     if (!this.disponible()) return;
 
     const config = await this.obtenerConfiguracion();
@@ -154,8 +198,11 @@ export class NotificationsService {
 
     if (config.recordatorioActivado) {
       await this.programarRecordatorioDiario(config.horaRecordatorio, rachaActual);
+      await this.programarAvisoRachaEnRiesgo(rachaActual, yaPracticoHoy);
     } else {
       await this.cancelar(NotificationsService.ID_RECORDATORIO);
+      await this.cancelar(NotificationsService.ID_RACHA_RIESGO_TEMPRANO);
+      await this.cancelar(NotificationsService.ID_RACHA_RIESGO_URGENTE);
     }
 
     if (config.avisoVidasActivado) {
@@ -222,10 +269,134 @@ export class NotificationsService {
     if (!this.disponible()) return;
     await this.cancelar(NotificationsService.ID_RECORDATORIO);
     await this.cancelar(NotificationsService.ID_VIDAS);
+    await this.cancelar(NotificationsService.ID_RACHA_RIESGO_TEMPRANO);
+    await this.cancelar(NotificationsService.ID_RACHA_RIESGO_URGENTE);
+    await this.cancelar(NotificationsService.ID_RACHA_EVENTO);
   }
 
   private async cancelar(id: number) {
     await LocalNotifications.cancel({ notifications: [{ id }] }).catch(() => {});
+  }
+
+  /** "125" -> "2 horas"; "40" -> "40 minutos". Para insertar en `{t}`. */
+  private formatearTiempoRestante(minutos: number): string {
+    if (minutos >= 60) {
+      const horas = Math.round(minutos / 60);
+      return horas <= 1 ? '1 hora' : `${horas} horas`;
+    }
+    return `${Math.max(1, minutos)} minutos`;
+  }
+
+  /**
+   * Dos alertas de "vas a perder la racha hoy", de una sola vez (no se
+   * repiten como el recordatorio diario): una a las 21:00 (todavía hay
+   * tiempo de sobra) y otra a las 23:00 (última oportunidad real). Solo
+   * tienen sentido si hoy no se ha practicado y hay una racha activa que
+   * perder — si cualquiera de esas condiciones no se cumple, se cancelan.
+   *
+   * Se reprograman cada vez que se llama sincronizar() (Home, Configuración),
+   * así que apenas el usuario practica, la siguiente sincronización las
+   * cancela solas sin que quede una alerta "vieja" pendiente.
+   *
+   * Si el usuario recién abre la app después de las 23:00 y todavía no
+   * practicó, la alerta urgente no se pierde en silencio: se dispara casi
+   * de inmediato en vez de esperar a una hora que ya pasó.
+   */
+  private async programarAvisoRachaEnRiesgo(rachaActual: number, yaPracticoHoy: boolean) {
+    if (rachaActual <= 0 || yaPracticoHoy) {
+      await this.cancelar(NotificationsService.ID_RACHA_RIESGO_TEMPRANO);
+      await this.cancelar(NotificationsService.ID_RACHA_RIESGO_URGENTE);
+      return;
+    }
+
+    const ahora = new Date();
+    const medianoche = new Date(ahora);
+    medianoche.setHours(24, 0, 0, 0);
+
+    const tiers = [
+      { hora: 21, minuto: 0, id: NotificationsService.ID_RACHA_RIESGO_TEMPRANO, pool: MENSAJES_RACHA_RIESGO_TEMPRANO },
+      { hora: 23, minuto: 0, id: NotificationsService.ID_RACHA_RIESGO_URGENTE, pool: MENSAJES_RACHA_RIESGO_URGENTE },
+    ];
+
+    for (let i = 0; i < tiers.length; i++) {
+      const tier = tiers[i];
+      const esUltimoTier = i === tiers.length - 1;
+      const cuando = new Date(ahora);
+      cuando.setHours(tier.hora, tier.minuto, 0, 0);
+
+      if (cuando.getTime() > ahora.getTime()) {
+        const minutosEnEseMomento = Math.round((medianoche.getTime() - cuando.getTime()) / 60000);
+        await this.programarUnaAlertaRacha(tier.id, tier.pool, rachaActual, minutosEnEseMomento, cuando);
+        continue;
+      }
+
+      // Esta hora ya pasó hoy: si es la última alerta y todavía queda un
+      // margen real antes de medianoche, avisar ahora mismo en vez de dejar
+      // pasar la última oportunidad en silencio.
+      const minutosRestantes = Math.round((medianoche.getTime() - ahora.getTime()) / 60000);
+      if (esUltimoTier && minutosRestantes > 2) {
+        await this.programarUnaAlertaRacha(tier.id, tier.pool, rachaActual, minutosRestantes, new Date(Date.now() + 5000));
+      } else {
+        await this.cancelar(tier.id);
+      }
+    }
+  }
+
+  private async programarUnaAlertaRacha(id: number, pool: MensajeNotif[], rachaActual: number, minutosRestantes: number, cuando: Date) {
+    await this.cancelar(id);
+    const mensaje = this.elegir(pool);
+    const tiempoTexto = this.formatearTiempoRestante(minutosRestantes);
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id,
+          title: mensaje.title.replace('{n}', String(rachaActual)).replace('{t}', tiempoTexto),
+          body: mensaje.body.replace('{n}', String(rachaActual)).replace('{t}', tiempoTexto),
+          channelId: 'recordatorios',
+          schedule: { at: cuando, allowWhileIdle: true },
+          isExactNotification: false,
+          autoCancel: true,
+        },
+      ],
+    }).catch(() => {});
+  }
+
+  /**
+   * Aviso inmediato para cuando `ContenidoService` detecta, al evaluar la
+   * racha, que un congelador cubrió un día saltado o que la racha se cortó
+   * por falta de congeladores. Se dispara una sola vez por evento (la
+   * evaluación en sí ya es idempotente por día), así que no hay riesgo de
+   * spamear al usuario con el mismo aviso varias veces.
+   */
+  async avisarEventoRacha(evento: EventoRacha, rachaActual: number) {
+    if (!this.disponible()) return;
+    const config = await this.obtenerConfiguracion();
+    if (!config.recordatorioActivado) return;
+
+    let permiso = await this.verificarPermiso();
+    if (permiso === 'prompt' || permiso === 'prompt-with-rationale') {
+      permiso = await this.pedirPermiso();
+    }
+    if (permiso !== 'granted') return;
+
+    await this.asegurarCanales();
+    const pool = evento.tipo === 'congelado' ? MENSAJES_CONGELADOR_USADO : MENSAJES_RACHA_PERDIDA;
+    const mensaje = this.elegir(pool);
+    const congeladoresTexto = evento.congeladoresRestantes === 1 ? '1 congelador' : `${evento.congeladoresRestantes} congeladores`;
+
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: NotificationsService.ID_RACHA_EVENTO,
+          title: mensaje.title.replace('{n}', String(rachaActual)),
+          body: mensaje.body.replace('{n}', String(rachaActual)).replace('{c}', congeladoresTexto),
+          channelId: 'recordatorios',
+          schedule: { at: new Date(Date.now() + 3000), allowWhileIdle: true },
+          isExactNotification: false,
+          autoCancel: true,
+        },
+      ],
+    }).catch(() => {});
   }
 
   /** Notificación inmediata (5s) para el botón "Probar" en Configuración.

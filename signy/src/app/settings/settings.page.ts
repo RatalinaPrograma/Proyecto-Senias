@@ -276,7 +276,8 @@ export class SettingsPage implements OnInit {
       await this.notificationsService.sincronizar(
         stats.vidas ?? 0,
         this.contenidoService.minutosParaProximaVida(stats),
-        stats.racha_actual ?? 0
+        stats.racha_actual ?? 0,
+        stats.ultima_fecha_practica === this.contenidoService.fechaHoy()
       );
       this.notifPermiso = await this.notificationsService.verificarPermiso();
       return true;

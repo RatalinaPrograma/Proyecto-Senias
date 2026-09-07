@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { SupabaseService } from './supabase';
 import {
   Nivel, Subnivel, Sena, ProgresoNivelUsuario, ProgresoSubnivelUsuario,
-  UserStats, PracticaFallo, Logro, NivelConEstado, RachaHistorialDia
+  UserStats, PracticaFallo, Logro, NivelConEstado, RachaHistorialDia, EventoRacha
 } from '../data/db-types';
 
 @Injectable({ providedIn: 'root' })
@@ -353,7 +353,13 @@ export class ContenidoService {
     const { error } = await this.db.from('user_stats').update(actualizado).eq('user_id', userId);
     if (error) throw error;
 
-    return { ...stats, ...actualizado };
+    // `eventoRacha` es solo para quien llamó a getMisStats en este instante
+    // (para poder avisarle con una notificación) — nunca se persiste.
+    const eventoRacha: EventoRacha = seCubreConCongeladores
+      ? { tipo: 'congelado', diasCubiertos: diasPerdidos, congeladoresRestantes: congeladoresDisponibles - diasPerdidos }
+      : { tipo: 'perdida', diasCubiertos: diasPerdidos, congeladoresRestantes: 0 };
+
+    return { ...stats, ...actualizado, eventoRacha };
   }
 
   /** Historial de días para el calendario de racha en el perfil. */

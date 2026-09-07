@@ -64,9 +64,22 @@ export interface UserStats {
   racha_congeladores: number | null;
   racha_evaluada_hasta: string | null;
   updated_at: string | null;
+  /** Transiente: NO es una columna de la tabla, nunca se manda a Supabase.
+   * `ContenidoService.evaluarRachaSiCorresponde` lo agrega en memoria solo
+   * durante el llamado en que detecta que un congelador cubrió un día
+   * saltado, o que la racha se cortó por falta de congeladores, para que
+   * quien llame a `getMisStats` (Home) pueda avisarle al usuario con una
+   * notificación. En cualquier otro llamado viene `undefined`. */
+  eventoRacha?: EventoRacha | null;
 }
 
 export type EstadoDiaRacha = 'practicado' | 'congelado' | 'perdido';
+
+export interface EventoRacha {
+  tipo: 'congelado' | 'perdida';
+  diasCubiertos: number;
+  congeladoresRestantes: number;
+}
 
 export interface RachaHistorialDia {
   fecha: string;

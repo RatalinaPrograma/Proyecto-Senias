@@ -77,9 +77,18 @@ export class HomePage {
       // No se espera esta llamada: si el permiso está "prompt" puede mostrar
       // el diálogo del sistema, y no queremos retrasar el resto de la carga
       // de Home por eso.
+      const yaPracticoHoy = stats.ultima_fecha_practica === this.contenidoService.fechaHoy();
       this.notificationsService
-        .sincronizar(stats.vidas ?? 0, this.contenidoService.minutosParaProximaVida(stats), stats.racha_actual ?? 0)
+        .sincronizar(stats.vidas ?? 0, this.contenidoService.minutosParaProximaVida(stats), stats.racha_actual ?? 0, yaPracticoHoy)
         .catch(() => {});
+
+      // Si getMisStats acaba de detectar que un congelador cubrió un día
+      // saltado (o que la racha se cortó por falta de congeladores), se
+      // avisa una sola vez con una notificación — evaluarRachaSiCorresponde
+      // ya es idempotente por día, así que esto no se repite en cada carga.
+      if (stats.eventoRacha) {
+        this.notificationsService.avisarEventoRacha(stats.eventoRacha, stats.racha_actual ?? 0).catch(() => {});
+      }
     } catch (e: any) {
       this.error = 'No se pudo cargar tu progreso. Revisa tu conexión.';
       console.error(e);

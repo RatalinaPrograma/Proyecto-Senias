@@ -25,7 +25,7 @@
     <ion-button class="btn-fox" expand="block" (click)="salir()">Volver al camino</ion-button>
   </div>
 
-  <ng-container *ngIf="fase !== 'cargando' && fase !== 'error' && fase !== 'sinvidas' && fase !== 'complete'">
+  <ng-container *ngIf="fase !== 'cargando' && fase !== 'error' && fase !== 'sinvidas' && fase !== 'complete' && fase !== 'racha'">
     <div class="lesson-topbar">
       <button class="icon-btn" (click)="salir()"><ion-icon name="close"></ion-icon></button>
 
@@ -220,7 +220,43 @@
         <span>PUNTOS XP</span>
       </div>
     </div>
-    <ion-button class="btn-fox" expand="block" (click)="salir()">Continuar</ion-button>
+    <ion-button class="btn-fox" expand="block" (click)="continuarLeccion()">Continuar</ion-button>
+  </div>
+
+  <!-- ===== RACHA ACTIVADA ===== -->
+  <div class="racha-celebracion" *ngIf="fase === 'racha'">
+    <div class="confetti" aria-hidden="true">
+      <span
+        *ngFor="let c of confeti"
+        class="confetti-bit"
+        [style.left.%]="c.left"
+        [style.animation-delay]="c.delay"
+        [style.background]="c.color">
+      </span>
+    </div>
+
+    <div class="flame-badge">
+      <div class="flame-glow"></div>
+      <div class="flame-shape">
+        <div class="flame-outer"></div>
+        <div class="flame-inner"></div>
+        <div class="flame-core"></div>
+      </div>
+    </div>
+
+    <div class="racha-numero">{{ racha }}</div>
+    <p class="racha-label">días de racha</p>
+
+    <app-racha-calendar class="racha-semana" [dias]="semanaCalendario" variante="semana"></app-racha-calendar>
+
+    <div class="congelador-banner" *ngIf="congeladorGanadoHoy">
+      <ion-icon name="snow-outline"></ion-icon>
+      ¡Ganaste un congelador de racha! Te cubre si algún día se te pasa.
+    </div>
+
+    <p class="racha-mensaje">{{ mensajeRacha }}</p>
+
+    <ion-button class="btn-fox racha-cta" expand="block" (click)="salir()">{{ textoBotonRacha }}</ion-button>
   </div>
 
 </ion-content>

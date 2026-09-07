@@ -5,18 +5,19 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
 import { ContenidoService } from '../services/contenido';
 import { TtsService } from '../services/tts';
-import { Nivel, Subnivel, Sena } from '../data/db-types';
+import { Nivel, Subnivel, Sena, RachaHistorialDia } from '../data/db-types';
 import { SenaIconComponent } from '../shared/sena-icon/sena-icon.component';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { esVideoMp4 } from '../shared/media-utils';
 import { GifTileComponent } from '../shared/gif-tile/gif-tile.component';
+import { RachaCalendarComponent, DiaRachaVista } from '../shared/racha-calendar/racha-calendar.component';
 import { ImageCacheService } from '../services/image-cache';
 import { addIcons } from 'ionicons';
-import { close, heart, checkmarkCircle, camera, videocam, volumeHigh } from 'ionicons/icons';
+import { close, heart, checkmarkCircle, camera, videocam, volumeHigh, snowOutline } from 'ionicons/icons';
 
-addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, camera, videocam, 'volume-high': volumeHigh });
+addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, camera, videocam, 'volume-high': volumeHigh, 'snow-outline': snowOutline });
 
-type Fase = 'cargando' | 'flash' | 'match' | 'quiz' | 'record' | 'complete' | 'sinvidas' | 'error';
+type Fase = 'cargando' | 'flash' | 'match' | 'quiz' | 'record' | 'complete' | 'racha' | 'sinvidas' | 'error';
 
 interface Par { palabra: string; senaId: number; seed: number; videoUrl: string | null; }
 interface Pregunta { palabra: string; senaId: number; opciones: string[]; seed: number; videoUrl: string | null; }
@@ -24,10 +25,21 @@ interface Pregunta { palabra: string; senaId: number; opciones: string[]; seed: 
 const MENSAJES_OK = ['¡Mano correcta!', '¡Excelente forma!', '¡Así se hace!'];
 const MENSAJES_MAL = ['Ajusta el pulgar', 'Centra tu mano en el óvalo', 'Prueba con un movimiento más marcado'];
 
+/** Frase corta y variable para la pantalla de racha activada — se elige una
+ * al azar cada vez, para que no se sienta repetitivo día tras día. */
+const MENSAJES_RACHA = [
+  'Un día más, una razón más para seguir. 🔥',
+  '¡Imparable! Nadie te para ahora. 🦊',
+  'Cada día cuenta — y hoy contó.',
+  'Así se construye un hábito de verdad. 🔥',
+  'Otra piedrita más en el camino. 🧱',
+  'Tus manos ya saben que hoy tocaba. 🤟',
+];
+
 @Component({
   selector: 'app-lesson',
   standalone: true,
-  imports: [CommonModule, IonicModule, SenaIconComponent, CachedSrcDirective, GifTileComponent],
+  imports: [CommonModule, IonicModule, SenaIconComponent, CachedSrcDirective, GifTileComponent, RachaCalendarComponent],
   templateUrl: './lesson.page.html',
   styleUrls: ['./lesson.page.scss'],
 })
@@ -87,6 +99,28 @@ export class LessonPage implements OnInit, OnDestroy {
   // Minutos que faltan para recuperar la próxima vida (0 si no aplica)
   minutosParaVida = 0;
 
+  // ---- racha activada (pantalla de celebración al terminar la primera
+  // lección del día) ----
+  private practicoAntesHoy = false;
+  private congeladoresAlEntrar = 0;
+  hayRachaParaCelebrar = false;
+  racha = 0;
+  congeladorGanadoHoy = false;
+  semanaCalendario: DiaRachaVista[] = [];
+  primerNombre = '';
+  mensajeRacha = '';
+  readonly confeti = Array.from({ length: 16 }, (_, i) => ({
+    left: Math.round(Math.random() * 92) + 4,
+    delay: `${(Math.random() * 0.6).toFixed(2)}s`,
+    color: ['#F2701A', '#FF9A52', '#2CA6A4', '#F7F5F0'][i % 4],
+  }));
+
+  get textoBotonRacha(): string {
+    return this.primerNombre
+      ? `¡Nada detiene a ${this.primerNombre.toUpperCase()}!`
+      : '¡Sigue así, no te detengas!';
+  }
+
   // ---- cámara ----
   camStage: 'idle' | 'requesting' | 'denied' | 'countdown' | 'recording' | 'result' = 'idle';
   camCount = 3;
@@ -129,11 +163,12 @@ export class LessonPage implements OnInit, OnDestroy {
 
       // El pool de palabras del quiz se trae acá, en paralelo con lo demás,
       // en vez de en serie justo antes de arrancar las flashcards.
-      const [nivel, senas, stats, pool] = await Promise.all([
+      const [nivel, senas, stats, pool, perfilRes] = await Promise.all([
         this.contenidoService.getNivelPorId(subnivel.nivel_id),
         this.contenidoService.getSenas(subnivelId),
         this.contenidoService.getMisStats(this.userId),
         this.contenidoService.getPoolDePalabras(),
+        this.supabaseService.getProfile(this.userId),
       ]);
 
       if (!nivel) { this.fase = 'error'; this.errorMsg = 'No se encontró la categoría de esta lección.'; return; }
@@ -143,6 +178,13 @@ export class LessonPage implements OnInit, OnDestroy {
       this.senas = senas;
       this.vidas = stats.vidas ?? 5;
       this.minutosParaVida = this.contenidoService.minutosParaProximaVida(stats);
+
+      // Se guarda ANTES de terminar la lección: así, al terminar, sabemos si
+      // esta fue la primera práctica del día (la que activa/sube la racha)
+      // sin tener que volver a comparar fechas después de actualizar stats.
+      this.practicoAntesHoy = stats.ultima_fecha_practica === this.contenidoService.fechaHoy();
+      this.congeladoresAlEntrar = stats.racha_congeladores ?? 0;
+      this.primerNombre = (perfilRes.data?.full_name ?? '').trim().split(/\s+/)[0] || '';
       this.cargaProgreso = 35;
       this.cargaMensaje = '¿Estás preparado?';
 
@@ -475,12 +517,53 @@ export class LessonPage implements OnInit, OnDestroy {
     this.xpGanado = xpFinal;
     try {
       await this.contenidoService.marcarSubnivelCompletado(this.userId, this.subnivel.id, xpFinal);
-      await this.contenidoService.actualizarStatsTrasLeccion(this.userId, xpFinal);
+      const statsFinal = await this.contenidoService.actualizarStatsTrasLeccion(this.userId, xpFinal);
       await this.contenidoService.avanzarNivelSiCorresponde(this.userId, this.nivel.id);
+
+      // Si ya se había practicado hoy antes de entrar a esta lección, la
+      // racha no cambió — no tiene sentido repetir la celebración por cada
+      // lección adicional del mismo día, solo por la primera.
+      if (!this.practicoAntesHoy) {
+        this.racha = statsFinal.racha_actual ?? 0;
+        this.congeladorGanadoHoy = (statsFinal.racha_congeladores ?? 0) > this.congeladoresAlEntrar;
+        this.mensajeRacha = MENSAJES_RACHA[Math.floor(Math.random() * MENSAJES_RACHA.length)];
+        const historial = await this.contenidoService.obtenerHistorialRacha(this.userId, 6);
+        this.semanaCalendario = this.construirSemana(historial);
+        this.hayRachaParaCelebrar = true;
+      }
     } catch (e) {
       console.error('No se pudo guardar el progreso', e);
     }
     this.fase = 'complete';
+  }
+
+  /** Últimos 7 días (6 + hoy) para la tira de calendario de la pantalla de
+   * racha activada. Misma lógica que el calendario mensual del Perfil, pero
+   * agregando la letra corta del día para mostrarla arriba de cada círculo. */
+  private construirSemana(historial: RachaHistorialDia[]): DiaRachaVista[] {
+    const DIAS_CORTOS = ['D', 'L', 'Ma', 'Mi', 'J', 'V', 'S']; // índice = Date.getDay()
+    const mapa = new Map(historial.map(h => [h.fecha, h.estado]));
+    const hoy = this.contenidoService.fechaHoy();
+    const dias: DiaRachaVista[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const fecha = this.contenidoService.sumarDias(hoy, -i);
+      const esHoy = fecha === hoy;
+      const estado = mapa.get(fecha) ?? (esHoy ? 'hoy' : 'sin-datos');
+      const [anio, mes, dia] = fecha.split('-').map(Number);
+      const diaSemana = new Date(anio, mes - 1, dia, 12).getDay();
+      dias.push({ fecha, numero: dia, estado, esHoy, etiquetaDia: DIAS_CORTOS[diaSemana] });
+    }
+    return dias;
+  }
+
+  /** Botón "Continuar" de la pantalla de resultados: si esta lección activó
+   * la racha del día, primero pasa por la celebración antes de salir. */
+  continuarLeccion() {
+    if (this.hayRachaParaCelebrar) {
+      this.fase = 'racha';
+    } else {
+      this.salir();
+    }
   }
 
   // ---------- Salidas ----------
