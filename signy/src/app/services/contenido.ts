@@ -190,7 +190,13 @@ export class ContenidoService {
 
   /** Si todos los subniveles de un nivel quedaron completados, marca el
    * nivel como completado y da acceso al siguiente nivel de la lista. */
-  async avanzarNivelSiCorresponde(userId: string, nivelId: number) {
+  /** Al terminar una lección, revisa si con eso se completó TODO el nivel.
+   * Devuelve `nivelRecienCompletado: true` solo el momento exacto en que
+   * pasa de "no completo" a "completo" — no cada vez que se practique de
+   * nuevo dentro de un nivel que ya estaba completo antes (por ejemplo, un
+   * repaso). Eso es lo que necesita la pantalla de celebración: mostrarse
+   * una sola vez, justo cuando corresponde. */
+  async avanzarNivelSiCorresponde(userId: string, nivelId: number): Promise<{ nivelRecienCompletado: boolean }> {
     const [niveles, subniveles, progresoSubniveles] = await Promise.all([
       this.getNiveles(),
       this.getSubniveles(nivelId),
@@ -201,7 +207,15 @@ export class ContenidoService {
       progresoSubniveles.filter(p => p.completado).map(p => p.subnivel_id)
     );
     const todosCompletados = subniveles.every(s => completadosPorId.has(s.id));
-    if (!todosCompletados) return;
+    if (!todosCompletados) return { nivelRecienCompletado: false };
+
+    const { data: progresoPrevio } = await this.db
+      .from('progreso_nivel_usuario')
+      .select('completado')
+      .eq('user_id', userId)
+      .eq('nivel_id', nivelId)
+      .maybeSingle();
+    const yaEstabaCompleto = progresoPrevio?.completado === true;
 
     await this.db.from('progreso_nivel_usuario').upsert(
       { user_id: userId, nivel_id: nivelId, completado: true, acceso: true, updated_at: new Date().toISOString() },
@@ -217,6 +231,8 @@ export class ContenidoService {
         { onConflict: 'user_id,nivel_id' }
       );
     }
+
+    return { nivelRecienCompletado: !yaEstabaCompleto };
   }
 
   // ---------- Estadísticas (racha, XP, vidas) ----------
@@ -228,6 +244,10 @@ export class ContenidoService {
   /** Cada cuántos días de racha se gana 1 congelador, y el tope acumulable. */
   private static readonly RACHA_CONGELADORES_CADA = 5;
   private static readonly RACHA_CONGELADORES_MAX = 2;
+
+  // ---------- Tienda de congeladores ----------
+  private static readonly PRECIO_CONGELADOR_COMPRA = 200;
+  private static readonly PRECIO_CONGELADOR_REGALO = 100;
 
   async getMisStats(userId: string): Promise<UserStats> {
     const { data, error } = await this.db.from('user_stats').select('*').eq('user_id', userId).maybeSingle();
@@ -545,6 +565,63 @@ export class ContenidoService {
     });
 
     return entradas.sort((a, b) => b.racha_actual - a.racha_actual || b.puntos_experiencia - a.puntos_experiencia);
+  }
+
+  // ---------- Tienda de congeladores ----------
+  /** Comprar para uno mismo solo toca tu propia fila -- la política RLS
+   * normal de "actualizas tus propias stats" ya alcanza, no hace falta
+   * ninguna función especial (a diferencia de regalar, ver más abajo). */
+  async comprarCongelador(userId: string): Promise<{ ok: boolean; error?: string }> {
+    const stats = await this.getMisStats(userId);
+    const xpActual = stats.puntos_experiencia ?? 0;
+    const congeladoresActuales = stats.racha_congeladores ?? 0;
+
+    if (congeladoresActuales >= ContenidoService.RACHA_CONGELADORES_MAX) {
+      return { ok: false, error: 'Ya tienes el máximo de congeladores.' };
+    }
+    if (xpActual < ContenidoService.PRECIO_CONGELADOR_COMPRA) {
+      return { ok: false, error: `Te faltan ${ContenidoService.PRECIO_CONGELADOR_COMPRA - xpActual} XP.` };
+    }
+
+    const { error } = await this.db.from('user_stats').update({
+      puntos_experiencia: xpActual - ContenidoService.PRECIO_CONGELADOR_COMPRA,
+      racha_congeladores: congeladoresActuales + 1,
+    }).eq('user_id', userId);
+
+    if (error) return { ok: false, error: 'No se pudo completar la compra.' };
+    return { ok: true };
+  }
+
+  /** Regalarle un congelador a alguien que sigues sí toca la fila de OTRA
+   * persona (sumarle un congelador), así que no se puede hacer con un
+   * simple .update() del cliente -- ver el comentario en la migración
+   * `tienda_congeladores.sql` para el porqué. Todo el trabajo real (validar
+   * que lo sigues, el XP, el enfriamiento de una semana, el máximo del
+   * amigo) lo hace la función `regalar_congelador` en la base de datos. */
+  async regalarCongelador(amigoId: string): Promise<{ ok: boolean; error?: string }> {
+    const { data, error } = await this.db.rpc('regalar_congelador', { para_user_id: amigoId });
+    if (error) return { ok: false, error: 'No se pudo completar el regalo.' };
+    return data as { ok: boolean; error?: string };
+  }
+
+  /** Personas que sigues y que tienen menos del máximo de congeladores,
+   * ordenadas con los que tienen menos primero (0 antes que 1) -- para la
+   * sección "Amigos que necesitan un congelador" en Perfil. */
+  async getAmigosBajosEnCongelador(userId: string): Promise<{ id: string; full_name: string | null; avatar_url: string | null; racha_congeladores: number }[]> {
+    const idsSeguidos = await this.supabaseService.idsSeguidos(userId);
+    if (!idsSeguidos.length) return [];
+
+    const [{ data: perfiles }, { data: stats }] = await Promise.all([
+      this.db.from('profiles').select('id, full_name, avatar_url').in('id', idsSeguidos),
+      this.db.from('user_stats').select('user_id, racha_congeladores').in('user_id', idsSeguidos),
+    ]);
+
+    const mapaCongeladores = new Map((stats ?? []).map(s => [s.user_id, s.racha_congeladores ?? 0]));
+
+    return (perfiles ?? [])
+      .map(p => ({ id: p.id, full_name: p.full_name, avatar_url: p.avatar_url, racha_congeladores: mapaCongeladores.get(p.id) ?? 0 }))
+      .filter(a => a.racha_congeladores < ContenidoService.RACHA_CONGELADORES_MAX)
+      .sort((a, b) => a.racha_congeladores - b.racha_congeladores);
   }
 
   // ---------- Logros ----------

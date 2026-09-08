@@ -13,17 +13,37 @@ import { GifTileComponent } from '../shared/gif-tile/gif-tile.component';
 import { RachaCalendarComponent, DiaRachaVista } from '../shared/racha-calendar/racha-calendar.component';
 import { ImageCacheService } from '../services/image-cache';
 import { addIcons } from 'ionicons';
-import { close, heart, checkmarkCircle, closeCircle, camera, videocam, volumeHigh, snowOutline } from 'ionicons/icons';
+import { close, heart, checkmarkCircle, closeCircle, camera, videocam, volumeHigh, snowOutline, trophy } from 'ionicons/icons';
 
-addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, 'close-circle': closeCircle, camera, videocam, 'volume-high': volumeHigh, 'snow-outline': snowOutline });
+addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, 'close-circle': closeCircle, camera, videocam, 'volume-high': volumeHigh, 'snow-outline': snowOutline, trophy });
 
-type Fase = 'cargando' | 'flash' | 'match' | 'quiz' | 'record' | 'complete' | 'racha' | 'sinvidas' | 'error';
+type Fase = 'cargando' | 'flash' | 'match' | 'quiz' | 'record' | 'complete' | 'nivel' | 'racha' | 'sinvidas' | 'error';
 
 interface Par { palabra: string; senaId: number; seed: number; videoUrl: string | null; }
 interface Pregunta { palabra: string; senaId: number; opciones: string[]; seed: number; videoUrl: string | null; }
 
 const MENSAJES_OK = ['¡Mano correcta!', '¡Excelente forma!', '¡Así se hace!'];
 const MENSAJES_MAL = ['Ajusta el pulgar', 'Centra tu mano en el óvalo', 'Prueba con un movimiento más marcado'];
+
+/** Mensaje corto y variable para la pantalla de "lección superada" — antes
+ * era un texto fijo, ahora rota para que no se sienta repetitivo lección
+ * tras lección. */
+const MENSAJES_LECCION = [
+  'Cachai cada vez más señas. 🤟',
+  'Una lección menos, un paso más cerca. 🦊',
+  '¡Se nota la práctica!',
+  'Tus manos están aprendiendo rápido. 👏',
+  'Directo a la próxima. 🔥',
+];
+
+/** Frase para la pantalla de nivel completado — un logro más grande que
+ * una lección normal, así que el tono es un poco más "arriba". */
+const MENSAJES_NIVEL = [
+  '¡Un nivel entero abajo! Nada te detiene. 🏆',
+  'De principio a fin, sin dejar nada pendiente. 🦊',
+  'Así se construye el dominio de una lengua. 🤟',
+  '¡Otro paso gigante en tu camino con LSCh!',
+];
 
 /** Frase corta y variable para la pantalla de racha activada — se elige una
  * al azar cada vez, para que no se sienta repetitivo día tras día. */
@@ -103,6 +123,15 @@ export class LessonPage implements OnInit, OnDestroy {
   // Minutos que faltan para recuperar la próxima vida (0 si no aplica)
   minutosParaVida = 0;
 
+  // ---- lección completa (pantalla base, siempre se muestra) ----
+  mensajeLeccion = MENSAJES_LECCION[Math.floor(Math.random() * MENSAJES_LECCION.length)];
+
+  // ---- nivel completado (pantalla de celebración al terminar TODAS las
+  // lecciones de un nivel — solo la primera vez que pasa, no de nuevo si
+  // se repasa algo dentro de un nivel ya completo) ----
+  hayNivelParaCelebrar = false;
+  mensajeNivel = '';
+
   // ---- racha activada (pantalla de celebración al terminar la primera
   // lección del día) ----
   private practicoAntesHoy = false;
@@ -113,11 +142,18 @@ export class LessonPage implements OnInit, OnDestroy {
   semanaCalendario: DiaRachaVista[] = [];
   primerNombre = '';
   mensajeRacha = '';
+  // Confetti compartido entre las pantallas de "lección", "nivel" y
+  // "racha" — es puramente decorativo, no hace falta un set por pantalla.
   readonly confeti = Array.from({ length: 16 }, (_, i) => ({
     left: Math.round(Math.random() * 92) + 4,
     delay: `${(Math.random() * 0.6).toFixed(2)}s`,
     color: ['#F2701A', '#FF9A52', '#2CA6A4', '#F7F5F0'][i % 4],
   }));
+  // Versión más liviana para "lección completa" (pasa más seguido que
+  // "nivel" o "racha", así que un confetti más discreto se siente mejor).
+  // Se calcula una sola vez acá, no con .slice() en el template, para que
+  // no se reinicie la animación en cada detección de cambios de Angular.
+  readonly confetiLeccion = this.confeti.slice(0, 8);
 
   get textoBotonRacha(): string {
     return this.primerNombre
@@ -540,7 +576,12 @@ export class LessonPage implements OnInit, OnDestroy {
     try {
       await this.contenidoService.marcarSubnivelCompletado(this.userId, this.subnivel.id, xpFinal);
       const statsFinal = await this.contenidoService.actualizarStatsTrasLeccion(this.userId, xpFinal);
-      await this.contenidoService.avanzarNivelSiCorresponde(this.userId, this.nivel.id);
+      const { nivelRecienCompletado } = await this.contenidoService.avanzarNivelSiCorresponde(this.userId, this.nivel.id);
+
+      if (nivelRecienCompletado) {
+        this.mensajeNivel = MENSAJES_NIVEL[Math.floor(Math.random() * MENSAJES_NIVEL.length)];
+        this.hayNivelParaCelebrar = true;
+      }
 
       // Si ya se había practicado hoy antes de entrar a esta lección, la
       // racha no cambió — no tiene sentido repetir la celebración por cada
@@ -578,9 +619,21 @@ export class LessonPage implements OnInit, OnDestroy {
     return dias;
   }
 
-  /** Botón "Continuar" de la pantalla de resultados: si esta lección activó
-   * la racha del día, primero pasa por la celebración antes de salir. */
+  /** Botón "Continuar" de la pantalla de resultados: encadena las
+   * celebraciones que apliquen antes de salir — primero nivel (si se
+   * completó uno entero), después racha (si se activó hoy). */
   continuarLeccion() {
+    if (this.hayNivelParaCelebrar) {
+      this.fase = 'nivel';
+    } else if (this.hayRachaParaCelebrar) {
+      this.fase = 'racha';
+    } else {
+      this.salir();
+    }
+  }
+
+  /** Botón "Continuar" de la pantalla de nivel completado. */
+  continuarDesdeNivel() {
     if (this.hayRachaParaCelebrar) {
       this.fase = 'racha';
     } else {

@@ -25,7 +25,7 @@
     <ion-button class="btn-fox" expand="block" (click)="salir()">Volver al camino</ion-button>
   </div>
 
-  <ng-container *ngIf="fase !== 'cargando' && fase !== 'error' && fase !== 'sinvidas' && fase !== 'complete' && fase !== 'racha'">
+  <ng-container *ngIf="fase !== 'cargando' && fase !== 'error' && fase !== 'sinvidas' && fase !== 'complete' && fase !== 'nivel' && fase !== 'racha'">
     <div class="lesson-topbar">
       <button class="icon-btn" (click)="salir()" aria-label="Salir de la lección"><ion-icon name="close"></ion-icon></button>
 
@@ -219,10 +219,20 @@
   </ng-container>
 
   <!-- ===== LECCIÓN COMPLETA ===== -->
-  <div class="empty-state" *ngIf="fase === 'complete'">
+  <div class="empty-state leccion-completa" *ngIf="fase === 'complete'">
+    <div class="confetti confetti-suave" aria-hidden="true">
+      <span
+        *ngFor="let c of confetiLeccion"
+        class="confetti-bit"
+        [style.left.%]="c.left"
+        [style.animation-delay]="c.delay"
+        [style.background]="c.color">
+      </span>
+    </div>
+
     <img [appCachedSrc]="'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="Signy" class="happy-fox" />
     <h2>¡Lección superada!</h2>
-    <p>Cachai cada vez más señas. Sigue la racha 🔥</p>
+    <p>{{ mensajeLeccion }}</p>
     <div class="complete-stats">
       <div class="complete-stat">
         <strong>+{{ xpGanado }}</strong>
@@ -230,6 +240,32 @@
       </div>
     </div>
     <ion-button class="btn-fox" expand="block" (click)="continuarLeccion()">Continuar</ion-button>
+  </div>
+
+  <!-- ===== NIVEL COMPLETADO ===== -->
+  <div class="nivel-celebracion" *ngIf="fase === 'nivel'">
+    <div class="confetti" aria-hidden="true">
+      <span
+        *ngFor="let c of confeti"
+        class="confetti-bit"
+        [style.left.%]="c.left"
+        [style.animation-delay]="c.delay"
+        [style.background]="c.color">
+      </span>
+    </div>
+
+    <div class="trofeo-badge">
+      <div class="trofeo-glow" [style.background]="'radial-gradient(circle, ' + (nivel.color || '#F2701A') + '55, transparent 70%)'"></div>
+      <div class="trofeo-circulo" [style.background]="'linear-gradient(160deg, ' + (nivel.color || '#F2701A') + ', ' + (nivel.color_oscuro || '#C6560E') + ')'" [style.boxShadow]="'0 5px 0 ' + (nivel.color_oscuro || '#C6560E')">
+        <ion-icon name="trophy"></ion-icon>
+      </div>
+    </div>
+
+    <p class="nivel-superlabel">¡Nivel superado!</p>
+    <h2 class="nivel-nombre">{{ nivel.nombre }}</h2>
+    <p class="nivel-mensaje">{{ mensajeNivel }}</p>
+
+    <ion-button class="btn-fox nivel-cta" expand="block" (click)="continuarDesdeNivel()">Continuar</ion-button>
   </div>
 
   <!-- ===== RACHA ACTIVADA ===== -->

@@ -169,7 +169,7 @@
   &.dot-perdido { background: var(--signy-error); }
 }
 
-.logros-card, .fallos-card {
+.logros-card, .fallos-card, .congelador-card {
   background: linear-gradient(165deg, var(--signy-card-hover), var(--signy-card));
   border: 1px solid rgba(242, 112, 26, 0.14);
   border-radius: var(--signy-radius);
@@ -178,6 +178,9 @@
   padding: 18px;
 
   h2 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-family: 'Baloo 2', sans-serif;
     font-weight: 700;
     font-size: 17px;
@@ -298,6 +301,137 @@
   background: rgba(225, 79, 61, 0.15);
   padding: 3px 9px;
   border-radius: 999px;
+}
+
+.congelador-hint {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  color: var(--signy-muted);
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+
+.congelador-slots {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.congelador-slot {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  background: var(--signy-ink-deep);
+  border: 2px solid var(--signy-locked);
+  filter: grayscale(1);
+  opacity: 0.4;
+
+  &.lleno {
+    background: linear-gradient(160deg, #5CD1CE, var(--signy-mint));
+    border-color: transparent;
+    box-shadow: 0 3px 0 var(--signy-mint-deep);
+    filter: none;
+    opacity: 1;
+  }
+}
+
+.congelador-btn-comprar {
+  --border-color: var(--signy-mint);
+  --color: var(--signy-mint);
+  margin-top: 4px;
+}
+
+.congelador-max {
+  text-align: center;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--signy-mint);
+  margin: 4px 0 0;
+}
+
+.congelador-mensaje {
+  text-align: center;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12.5px;
+  color: var(--signy-cream);
+  background: var(--signy-ink-deep);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 12px 0 0;
+}
+
+.amigos-congelador {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--signy-locked);
+
+  h3 {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 13.5px;
+    color: var(--signy-cream);
+    margin: 0 0 10px;
+  }
+}
+
+.amigo-congelador-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid var(--signy-locked);
+  }
+
+  .person-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--signy-ink-deep);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+
+    img { width: 100%; height: 100%; object-fit: cover; }
+    ion-icon { font-size: 18px; color: var(--signy-muted); }
+  }
+
+  .person-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .person-name {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--signy-cream);
+    margin: 0;
+  }
+
+  .congelador-estado {
+    font-family: 'Manrope', sans-serif;
+    font-size: 11.5px;
+    color: var(--signy-muted);
+    margin: 2px 0 0;
+  }
+}
+
+.btn-regalar {
+  --color: var(--signy-fox);
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 11.5px;
+  flex-shrink: 0;
 }
 
 .follow-row {

@@ -85,6 +85,50 @@
       </div>
     </div>
 
+    <div class="congelador-card" *ngIf="stats">
+      <h2><ion-icon name="snow-outline"></ion-icon> Congeladores de racha</h2>
+      <p class="congelador-hint">Te cubren si algún día se te pasa practicar. Ganas uno gratis cada 5 días de racha.</p>
+
+      <div class="congelador-slots">
+        <div class="congelador-slot" *ngFor="let i of [0, 1]" [class.lleno]="(stats.racha_congeladores ?? 0) > i">❄️</div>
+      </div>
+
+      <ion-button
+        *ngIf="(stats.racha_congeladores ?? 0) < MAX_CONGELADORES"
+        class="btn-fox congelador-btn-comprar"
+        expand="block"
+        fill="outline"
+        [disabled]="comprandoCongelador || (stats.puntos_experiencia ?? 0) < PRECIO_COMPRA"
+        (click)="comprarCongelador()">
+        Comprar por {{ PRECIO_COMPRA }} XP
+      </ion-button>
+      <p class="congelador-max" *ngIf="(stats.racha_congeladores ?? 0) >= MAX_CONGELADORES">¡Ya tienes el máximo!</p>
+
+      <p class="congelador-mensaje" *ngIf="mensajeCongelador">{{ mensajeCongelador }}</p>
+
+      <div class="amigos-congelador" *ngIf="amigosBajosCongelador.length">
+        <h3>Amigos que necesitan uno</h3>
+        <div class="amigo-congelador-row" *ngFor="let a of amigosBajosCongelador">
+          <div class="person-avatar">
+            <img *ngIf="a.avatar_url" [appCachedSrc]="a.avatar_url" [alt]="a.full_name || ''" />
+            <ion-icon *ngIf="!a.avatar_url" name="paw"></ion-icon>
+          </div>
+          <div class="person-info">
+            <p class="person-name">{{ a.full_name || 'Usuario Signy' }}</p>
+            <p class="congelador-estado" *ngIf="a.racha_congeladores === 0">😢 Se quedó sin congeladores</p>
+            <p class="congelador-estado" *ngIf="a.racha_congeladores === 1">❄️ Le queda 1 congelador</p>
+          </div>
+          <ion-button
+            class="btn-regalar"
+            fill="clear"
+            [disabled]="regalandoAId === a.id || (stats.puntos_experiencia ?? 0) < PRECIO_REGALO"
+            (click)="regalarCongelador(a)">
+            Regalar ({{ PRECIO_REGALO }} XP)
+          </ion-button>
+        </div>
+      </div>
+    </div>
+
     <div class="follow-row">
       <button class="follow-box" (click)="irASeguidores()">
         <strong>{{ seguidores }}</strong>

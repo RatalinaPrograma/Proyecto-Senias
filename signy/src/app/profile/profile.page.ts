@@ -52,6 +52,15 @@ export class ProfilePage {
   logros: LogroVista[] = [];
   fallos: FalloVista[] = [];
 
+  // ---- tienda de congeladores ----
+  readonly PRECIO_COMPRA = 200;
+  readonly PRECIO_REGALO = 100;
+  readonly MAX_CONGELADORES = 2;
+  amigosBajosCongelador: { id: string; full_name: string | null; avatar_url: string | null; racha_congeladores: number }[] = [];
+  comprandoCongelador = false;
+  regalandoAId: string | null = null;
+  mensajeCongelador: string | null = null;
+
   constructor(
     private supabaseService: SupabaseService,
     private contenidoService: ContenidoService,
@@ -70,7 +79,7 @@ export class ProfilePage {
 
     const nombreFallback = userData.user.user_metadata?.['full_name'] ?? 'Usuario Signy';
 
-    const [perfil, stats, seguidores, seguidos, historialRacha, logros, misLogrosIds, fallos] = await Promise.all([
+    const [perfil, stats, seguidores, seguidos, historialRacha, logros, misLogrosIds, fallos, amigosBajosCongelador] = await Promise.all([
       this.supabaseService.getOCrearProfile(this.userId, nombreFallback),
       this.contenidoService.getMisStats(this.userId),
       this.supabaseService.contarSeguidores(this.userId),
@@ -79,6 +88,7 @@ export class ProfilePage {
       this.contenidoService.getLogros(),
       this.contenidoService.getMisLogrosIds(this.userId),
       this.contenidoService.getMisFallos(this.userId, 5),
+      this.contenidoService.getAmigosBajosEnCongelador(this.userId),
     ]);
 
     this.perfil = perfil;
@@ -93,6 +103,7 @@ export class ProfilePage {
       .map(l => ({ ...l, desbloqueado: misLogrosIds.has(l.id) }))
       .sort((a, b) => Number(b.desbloqueado) - Number(a.desbloqueado));
     this.fallos = fallos;
+    this.amigosBajosCongelador = amigosBajosCongelador;
     this.cargando = false;
   }
 
@@ -110,6 +121,44 @@ export class ProfilePage {
       dias.push({ fecha, numero: Number(fecha.slice(8, 10)), estado, esHoy });
     }
     return dias;
+  }
+
+  async comprarCongelador() {
+    if (this.comprandoCongelador || !this.stats) return;
+    this.comprandoCongelador = true;
+    this.mensajeCongelador = null;
+
+    const resultado = await this.contenidoService.comprarCongelador(this.userId);
+    if (resultado.ok) {
+      // Actualiza en el momento en vez de recargar todo el perfil de nuevo.
+      this.stats = {
+        ...this.stats,
+        puntos_experiencia: (this.stats.puntos_experiencia ?? 0) - this.PRECIO_COMPRA,
+        racha_congeladores: (this.stats.racha_congeladores ?? 0) + 1,
+      };
+      this.mensajeCongelador = '¡Listo! Ganaste un congelador de racha. ❄️';
+    } else {
+      this.mensajeCongelador = resultado.error ?? 'No se pudo completar la compra.';
+    }
+    this.comprandoCongelador = false;
+  }
+
+  async regalarCongelador(amigo: { id: string; full_name: string | null; racha_congeladores: number }) {
+    if (this.regalandoAId) return;
+    this.regalandoAId = amigo.id;
+    this.mensajeCongelador = null;
+
+    const resultado = await this.contenidoService.regalarCongelador(amigo.id);
+    if (resultado.ok) {
+      if (this.stats) {
+        this.stats = { ...this.stats, puntos_experiencia: (this.stats.puntos_experiencia ?? 0) - this.PRECIO_REGALO };
+      }
+      this.amigosBajosCongelador = this.amigosBajosCongelador.filter(a => a.id !== amigo.id);
+      this.mensajeCongelador = `¡Le regalaste un congelador a ${amigo.full_name || 'tu amigo'}! 🎁`;
+    } else {
+      this.mensajeCongelador = resultado.error ?? 'No se pudo completar el regalo.';
+    }
+    this.regalandoAId = null;
   }
 
   irABuscarAmigos() {
