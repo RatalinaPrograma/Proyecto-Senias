@@ -1,8 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Capacitor, PermissionState } from '@capacitor/core';
-import { LocalNotifications } from '@capacitor/local-notifications';
-import { Preferences } from '@capacitor/preferences';
 import { EventoRacha } from '../data/db-types';
+import { PreferencesAdapter, LocalNotificationsAdapter } from './capacitor-plugins';
 
 export interface NotifConfig {
   recordatorioActivado: boolean;
@@ -108,6 +107,11 @@ export class NotificationsService {
 
   private canalesListos = false;
 
+  constructor(
+    private preferences: PreferencesAdapter,
+    private localNotifications: LocalNotificationsAdapter
+  ) {}
+
   disponible(): boolean {
     return Capacitor.isNativePlatform();
   }
@@ -115,7 +119,7 @@ export class NotificationsService {
   // ========== CONFIGURACIÓN (guardada en el dispositivo, no en Supabase) ==========
   async obtenerConfiguracion(): Promise<NotifConfig> {
     if (!this.disponible()) return { ...CONFIG_POR_DEFECTO };
-    const { value } = await Preferences.get({ key: STORAGE_KEY });
+    const { value } = await this.preferences.get({ key: STORAGE_KEY });
     if (!value) return { ...CONFIG_POR_DEFECTO };
     try {
       return { ...CONFIG_POR_DEFECTO, ...JSON.parse(value) };
@@ -126,27 +130,27 @@ export class NotificationsService {
 
   async guardarConfiguracion(cambios: Partial<NotifConfig>): Promise<NotifConfig> {
     const nueva = { ...(await this.obtenerConfiguracion()), ...cambios };
-    await Preferences.set({ key: STORAGE_KEY, value: JSON.stringify(nueva) });
+    await this.preferences.set({ key: STORAGE_KEY, value: JSON.stringify(nueva) });
     return nueva;
   }
 
   // ========== PERMISOS ==========
   async verificarPermiso(): Promise<PermissionState> {
     if (!this.disponible()) return 'denied';
-    const { display } = await LocalNotifications.checkPermissions();
+    const { display } = await this.localNotifications.checkPermissions();
     return display;
   }
 
   async pedirPermiso(): Promise<PermissionState> {
     if (!this.disponible()) return 'denied';
-    const { display } = await LocalNotifications.requestPermissions();
+    const { display } = await this.localNotifications.requestPermissions();
     return display;
   }
 
   private async asegurarCanales() {
     if (this.canalesListos || !this.disponible()) return;
     await Promise.all([
-      LocalNotifications.createChannel({
+      this.localNotifications.createChannel({
         id: 'recordatorios',
         name: 'Recordatorio diario',
         description: 'Aviso para practicar tu lección del día',
@@ -154,7 +158,7 @@ export class NotificationsService {
         visibility: 1,
         vibration: true,
       }),
-      LocalNotifications.createChannel({
+      this.localNotifications.createChannel({
         id: 'vidas',
         name: 'Vidas recuperadas',
         description: 'Aviso cuando recuperas una vida para seguir practicando',
@@ -227,7 +231,7 @@ export class NotificationsService {
     const mensaje = this.elegir(pool);
 
     await this.cancelar(NotificationsService.ID_RECORDATORIO);
-    await LocalNotifications.schedule({
+    await this.localNotifications.schedule({
       notifications: [
         {
           id: NotificationsService.ID_RECORDATORIO,
@@ -250,7 +254,7 @@ export class NotificationsService {
 
     const mensaje = this.elegir(MENSAJES_VIDAS);
     const cuando = new Date(Date.now() + minutosParaProximaVida * 60000);
-    await LocalNotifications.schedule({
+    await this.localNotifications.schedule({
       notifications: [
         {
           id: NotificationsService.ID_VIDAS,
@@ -275,7 +279,7 @@ export class NotificationsService {
   }
 
   private async cancelar(id: number) {
-    await LocalNotifications.cancel({ notifications: [{ id }] }).catch(() => {});
+    await this.localNotifications.cancel({ notifications: [{ id }] }).catch(() => {});
   }
 
   /** "125" -> "2 horas"; "40" -> "40 minutos". Para insertar en `{t}`. */
@@ -346,7 +350,7 @@ export class NotificationsService {
     await this.cancelar(id);
     const mensaje = this.elegir(pool);
     const tiempoTexto = this.formatearTiempoRestante(minutosRestantes);
-    await LocalNotifications.schedule({
+    await this.localNotifications.schedule({
       notifications: [
         {
           id,
@@ -384,7 +388,7 @@ export class NotificationsService {
     const mensaje = this.elegir(pool);
     const congeladoresTexto = evento.congeladoresRestantes === 1 ? '1 congelador' : `${evento.congeladoresRestantes} congeladores`;
 
-    await LocalNotifications.schedule({
+    await this.localNotifications.schedule({
       notifications: [
         {
           id: NotificationsService.ID_RACHA_EVENTO,
@@ -407,7 +411,7 @@ export class NotificationsService {
     await this.asegurarCanales();
     const pool = rachaActual > 0 ? MENSAJES_RECORDATORIO_RACHA : MENSAJES_RECORDATORIO;
     const mensaje = this.elegir(pool);
-    await LocalNotifications.schedule({
+    await this.localNotifications.schedule({
       notifications: [
         {
           id: NotificationsService.ID_PRUEBA,

@@ -2,9 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
-import { Preferences } from '@capacitor/preferences';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { SupabaseService } from '../services/supabase';
+import { PreferencesAdapter } from '../services/capacitor-plugins';
 import { addIcons } from 'ionicons';
 import { paw, people, settingsOutline } from 'ionicons/icons';
 
@@ -75,14 +75,15 @@ export class OnboardingPage implements OnInit {
 
   constructor(
     private router: Router,
-    private supabaseService: SupabaseService
+    private supabaseService: SupabaseService,
+    private preferences: PreferencesAdapter
   ) {}
 
   async ngOnInit() {
     // El tutorial se muestra una sola vez. Si ya se vio, esta página no
     // debería aparecer nunca más: se salta directo a donde corresponda
     // según haya sesión o no.
-    const { value } = await Preferences.get({ key: STORAGE_KEY });
+    const { value } = await this.preferences.get({ key: STORAGE_KEY });
     if (value === '1') {
       await this.irADestino();
       return;
@@ -127,7 +128,7 @@ export class OnboardingPage implements OnInit {
   }
 
   private async terminar() {
-    await Preferences.set({ key: STORAGE_KEY, value: '1' });
+    await this.preferences.set({ key: STORAGE_KEY, value: '1' });
     await this.irADestino();
   }
 }
