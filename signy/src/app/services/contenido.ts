@@ -155,19 +155,21 @@ export class ContenidoService {
     return resultado;
   }
 
+  /** El upsert de progreso y el XP ganado se resuelven en la función de
+   * Postgres `completar_subnivel` (ver migración
+   * `endurecer_completar_leccion.sql`), no acá: valida en el servidor que
+   * el nivel esté desbloqueado y que este sea de verdad el subnivel
+   * "actual" (no uno bloqueado ni fuera de orden), y limita el XP de la
+   * llamada en vez de confiar en el `puntaje` que mande el cliente. Antes
+   * esto era un `.upsert()` directo, así que cualquiera con su propio
+   * token podía marcar como completado un subnivel que nunca desbloqueó. */
   async marcarSubnivelCompletado(userId: string, subnivelId: number, puntaje: number) {
-    const { error } = await this.db.from('progreso_subnivel_usuario').upsert(
-      {
-        user_id: userId,
-        subnivel_id: subnivelId,
-        completado: true,
-        puntaje,
-        fecha_completado: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id,subnivel_id' }
-    );
+    const { data, error } = await this.db.rpc('completar_subnivel', {
+      p_subnivel_id: subnivelId,
+      p_xp_ganado: puntaje,
+    });
     if (error) throw error;
+    if (!data?.ok) throw new Error(data?.error ?? 'No se pudo completar el subnivel.');
 
     const totalCompletadas = await this.contarLeccionesCompletadas(userId);
     if (totalCompletadas >= 1) this.otorgarLogroPorCodigo(userId, 'primera_leccion').catch(console.error);
@@ -362,7 +364,21 @@ export class ContenidoService {
     if (!stats.ultima_fecha_practica || stats.ultima_fecha_practica === hoy) return stats;
     if (stats.racha_evaluada_hasta === hoy) return stats;
 
-    const diasSinPracticar = this.diasEntreFechas(stats.ultima_fecha_practica, hoy);
+    // Punto de referencia para contar días perdidos: el último día que ya
+    // se evaluó (si hay uno posterior a la última práctica), no siempre
+    // `ultima_fecha_practica`. Esa fecha NO avanza mientras el usuario no
+    // haga una lección (aunque los congeladores sí hayan cubierto días),
+    // así que usarla siempre acá hacía que, si el usuario seguía sin
+    // practicar, la SIGUIENTE evaluación volviera a contar desde cero todos
+    // los días ya cubiertos en una evaluación anterior -- inflando
+    // "díasPerdidos" cada vez más y gastando (o de plano agotando)
+    // congeladores por días que ya habían sido cerrados antes.
+    const ultimoDiaEvaluado =
+      stats.racha_evaluada_hasta && stats.racha_evaluada_hasta > stats.ultima_fecha_practica
+        ? stats.racha_evaluada_hasta
+        : stats.ultima_fecha_practica;
+
+    const diasSinPracticar = this.diasEntreFechas(ultimoDiaEvaluado, hoy);
 
     // Practicó ayer (dentro de la ventana normal) o ya no tenía racha que
     // proteger: no hay nada que congelar ni que cortar, solo se marca el día.
@@ -378,7 +394,7 @@ export class ContenidoService {
 
     const filasHistorial = Array.from({ length: diasPerdidos }, (_, i) => ({
       user_id: userId,
-      fecha: this.sumarDias(stats.ultima_fecha_practica!, i + 1),
+      fecha: this.sumarDias(ultimoDiaEvaluado, i + 1),
       estado: seCubreConCongeladores ? 'congelado' : 'perdido',
     }));
 
@@ -416,7 +432,7 @@ export class ContenidoService {
     return data ?? [];
   }
 
-  /** Actualiza racha y XP al terminar una lección. Regla simple: si ya
+  /** Actualiza racha (y congeladores) al terminar una lección. Regla simple: si ya
    * practicaste hoy, la racha no cambia; si practicaste ayer, sube +1; si
    * no, se reinicia en 1. `getMisStats` (llamado arriba) ya corrió la
    * evaluación de racha con congeladores, así que `stats.racha_actual` ya
@@ -424,8 +440,14 @@ export class ContenidoService {
    * acá (si se comparara de nuevo, un día cubierto por un congelador se
    * vería como "no fue ayer" y cortaría la racha igual, aunque el
    * congelador ya la haya protegido). Cada 5 días de racha se gana 1
-   * congelador (tope 2) para no perderla si algún día se pasa por alto. */
-  async actualizarStatsTrasLeccion(userId: string, xpGanado: number): Promise<UserStats> {
+   * congelador (tope 2) para no perderla si algún día se pasa por alto.
+   *
+   * El XP de la lección YA se sumó en `marcarSubnivelCompletado()` (vía la
+   * función de Postgres `completar_subnivel`, que además lo valida y le
+   * pone un tope) -- acá NO se vuelve a tocar `puntos_experiencia` para no
+   * sumarlo dos veces. `stats.puntos_experiencia`, leído por `getMisStats`
+   * de la línea de arriba, ya viene con el valor fresco post-RPC. */
+  async actualizarStatsTrasLeccion(userId: string): Promise<UserStats> {
     const stats = await this.getMisStats(userId);
     const hoy = this.fechaHoy();
 
@@ -442,7 +464,6 @@ export class ContenidoService {
     const actualizado: Partial<UserStats> = {
       racha_actual: nuevaRacha,
       max_racha: Math.max(stats.max_racha ?? 0, nuevaRacha),
-      puntos_experiencia: (stats.puntos_experiencia ?? 0) + xpGanado,
       ultima_fecha_practica: hoy,
       racha_evaluada_hasta: hoy,
       racha_congeladores: congeladoresFinal,
@@ -568,28 +589,16 @@ export class ContenidoService {
   }
 
   // ---------- Tienda de congeladores ----------
-  /** Comprar para uno mismo solo toca tu propia fila -- la política RLS
-   * normal de "actualizas tus propias stats" ya alcanza, no hace falta
-   * ninguna función especial (a diferencia de regalar, ver más abajo). */
+  /** El precio, el máximo y la validación viven en la función de Postgres
+   * `comprar_congelador` (ver migración `endurecer_completar_leccion.sql`)
+   * -- no en un `.update()` de acá. Un trigger en `user_stats` bloquea
+   * que un cliente autenticado cambie `puntos_experiencia` por fuera de
+   * funciones como esta, así que ya no alcanza con calcular el precio acá
+   * y mandar el resultado final: hay que pasar por el RPC sí o sí. */
   async comprarCongelador(userId: string): Promise<{ ok: boolean; error?: string }> {
-    const stats = await this.getMisStats(userId);
-    const xpActual = stats.puntos_experiencia ?? 0;
-    const congeladoresActuales = stats.racha_congeladores ?? 0;
-
-    if (congeladoresActuales >= ContenidoService.RACHA_CONGELADORES_MAX) {
-      return { ok: false, error: 'Ya tienes el máximo de congeladores.' };
-    }
-    if (xpActual < ContenidoService.PRECIO_CONGELADOR_COMPRA) {
-      return { ok: false, error: `Te faltan ${ContenidoService.PRECIO_CONGELADOR_COMPRA - xpActual} XP.` };
-    }
-
-    const { error } = await this.db.from('user_stats').update({
-      puntos_experiencia: xpActual - ContenidoService.PRECIO_CONGELADOR_COMPRA,
-      racha_congeladores: congeladoresActuales + 1,
-    }).eq('user_id', userId);
-
+    const { data, error } = await this.db.rpc('comprar_congelador');
     if (error) return { ok: false, error: 'No se pudo completar la compra.' };
-    return { ok: true };
+    return data as { ok: boolean; error?: string };
   }
 
   /** Regalarle un congelador a alguien que sigues sí toca la fila de OTRA

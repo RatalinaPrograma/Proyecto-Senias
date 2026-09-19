@@ -105,6 +105,7 @@ export class NotificationsService {
   private static readonly ID_RACHA_RIESGO_TEMPRANO = 1003;
   private static readonly ID_RACHA_RIESGO_URGENTE = 1004;
   private static readonly ID_RACHA_EVENTO = 1005;
+  private static readonly ID_RACHA_RIESGO_URGENTE_HOY = 1006;
 
   private canalesListos = false;
 
@@ -271,6 +272,7 @@ export class NotificationsService {
     await this.cancelar(NotificationsService.ID_VIDAS);
     await this.cancelar(NotificationsService.ID_RACHA_RIESGO_TEMPRANO);
     await this.cancelar(NotificationsService.ID_RACHA_RIESGO_URGENTE);
+    await this.cancelar(NotificationsService.ID_RACHA_RIESGO_URGENTE_HOY);
     await this.cancelar(NotificationsService.ID_RACHA_EVENTO);
   }
 
@@ -288,24 +290,34 @@ export class NotificationsService {
   }
 
   /**
-   * Dos alertas de "vas a perder la racha hoy", de una sola vez (no se
-   * repiten como el recordatorio diario): una a las 21:00 (todavía hay
+   * Dos alertas de "vas a perder la racha hoy": una a las 21:00 (todavía hay
    * tiempo de sobra) y otra a las 23:00 (última oportunidad real). Solo
-   * tienen sentido si hoy no se ha practicado y hay una racha activa que
-   * perder — si cualquiera de esas condiciones no se cumple, se cancelan.
+   * tienen sentido si hay una racha activa que perder — si no, se cancelan.
    *
-   * Se reprograman cada vez que se llama sincronizar() (Home, Configuración),
-   * así que apenas el usuario practica, la siguiente sincronización las
-   * cancela solas sin que quede una alerta "vieja" pendiente.
+   * Se programan como RECURRENTES (todos los días a esa hora), igual que el
+   * recordatorio diario, en vez de como un aviso de una sola vez para "hoy".
+   * Antes, al ser de una sola vez, si el usuario no abría la app ese día
+   * nunca quedaban armadas para esa noche, así que en una racha de varios
+   * días sin abrir la app no había ningún aviso previo — recién se enteraba,
+   * demasiado tarde, con el aviso de racha perdida/congelador usado la
+   * siguiente vez que abría la app. Al ser recurrentes siguen sonando esas
+   * noches aunque la app no se abra, aunque el texto (racha, tiempo
+   * restante) quede con el valor de la última vez que se sincronizó.
+   *
+   * Se reprograman cada vez que se llama sincronizar() (Home, Configuración):
+   * apenas el usuario practica o pierde la racha, la siguiente sincronización
+   * las cancela o las actualiza con el dato correcto.
    *
    * Si el usuario recién abre la app después de las 23:00 y todavía no
-   * practicó, la alerta urgente no se pierde en silencio: se dispara casi
-   * de inmediato en vez de esperar a una hora que ya pasó.
+   * practicó, además de dejar armada la alerta urgente para mañana se manda
+   * una ahora mismo para esta noche — si no, la de hoy ya habría "pasado" y
+   * la recién armada no dispararía hasta el día siguiente.
    */
   private async programarAvisoRachaEnRiesgo(rachaActual: number, yaPracticoHoy: boolean) {
     if (rachaActual <= 0 || yaPracticoHoy) {
       await this.cancelar(NotificationsService.ID_RACHA_RIESGO_TEMPRANO);
       await this.cancelar(NotificationsService.ID_RACHA_RIESGO_URGENTE);
+      await this.cancelar(NotificationsService.ID_RACHA_RIESGO_URGENTE_HOY);
       return;
     }
 
@@ -323,26 +335,62 @@ export class NotificationsService {
       const esUltimoTier = i === tiers.length - 1;
       const cuando = new Date(ahora);
       cuando.setHours(tier.hora, tier.minuto, 0, 0);
+      const minutosEnEseMomento = Math.round((medianoche.getTime() - cuando.getTime()) / 60000);
 
-      if (cuando.getTime() > ahora.getTime()) {
-        const minutosEnEseMomento = Math.round((medianoche.getTime() - cuando.getTime()) / 60000);
-        await this.programarUnaAlertaRacha(tier.id, tier.pool, rachaActual, minutosEnEseMomento, cuando);
-        continue;
-      }
+      await this.programarAlertaRachaRecurrente(tier.id, tier.hora, tier.minuto, tier.pool, rachaActual, minutosEnEseMomento);
 
       // Esta hora ya pasó hoy: si es la última alerta y todavía queda un
-      // margen real antes de medianoche, avisar ahora mismo en vez de dejar
-      // pasar la última oportunidad en silencio.
-      const minutosRestantes = Math.round((medianoche.getTime() - ahora.getTime()) / 60000);
-      if (esUltimoTier && minutosRestantes > 2) {
-        await this.programarUnaAlertaRacha(tier.id, tier.pool, rachaActual, minutosRestantes, new Date(Date.now() + 5000));
-      } else {
-        await this.cancelar(tier.id);
+      // margen real antes de medianoche, avisar también ahora mismo para
+      // esta noche (la recurrente recién armada recién dispara mañana).
+      if (esUltimoTier && cuando.getTime() <= ahora.getTime()) {
+        const minutosRestantes = Math.round((medianoche.getTime() - ahora.getTime()) / 60000);
+        if (minutosRestantes > 2) {
+          await this.programarAlertaRachaUnica(
+            NotificationsService.ID_RACHA_RIESGO_URGENTE_HOY,
+            tier.pool,
+            rachaActual,
+            minutosRestantes,
+            new Date(Date.now() + 5000)
+          );
+        } else {
+          await this.cancelar(NotificationsService.ID_RACHA_RIESGO_URGENTE_HOY);
+        }
       }
     }
   }
 
-  private async programarUnaAlertaRacha(id: number, pool: MensajeNotif[], rachaActual: number, minutosRestantes: number, cuando: Date) {
+  /** Arma una de las alertas de racha en riesgo para que se repita todos los
+   * días a la misma hora (no solo hoy) — ver comentario de
+   * `programarAvisoRachaEnRiesgo` sobre por qué. */
+  private async programarAlertaRachaRecurrente(
+    id: number,
+    hora: number,
+    minuto: number,
+    pool: MensajeNotif[],
+    rachaActual: number,
+    minutosRestantes: number
+  ) {
+    await this.cancelar(id);
+    const mensaje = this.elegir(pool);
+    const tiempoTexto = this.formatearTiempoRestante(minutosRestantes);
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id,
+          title: mensaje.title.replace('{n}', String(rachaActual)).replace('{t}', tiempoTexto),
+          body: mensaje.body.replace('{n}', String(rachaActual)).replace('{t}', tiempoTexto),
+          channelId: 'recordatorios',
+          schedule: { on: { hour: hora, minute: minuto }, allowWhileIdle: true },
+          isExactNotification: false,
+          autoCancel: true,
+        },
+      ],
+    }).catch(() => {});
+  }
+
+  /** Aviso de una sola vez para el caso puntual de "hoy ya pasaron las
+   * 23:00 y recién ahora se sincroniza" — ver comentario de arriba. */
+  private async programarAlertaRachaUnica(id: number, pool: MensajeNotif[], rachaActual: number, minutosRestantes: number, cuando: Date) {
     await this.cancelar(id);
     const mensaje = this.elegir(pool);
     const tiempoTexto = this.formatearTiempoRestante(minutosRestantes);
