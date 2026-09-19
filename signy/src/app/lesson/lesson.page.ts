@@ -575,7 +575,7 @@ export class LessonPage implements OnInit, OnDestroy {
     this.xpGanado = xpFinal;
     try {
       await this.contenidoService.marcarSubnivelCompletado(this.userId, this.subnivel.id, xpFinal);
-      const statsFinal = await this.contenidoService.actualizarStatsTrasLeccion(this.userId, xpFinal);
+      const statsFinal = await this.contenidoService.actualizarStatsTrasLeccion(this.userId);
       const { nivelRecienCompletado } = await this.contenidoService.avanzarNivelSiCorresponde(this.userId, this.nivel.id);
 
       if (nivelRecienCompletado) {
