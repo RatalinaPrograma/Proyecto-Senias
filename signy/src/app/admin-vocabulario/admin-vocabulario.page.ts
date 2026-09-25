@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
-import { IonicModule } from '@ionic/angular';
+import { IonicModule, ModalController } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
 import { Nivel, Subnivel, Sena } from '../data/db-types';
@@ -21,6 +21,9 @@ import {
   imageOutline,
   layersOutline,
   alertCircleOutline,
+  sparklesOutline,
+  videocamOutline,
+  hardwareChipOutline,
 } from 'ionicons/icons';
 
 addIcons({
@@ -36,6 +39,9 @@ addIcons({
   'image-outline': imageOutline,
   'layers-outline': layersOutline,
   'alert-circle-outline': alertCircleOutline,
+  'sparkles-outline': sparklesOutline,
+  'videocam-outline': videocamOutline,
+  'hardware-chip-outline': hardwareChipOutline,
 });
 
 /** El input ya filtra por accept="image/*,video/mp4", pero eso es solo una
@@ -122,8 +128,13 @@ export class AdminVocabularioPage implements OnInit {
 
   constructor(
     private supabaseService: SupabaseService,
-    private router: Router
+    private router: Router,
+    private modalCtrl: ModalController
   ) {}
+
+  irAAIStudio() {
+    this.router.navigate(['/admin/ai-studio']);
+  }
 
   async ngOnInit() {
     await this.cargarTodo();

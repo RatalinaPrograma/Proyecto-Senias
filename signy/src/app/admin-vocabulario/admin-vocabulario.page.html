@@ -15,7 +15,10 @@
         <span class="crumb current">{{ subnivelActivo.nombre }}</span>
       </ng-container>
     </div>
-    <div class="spacer"></div>
+    <button class="ai-studio-nav-btn" (click)="irAAIStudio()" title="Abrir Signy AI Studio">
+      <ion-icon name="hardware-chip-outline"></ion-icon>
+      <span>AI Studio</span>
+    </button>
   </div>
 
   <!-- ===== CARGANDO / ERROR ===== -->
@@ -194,7 +197,7 @@
         </div>
         <div class="item-info">
           <p class="item-title">{{ s.palabra }}</p>
-          <p class="item-sub warn" *ngIf="!s.video_url"><ion-icon name="alert-circle-outline"></ion-icon> Sin GIF/foto</p>
+          <p class="item-sub warn" *ngIf="!s.video_url"><ion-icon name="alert-circle-outline"></ion-icon> Sin video</p>
         </div>
         <button class="icon-btn small" (click)="editarSena(s); $event.stopPropagation()" aria-label="Editar">
           <ion-icon name="create-outline"></ion-icon>

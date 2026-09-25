@@ -122,10 +122,6 @@ export class OnboardingPage implements OnInit {
     this.terminar();
   }
 
-  irALab() {
-    this.router.navigate(['/mediapipe-test']);
-  }
-
   private async terminar() {
     await Preferences.set({ key: STORAGE_KEY, value: '1' });
     await this.irADestino();

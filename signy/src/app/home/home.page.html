@@ -26,7 +26,10 @@
           <p>Sigamos aprendiendo LSCh</p>
         </div>
 
-        <button class="fox-badge admin-badge" *ngIf="esAdmin" (click)="irAAdmin()" aria-label="Administrar vocabulario">
+        <button class="fox-badge ai-studio-badge" *ngIf="esAdmin" (click)="irAAIStudio()" aria-label="Signy AI Studio" title="Signy AI Studio">
+          <ion-icon name="hardware-chip-outline"></ion-icon>
+        </button>
+        <button class="fox-badge admin-badge" *ngIf="esAdmin" (click)="irAAdmin()" aria-label="Administrar vocabulario" title="Vocabulario">
           <ion-icon name="construct"></ion-icon>
         </button>
       </div>
@@ -119,20 +122,6 @@
       </div>
     </ng-container>
 
-    <!-- Botón al Laboratorio de Pruebas de MediaPipe -->
-    <div class="lab-card-container">
-      <button class="lab-card" (click)="irALabMediaPipe()">
-        <div class="lab-icon-wrap">
-          <ion-icon name="videocam"></ion-icon>
-        </div>
-        <div class="lab-content">
-          <div class="lab-badge">BETA · VISIÓN ARTIFICIAL</div>
-          <h3>Laboratorio MediaPipe</h3>
-          <p>Pruebas de tracking y reconocimiento de señas en vivo</p>
-        </div>
-        <ion-icon name="arrow-forward" class="lab-arrow"></ion-icon>
-      </button>
-    </div>
 
     <div class="footer-mascot">
       <div class="fox-badge fox-badge-lg">

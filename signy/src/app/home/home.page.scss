@@ -36,8 +36,17 @@
     object-fit: cover;
   }
 
-  &.admin-badge {
+  &.ai-studio-badge {
     margin-left: auto;
+    background: rgba(0, 81, 255, 0.2);
+    border: 1.5px solid #00e5ff;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.45);
+    color: #00e5ff;
+    font-size: 20px;
+  }
+
+  &.admin-badge {
+    margin-left: 6px;
     box-shadow: 0 3px 0 var(--signy-mint-deep, var(--signy-mint));
     color: var(--signy-mint);
     font-size: 20px;

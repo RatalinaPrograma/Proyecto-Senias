@@ -13,9 +13,25 @@ import { GifTileComponent } from '../shared/gif-tile/gif-tile.component';
 import { RachaCalendarComponent, DiaRachaVista } from '../shared/racha-calendar/racha-calendar.component';
 import { ImageCacheService } from '../services/image-cache';
 import { addIcons } from 'ionicons';
-import { close, heart, checkmarkCircle, closeCircle, camera, videocam, volumeHigh, snowOutline, trophy } from 'ionicons/icons';
+import { close, heart, checkmarkCircle, closeCircle, camera, videocam, volumeHigh, snowOutline, trophy, sparklesOutline } from 'ionicons/icons';
+import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+import {
+  ModeloReferenciaSena,
+  Punto3D,
+  compararFrameEstatico,
+  compararSecuenciasDTW,
+  normalizarFrame,
+} from '../utils/gesture-math';
 
-addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, 'close-circle': closeCircle, camera, videocam, 'volume-high': volumeHigh, 'snow-outline': snowOutline, trophy });
+addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, 'close-circle': closeCircle, camera, videocam, 'volume-high': volumeHigh, 'snow-outline': snowOutline, trophy, 'sparkles-outline': sparklesOutline });
+
+const HAND_CONNECTIONS: [number, number][] = [
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  [0, 5], [5, 6], [6, 7], [7, 8],
+  [5, 9], [9, 10], [10, 11], [11, 12],
+  [9, 13], [13, 14], [14, 15], [15, 16],
+  [13, 17], [0, 17], [17, 18], [18, 19], [19, 20],
+];
 
 type Fase = 'cargando' | 'flash' | 'match' | 'quiz' | 'record' | 'complete' | 'nivel' | 'racha' | 'sinvidas' | 'error';
 
@@ -161,7 +177,7 @@ export class LessonPage implements OnInit, OnDestroy {
       : '¡Sigue así, no te detengas!';
   }
 
-  // ---- cámara ----
+  // ---- cámara y Signy Edge AI (MediaPipe + DTW) ----
   camStage: 'idle' | 'requesting' | 'denied' | 'countdown' | 'recording' | 'result' = 'idle';
   camCount = 3;
   camScore = 0;
@@ -169,8 +185,11 @@ export class LessonPage implements OnInit, OnDestroy {
   camMsg = '';
   private stream: MediaStream | null = null;
   private rafId = 0;
-  private prevFrame: Uint8ClampedArray | null = null;
-  private muestras: number[] = [];
+  private handLandmarker: HandLandmarker | null = null;
+  private lastVideoTime = -1;
+  private framesAlumno: number[][] = [];
+  tieneModeloReferencia = false;
+  modeloReferencia: ModeloReferenciaSena | null = null;
 
   constructor(
     private route: ActivatedRoute,
@@ -268,6 +287,11 @@ export class LessonPage implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.detenerCamara();
     if (this.rafId) cancelAnimationFrame(this.rafId);
+    if (this.handLandmarker) {
+      try {
+        this.handLandmarker.close();
+      } catch (e) {}
+    }
     this.imageCacheService.liberarMemoriaRAM();
   }
 
@@ -466,22 +490,84 @@ export class LessonPage implements OnInit, OnDestroy {
     this.estado = null;
   }
 
-  // ---------- Cámara ----------
+  // ---------- Cámara y Signy Edge AI (MediaPipe + DTW) ----------
   get senaCamara(): Sena {
     return this.senas[this.senas.length - 1];
   }
 
+  private cargarModeloReferencia() {
+    this.modeloReferencia = null;
+    this.tieneModeloReferencia = false;
+    if (this.senaCamara?.landmarks_referencia) {
+      try {
+        const mod = typeof this.senaCamara.landmarks_referencia === 'string'
+          ? JSON.parse(this.senaCamara.landmarks_referencia)
+          : this.senaCamara.landmarks_referencia;
+
+        if (mod && Array.isArray(mod.frames) && mod.frames.length > 0) {
+          this.modeloReferencia = mod as ModeloReferenciaSena;
+          this.tieneModeloReferencia = true;
+        }
+      } catch (e) {
+        console.warn('Error al parsear landmarks_referencia:', e);
+      }
+    }
+  }
+
+  private async inicializarMediaPipe() {
+    if (this.handLandmarker) return;
+    try {
+      const vision = await FilesetResolver.forVisionTasks(
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+      );
+      this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+          delegate: 'GPU',
+        },
+        runningMode: 'VIDEO',
+        numHands: 2,
+        minHandDetectionConfidence: 0.5,
+        minHandPresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+    } catch (e) {
+      console.warn('Error al cargar MediaPipe en lección:', e);
+    }
+  }
+
   async iniciarCamara() {
     this.camStage = 'requesting';
+    this.cargarModeloReferencia();
+
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 480 } },
-        audio: false,
-      });
-      if (this.videoRef) {
-        this.videoRef.nativeElement.srcObject = this.stream;
-        await this.videoRef.nativeElement.play();
+      const promesaMediaPipe = this.inicializarMediaPipe();
+
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false,
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: false,
+        });
       }
+
+      await promesaMediaPipe;
+
+      this.stream = stream;
+      if (this.videoRef?.nativeElement) {
+        this.videoRef.nativeElement.srcObject = this.stream;
+        this.videoRef.nativeElement.setAttribute('playsinline', 'true');
+        this.videoRef.nativeElement.setAttribute('webkit-playsinline', 'true');
+        this.videoRef.nativeElement.muted = true;
+        await this.videoRef.nativeElement.play().catch(() => {});
+      }
+
       this.camStage = 'countdown';
       this.contarRegresiva();
     } catch {
@@ -498,63 +584,175 @@ export class LessonPage implements OnInit, OnDestroy {
         this.camStage = 'recording';
         this.grabar();
       }
-    }, 700);
+    }, 800);
   }
 
   private grabar() {
-    this.muestras = [];
-    this.prevFrame = null;
+    this.framesAlumno = [];
+    this.lastVideoTime = -1;
     const inicio = performance.now();
-    const duracion = 2500;
+    const duracion = 2800; // ~2.8 segundos de captura continua
 
-    const sample = () => {
+    const loop = () => {
       const video = this.videoRef?.nativeElement;
       const canvas = this.canvasRef?.nativeElement;
-      if (video && canvas && video.videoWidth) {
-        const ctx = canvas.getContext('2d')!;
-        canvas.width = 48;
-        canvas.height = 36;
-        ctx.drawImage(video, 0, 0, 48, 36);
-        const frame = ctx.getImageData(0, 0, 48, 36).data;
-        if (this.prevFrame) {
-          let diff = 0;
-          for (let i = 0; i < frame.length; i += 4) {
-            diff += Math.abs(frame[i] - this.prevFrame[i]);
-          }
-          this.muestras.push(diff);
+
+      if (video && canvas && this.camStage === 'recording' && video.videoWidth > 0) {
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
         }
-        this.prevFrame = frame;
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          if (this.handLandmarker) {
+            const nowInMs = Date.now();
+            if (nowInMs !== this.lastVideoTime) {
+              this.lastVideoTime = nowInMs;
+              const results = this.handLandmarker.detectForVideo(video, nowInMs);
+
+              if (results?.landmarks && results.landmarks.length > 0) {
+                this.dibujarEsqueleto(ctx, canvas.width, canvas.height, results.landmarks);
+
+                const manos: Punto3D[][] = results.landmarks.map((hand: any[]) =>
+                  hand.map((p) => ({ x: p.x, y: p.y, z: p.z || 0 }))
+                );
+                const frameNorm = normalizarFrame(
+                  manos,
+                  this.modeloReferencia?.manosRequeridas || 1
+                );
+                if (frameNorm) {
+                  this.framesAlumno.push(frameNorm);
+                }
+              }
+            }
+          }
+        }
       }
+
       if (performance.now() - inicio < duracion) {
-        this.rafId = requestAnimationFrame(sample);
+        this.rafId = requestAnimationFrame(loop);
       } else {
         this.terminarGrabacion();
       }
     };
-    this.rafId = requestAnimationFrame(sample);
+
+    this.rafId = requestAnimationFrame(loop);
+  }
+
+  private dibujarEsqueleto(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    allLandmarks: any[]
+  ) {
+    for (const landmarks of allLandmarks) {
+      ctx.strokeStyle = '#2CA6A4';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      for (const [start, end] of HAND_CONNECTIONS) {
+        const p1 = landmarks[start];
+        const p2 = landmarks[end];
+        ctx.beginPath();
+        ctx.moveTo(p1.x * width, p1.y * height);
+        ctx.lineTo(p2.x * width, p2.y * height);
+        ctx.stroke();
+      }
+
+      for (let i = 0; i < landmarks.length; i++) {
+        const pt = landmarks[i];
+        const x = pt.x * width;
+        const y = pt.y * height;
+        ctx.beginPath();
+        if ([4, 8, 12, 16, 20].includes(i)) {
+          ctx.arc(x, y, 5, 0, 2 * Math.PI);
+          ctx.fillStyle = '#F2701A';
+        } else {
+          ctx.arc(x, y, 3, 0, 2 * Math.PI);
+          ctx.fillStyle = '#FFFFFF';
+        }
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#0A1526';
+        ctx.stroke();
+      }
+    }
   }
 
   private async terminarGrabacion() {
-    const avg = this.muestras.length ? this.muestras.reduce((a, b) => a + b, 0) / this.muestras.length : 0;
-    const normalizado = Math.min(100, Math.round((avg / 4000) * 100));
-    const paso = normalizado > 18;
-    const pool = paso ? MENSAJES_OK : MENSAJES_MAL;
-    this.camMsg = pool[Math.floor(Math.random() * pool.length)];
-    this.camScore = normalizado;
-    this.camPassed = paso;
-    this.camStage = 'result';
     this.detenerCamara();
 
-    // Nota: score_similitud hoy viene de una heurística de movimiento en
-    // cámara, no de comparación real de landmarks (eso es MediaPipe Hands,
-    // pendiente). El campo en la base de datos ya está listo para cuando
-    // se conecte el modelo real.
-    await this.contenidoService.registrarIntento(this.userId, this.senaCamara.id, this.camPassed, this.camScore);
+    const canvas = this.canvasRef?.nativeElement;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    if (this.tieneModeloReferencia && this.modeloReferencia) {
+      // EVALUACIÓN REAL CON SIGNY EDGE AI (DTW / Estática)
+      if (this.framesAlumno.length < 5) {
+        this.camPassed = false;
+        this.camScore = 0;
+        this.camMsg = 'No pudimos registrar suficientes movimientos de tu mano. Intenta centrar tu mano.';
+      } else if (this.modeloReferencia.tipo === 'estatica') {
+        let mejorSimilitud = 0;
+        for (const frame of this.framesAlumno) {
+          const res = compararFrameEstatico(
+            this.modeloReferencia.frames[0],
+            frame,
+            this.modeloReferencia.umbralRecomendado || 75
+          );
+          if (res.similitudPct > mejorSimilitud) {
+            mejorSimilitud = res.similitudPct;
+          }
+        }
+        this.camScore = mejorSimilitud;
+        this.camPassed = this.camScore >= (this.modeloReferencia.umbralRecomendado || 75);
+        this.camMsg = this.camPassed
+          ? '¡Excelente postura! Coincide con el modelo experto.'
+          : 'Casi, la postura de tus dedos varió un poco. ¡Inténtalo de nuevo!';
+      } else {
+        const resultado = compararSecuenciasDTW(
+          this.modeloReferencia.frames,
+          this.framesAlumno,
+          this.modeloReferencia.umbralRecomendado || 70
+        );
+        this.camScore = resultado.similitudPct;
+        this.camPassed = resultado.esCoincidente;
+        this.camMsg = this.camPassed
+          ? '¡Excelente! Movimiento reconocido con el modelo experto.'
+          : 'La trayectoria o ritmo varió. ¡Prueba a hacer el gesto de nuevo!';
+      }
+    } else {
+      // Fallback si la seña aún no tiene un modelo grabado
+      const huboDeteccion = this.framesAlumno.length >= 8;
+      this.camScore = huboDeteccion ? 80 : 20;
+      this.camPassed = huboDeteccion;
+      this.camMsg = huboDeteccion
+        ? '¡Buena práctica de manos! (Seña en proceso de calibración)'
+        : 'No logramos detectar tus manos con claridad frente a la cámara.';
+    }
+
+    this.camStage = 'result';
+
+    // Registrar intento con el score real en la base de datos
+    await this.contenidoService.registrarIntento(
+      this.userId,
+      this.senaCamara.id,
+      this.camPassed,
+      this.camScore
+    );
     this.contenidoService.otorgarLogroPorCodigo(this.userId, 'practica_camara').catch(console.error);
   }
 
   private detenerCamara() {
-    this.stream?.getTracks().forEach(t => t.stop());
+    if (this.rafId) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = 0;
+    }
+    this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
   }
 

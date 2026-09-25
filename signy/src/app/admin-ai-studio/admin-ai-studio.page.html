@@ -1,0 +1,347 @@
+<ion-content [fullscreen]="true" class="ai-studio-content">
+  <!-- Topbar Futurista -->
+  <div class="studio-topbar">
+    <button class="cyber-btn-back" (click)="volver()" aria-label="Volver">
+      <ion-icon name="arrow-back"></ion-icon>
+    </button>
+    <div class="studio-brand">
+      <div class="brand-title">
+        <ion-icon name="hardware-chip-outline" class="brand-icon"></ion-icon>
+        <span>SIGNY AI STUDIO</span>
+      </div>
+      <p class="brand-subtitle">NEURAL TOPOLOGY // EDGE DTW RECOGNITION</p>
+    </div>
+    <div class="studio-top-actions">
+      <button class="cyber-link-btn" (click)="irAVocabulario()">
+        <ion-icon name="layers-outline"></ion-icon>
+        <span>Vocabulario</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Estado de Carga / Error -->
+  <div class="cyber-state-box" *ngIf="cargando">
+    <ion-spinner name="crescent" color="primary"></ion-spinner>
+    <p>Cargando topología neuronal y modelos…</p>
+  </div>
+
+  <div class="cyber-state-box error" *ngIf="!cargando && error">
+    <ion-icon name="alert-circle-outline"></ion-icon>
+    <p>{{ error }}</p>
+    <button class="cyber-btn-primary" (click)="cargarDatos()">Reintentar</button>
+  </div>
+
+  <ng-container *ngIf="!cargando && !error">
+    <!-- Panel de Métricas de la Red Neuronal -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <span class="metric-val">{{ totalSenas }}</span>
+        <span class="metric-lbl">Total Señas</span>
+      </div>
+      <div class="metric-card calibrated">
+        <span class="metric-val">{{ calibradasCount }}</span>
+        <span class="metric-lbl">Calibradas</span>
+      </div>
+      <div class="metric-card pending">
+        <span class="metric-val">{{ pendientesCount }}</span>
+        <span class="metric-lbl">Pendientes</span>
+      </div>
+      <div class="metric-card progress-card">
+        <div class="progress-info">
+          <span class="metric-val">{{ porcentajeCalibrado }}%</span>
+          <span class="metric-lbl">Cobertura IA</span>
+        </div>
+        <div class="cyber-progress-bar">
+          <div class="cyber-progress-fill" [style.width.%]="porcentajeCalibrado"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Selector de Modo de Visualización (3 Pestañas) -->
+    <div class="studio-nav-tabs">
+      <button
+        class="tab-btn"
+        [class.active]="vistaModo === 'grafo'"
+        (click)="cambiarVista('grafo')">
+        <ion-icon name="hardware-chip-outline"></ion-icon>
+        <span>Red Neuronal</span>
+      </button>
+      <button
+        class="tab-btn"
+        [class.active]="vistaModo === 'lista'"
+        (click)="cambiarVista('lista')">
+        <ion-icon name="flash-outline"></ion-icon>
+        <span>Catálogo ({{ senasFiltradas.length }})</span>
+      </button>
+      <button
+        class="tab-btn tab-btn-lab"
+        [class.active]="vistaModo === 'lab'"
+        (click)="cambiarVista('lab')">
+        <ion-icon name="videocam-outline"></ion-icon>
+        <span>Lab en Vivo</span>
+      </button>
+    </div>
+
+    <!-- ================= VISTA 1: GRAFO DE RED NEURONAL ================= -->
+    <div class="graph-section" [class.hidden-tab]="vistaModo !== 'grafo'">
+      <div class="graph-container">
+        <canvas
+          #neuralCanvas
+          class="neural-canvas"
+          (click)="onCanvasClick($event)">
+        </canvas>
+
+        <div class="graph-overlay-hint">
+          <span>Toca un nodo de seña para calibrar</span>
+        </div>
+      </div>
+
+      <!-- Tarjeta Flotante del Nodo Seleccionado -->
+      <div class="selected-node-card" *ngIf="senaSeleccionada">
+        <div class="node-info">
+          <div class="node-header">
+            <h3>{{ senaSeleccionada.palabra }}</h3>
+            <span
+              class="node-badge"
+              [class.calibrated]="senaSeleccionada.landmarks_referencia"
+              [class.pending]="!senaSeleccionada.landmarks_referencia">
+              {{ senaSeleccionada.landmarks_referencia ? '🟢 Calibrada' : '🟡 Pendiente' }}
+            </span>
+          </div>
+          <p class="node-sub">Subnivel: {{ nombreSubnivelDe(senaSeleccionada.subnivel_id) }}</p>
+        </div>
+
+        <button class="cyber-btn-action" (click)="calibrarSena(senaSeleccionada)">
+          <ion-icon name="videocam-outline"></ion-icon>
+          <span>{{ senaSeleccionada.landmarks_referencia ? 'Re-calibrar' : 'Calibrar Seña' }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ================= VISTA 2: CATÁLOGO RÁPIDO ================= -->
+    <div class="list-section" *ngIf="vistaModo === 'lista'">
+      <!-- Buscador y Filtros -->
+      <div class="search-filter-bar">
+        <div class="search-box">
+          <ion-icon name="search-outline"></ion-icon>
+          <input
+            type="text"
+            placeholder="Buscar por palabra (ej. Hola, Casa)…"
+            [(ngModel)]="busqueda" />
+        </div>
+
+        <div class="filter-pills">
+          <button
+            class="pill"
+            [class.active]="filtroEstado === 'todas'"
+            (click)="filtroEstado = 'todas'">
+            Todas
+          </button>
+          <button
+            class="pill pill-calibrated"
+            [class.active]="filtroEstado === 'calibradas'"
+            (click)="filtroEstado = 'calibradas'">
+            Calibradas ({{ calibradasCount }})
+          </button>
+          <button
+            class="pill pill-pending"
+            [class.active]="filtroEstado === 'pendientes'"
+            (click)="filtroEstado = 'pendientes'">
+            Pendientes ({{ pendientesCount }})
+          </button>
+        </div>
+      </div>
+
+      <!-- Lista de Señas -->
+      <div class="signs-list">
+        <div
+          class="sign-row-card"
+          *ngFor="let s of senasFiltradas"
+          [class.is-calibrated]="s.landmarks_referencia">
+          <div class="sign-left">
+            <span class="sign-status-dot" [class.active]="s.landmarks_referencia"></span>
+            <div>
+              <p class="sign-word">{{ s.palabra }}</p>
+              <p class="sign-category">{{ nombreSubnivelDe(s.subnivel_id) }}</p>
+            </div>
+          </div>
+
+          <div class="sign-right">
+            <button
+              class="btn-row-calibrate"
+              [class.calibrated]="s.landmarks_referencia"
+              (click)="calibrarSena(s)">
+              <ion-icon name="videocam-outline"></ion-icon>
+              <span>{{ s.landmarks_referencia ? 'Calibrada' : 'Entrenar' }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="empty-list" *ngIf="!senasFiltradas.length">
+          <ion-icon name="search-outline"></ion-icon>
+          <p>No se encontraron señas con estos filtros.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= VISTA 3: LABORATORIO EN VIVO ================= -->
+    <div class="lab-section" *ngIf="vistaModo === 'lab'">
+      <div class="lab-header-banner">
+        <div class="lab-status-badge" [class.active]="manosEnLaboratorio > 0">
+          <span class="status-indicator-dot"></span>
+          <span>{{ manosEnLaboratorio > 0 ? (manosEnLaboratorio + ' mano(s) detectada(s)') : 'Buscando manos en cuadro…' }}</span>
+        </div>
+        <button class="cyber-btn-cam" (click)="alternarCamaraLab()" title="Cambiar cámara">
+          <ion-icon name="camera-reverse-outline"></ion-icon>
+          <span>{{ labFacingMode === 'user' ? 'Frontal' : 'Trasera' }}</span>
+        </button>
+      </div>
+
+      <!-- Visor de Cámara con Skeleton Overlay -->
+      <div class="lab-viewport">
+        <div class="hud-corner top-left"></div>
+        <div class="hud-corner top-right"></div>
+        <div class="hud-corner bottom-left"></div>
+        <div class="hud-corner bottom-right"></div>
+        <div class="hud-scanline"></div>
+
+        <video
+          #labVideo
+          class="lab-video"
+          [class.mirrored]="labFacingMode === 'user'"
+          autoplay
+          playsinline
+          muted>
+        </video>
+        <canvas
+          #labCanvas
+          class="lab-canvas"
+          [class.mirrored]="labFacingMode === 'user'">
+        </canvas>
+
+        <div class="lab-overlay-loader" *ngIf="labEstado === 'cargando'">
+          <ion-spinner name="crescent" color="primary"></ion-spinner>
+          <p>Inicializando sensor óptico & MediaPipe Vision…</p>
+        </div>
+
+        <div class="lab-overlay-error" *ngIf="labEstado === 'error'">
+          <ion-icon name="alert-circle-outline"></ion-icon>
+          <p>{{ labMensajeError || 'No se pudo acceder a la cámara' }}</p>
+          <button class="cyber-btn-primary" (click)="iniciarLaboratorioReconocimiento()">Reintentar</button>
+        </div>
+      </div>
+
+      <!-- Panel de Predicciones en Vivo del Modelo -->
+      <div class="lab-prediction-dashboard">
+        <!-- Top Match Card -->
+        <div class="top-match-card" [class.matched]="mejorPrediccion && mejorPrediccion.esCoincidente">
+          <div class="match-meta">
+            <span class="match-subtitle">PREDICCIÓN EN TIEMPO REAL</span>
+            <span class="match-type-pill" *ngIf="mejorPrediccion">
+              {{ mejorPrediccion.tipo === 'estatica' ? 'Estática (1 Frame)' : 'Dinámica (30 Frames DTW)' }}
+            </span>
+          </div>
+
+          <div class="match-body">
+            <div class="match-word">
+              {{ mejorPrediccion ? mejorPrediccion.palabra : (manosEnLaboratorio > 0 ? 'Analizando movimiento…' : 'Coloca tus manos frente a la cámara') }}
+            </div>
+            <div class="match-percentage" *ngIf="mejorPrediccion">
+              {{ mejorPrediccion.similitud }}%
+            </div>
+          </div>
+
+          <!-- Barra de confianza DTW -->
+          <div class="confidence-bar-wrap" *ngIf="mejorPrediccion">
+            <div
+              class="confidence-bar-fill"
+              [class.matched]="mejorPrediccion.esCoincidente"
+              [style.width.%]="mejorPrediccion.similitud">
+            </div>
+          </div>
+
+          <div class="match-status-tag" *ngIf="mejorPrediccion">
+            <ion-icon [name]="mejorPrediccion.esCoincidente ? 'checkmark-circle' : 'flash-outline'"></ion-icon>
+            <span>
+              {{ mejorPrediccion.esCoincidente ? '¡Seña coincidente detectada!' : 'Analizando patrón… (umbral > ' + (mejorPrediccion.tipo === 'estatica' ? '75%' : '70%') + ')' }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Ranking en tiempo real de alternativas -->
+        <div class="ranking-panel" *ngIf="prediccionesEnVivo.length > 1">
+          <h4 class="ranking-title">TOP COINCIDENCIAS EN EL MODELO</h4>
+          <div class="ranking-list">
+            <div class="ranking-item" *ngFor="let pred of prediccionesEnVivo; let i = index">
+              <span class="rank-pos">#{{ i + 1 }}</span>
+              <span class="rank-word">{{ pred.palabra }}</span>
+              <div class="rank-bar-wrap">
+                <div class="rank-bar-fill" [style.width.%]="pred.similitud"></div>
+              </div>
+              <span class="rank-score">{{ pred.similitud }}%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alerta si no hay señas calibradas -->
+        <div class="no-calibrated-alert" *ngIf="calibradasCount === 0">
+          <ion-icon name="alert-circle-outline"></ion-icon>
+          <div>
+            <p class="alert-title">Modelo sin datos calibrados</p>
+            <p class="alert-desc">
+              Aún no has grabado vectores de referencia. Ve a "Red Neuronal" o "Catálogo", toca una seña y calíbrala con tu cámara para que el laboratorio pueda reconocerla.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- Botón Flotante para Agregar Seña Rápida (sólo en vista grafo o lista) -->
+  <button class="fab-add-sign" *ngIf="vistaModo !== 'lab'" (click)="abrirModalCrear()" title="Agregar nueva seña">
+    <ion-icon name="add-outline"></ion-icon>
+    <span>Nueva Seña</span>
+  </button>
+
+  <!-- Modal Rápido para Crear Seña y Conectar -->
+  <div class="cyber-modal-backdrop" *ngIf="modalCrearAbierto">
+    <div class="cyber-modal">
+      <div class="modal-header">
+        <h3>+ Conectar Nueva Seña al Modelo</h3>
+        <button class="btn-close-modal" (click)="cerrarModalCrear()">
+          <ion-icon name="close-outline"></ion-icon>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <label>Palabra o Gesto:</label>
+        <input
+          type="text"
+          class="cyber-input"
+          placeholder="Ej: Buenos Días, Gracias..."
+          [(ngModel)]="nuevaPalabra" />
+
+        <label>Asignar a Subnivel:</label>
+        <select class="cyber-select" [(ngModel)]="nuevoSubnivelId">
+          <option *ngFor="let sub of subniveles" [value]="sub.id">
+            {{ sub.nombre }}
+          </option>
+        </select>
+        <p class="modal-hint">
+          Al guardar, se abrirá la cámara inmediatamente para que grabes los vectores de esta seña.
+        </p>
+      </div>
+
+      <div class="modal-footer">
+        <button class="cyber-btn-cancel" (click)="cerrarModalCrear()">Cancelar</button>
+        <button
+          class="cyber-btn-primary"
+          [disabled]="!nuevaPalabra.trim() || !nuevoSubnivelId || guardandoNueva"
+          (click)="guardarYCalibrarNueva()">
+          <ion-icon name="sparkles-outline"></ion-icon>
+          <span>{{ guardandoNueva ? 'Creando…' : 'Crear y Calibrar' }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</ion-content>

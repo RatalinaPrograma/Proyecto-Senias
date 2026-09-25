@@ -1,0 +1,450 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0a1526;
+  color: #f7f5f0;
+}
+
+.trainer-header {
+  background: #0d1b30;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+  .trainer-toolbar {
+    --background: transparent;
+    --color: #ffffff;
+    --min-height: 52px;
+
+    ion-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      strong {
+        color: #f2701a;
+      }
+    }
+  }
+
+  .icon-btn-close {
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 1.3rem;
+    cursor: pointer;
+    margin-right: 8px;
+
+    &:active {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  }
+}
+
+.config-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px 12px;
+  background: #0d1b30;
+  overflow-x: auto;
+
+  .config-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+  }
+
+  .pill-selector {
+    display: flex;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 20px;
+    padding: 2px;
+
+    .pill-btn {
+      background: transparent;
+      border: none;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+
+      &.active {
+        background: #2ca6a4;
+        color: #ffffff;
+      }
+    }
+  }
+
+  .flip-btn {
+    margin-left: auto;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    color: #ffffff;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    cursor: pointer;
+
+    &:active {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  }
+}
+
+.trainer-content {
+  --background: #000000;
+  height: 100%;
+}
+
+.camera-viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #000000;
+
+  .video-feed,
+  .canvas-feed {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .video-feed.mirror,
+  .canvas-feed.mirror {
+    transform: scaleX(-1);
+  }
+
+  .canvas-feed {
+    z-index: 2;
+    pointer-events: none;
+  }
+}
+
+.status-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 21, 38, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 24px;
+
+  .status-card {
+    text-align: center;
+    color: #ffffff;
+
+    p {
+      margin-top: 12px;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    &.error {
+      color: #ff5252;
+      ion-icon {
+        font-size: 3rem;
+      }
+    }
+  }
+}
+
+.hand-indicator {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 5;
+
+  .badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    backdrop-filter: blur(8px);
+
+    &.badge-ok {
+      background: rgba(44, 166, 164, 0.85);
+      color: #ffffff;
+    }
+
+    &.badge-wait {
+      background: rgba(242, 112, 26, 0.85);
+      color: #ffffff;
+    }
+  }
+}
+
+.countdown-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 8;
+
+  .countdown-number {
+    font-size: 6rem;
+    font-weight: 900;
+    color: #f2701a;
+    animation: pulse 1s infinite alternate;
+  }
+
+  .countdown-text {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin-top: 8px;
+  }
+}
+
+@keyframes pulse {
+  from {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+.recording-overlay {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  left: 16px;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  .rec-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(220, 38, 38, 0.9);
+    color: #ffffff;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+
+    .rec-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ffffff;
+      animation: blink 0.7s infinite alternate;
+    }
+  }
+
+  .rec-progress-bar {
+    width: 80%;
+    max-width: 320px;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    margin-top: 12px;
+    overflow: hidden;
+
+    .rec-fill {
+      height: 100%;
+      background: #f2701a;
+      transition: width 0.1s linear;
+    }
+  }
+
+  .rec-hint {
+    margin-top: 6px;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 600;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  }
+}
+
+@keyframes blink {
+  from { opacity: 0.2; }
+  to { opacity: 1; }
+}
+
+.test-panel {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  background: rgba(13, 27, 48, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 14px 18px;
+  z-index: 6;
+
+  .test-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+
+    .test-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.8);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .test-score {
+      font-size: 0.95rem;
+      font-weight: 800;
+
+      &.pass {
+        color: #2ca6a4;
+      }
+
+      &.fail {
+        color: #f2701a;
+      }
+    }
+  }
+
+  .test-progress-bar {
+    width: 100%;
+    height: 10px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 6px;
+
+    .test-fill {
+      height: 100%;
+      transition: width 0.15s ease-out;
+
+      &.pass {
+        background: #2ca6a4;
+      }
+
+      &.fail {
+        background: #f2701a;
+      }
+    }
+  }
+
+  .test-feedback {
+    margin: 0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #2ca6a4;
+
+    &.fail {
+      color: rgba(255, 255, 255, 0.7);
+    }
+  }
+}
+
+.trainer-footer {
+  background: #0d1b30;
+  padding: 12px 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+
+  .footer-info {
+    text-align: center;
+    margin-bottom: 10px;
+
+    .info-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #2ca6a4;
+      background: rgba(44, 166, 164, 0.12);
+      padding: 4px 12px;
+      border-radius: 12px;
+    }
+  }
+
+  .footer-actions {
+    display: flex;
+    gap: 12px;
+
+    .btn-action {
+      flex: 1;
+      height: 48px;
+      border: none;
+      border-radius: 14px;
+      font-size: 0.95rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+    }
+
+    .btn-record {
+      background: #f2701a;
+      color: #ffffff;
+      box-shadow: 0 4px 0 #c6560e;
+
+      &:active:not(:disabled) {
+        transform: translateY(2px);
+        box-shadow: 0 2px 0 #c6560e;
+      }
+    }
+
+    .btn-save {
+      background: #2ca6a4;
+      color: #ffffff;
+      box-shadow: 0 4px 0 #1f7e7c;
+
+      &:active:not(:disabled) {
+        transform: translateY(2px);
+        box-shadow: 0 2px 0 #1f7e7c;
+      }
+    }
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}

@@ -120,10 +120,6 @@ export class LoginPage implements OnDestroy {
     this.router.navigate(['/auth/recuperar']);
   }
 
-  irALab() {
-    this.router.navigate(['/mediapipe-test']);
-  }
-
   ngOnDestroy() {
     this.form.reset();
     this.errorMsg = '';

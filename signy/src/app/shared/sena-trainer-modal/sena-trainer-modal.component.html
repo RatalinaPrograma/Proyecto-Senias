@@ -1,0 +1,173 @@
+<ion-header class="ion-no-border trainer-header">
+  <ion-toolbar class="trainer-toolbar">
+    <ion-title>Entrenar Seña: <strong>{{ sena.palabra }}</strong></ion-title>
+    <ion-buttons slot="end">
+      <button class="icon-btn-close" (click)="cerrar()" aria-label="Cerrar">
+        <ion-icon name="close-outline"></ion-icon>
+      </button>
+    </ion-buttons>
+  </ion-toolbar>
+
+  <!-- Barra de Configuración de la Seña -->
+  <div class="config-bar">
+    <div class="config-group">
+      <label>Tipo:</label>
+      <div class="pill-selector">
+        <button
+          type="button"
+          class="pill-btn"
+          [class.active]="tipoSena === 'dinamica'"
+          [disabled]="estadoGrabacion === 'grabando'"
+          (click)="tipoSena = 'dinamica'">
+          Dinámica (30 frames)
+        </button>
+        <button
+          type="button"
+          class="pill-btn"
+          [class.active]="tipoSena === 'estatica'"
+          [disabled]="estadoGrabacion === 'grabando'"
+          (click)="tipoSena = 'estatica'">
+          Fija (Estática)
+        </button>
+      </div>
+    </div>
+
+    <div class="config-group">
+      <label>Manos:</label>
+      <div class="pill-selector">
+        <button
+          type="button"
+          class="pill-btn"
+          [class.active]="manosRequeridas === 1"
+          [disabled]="estadoGrabacion === 'grabando'"
+          (click)="manosRequeridas = 1">
+          1 Mano
+        </button>
+        <button
+          type="button"
+          class="pill-btn"
+          [class.active]="manosRequeridas === 2"
+          [disabled]="estadoGrabacion === 'grabando'"
+          (click)="manosRequeridas = 2">
+          2 Manos
+        </button>
+      </div>
+    </div>
+
+    <button class="flip-btn" (click)="alternarCamara()" aria-label="Cambiar cámara">
+      <ion-icon name="camera-reverse-outline"></ion-icon>
+    </button>
+  </div>
+</ion-header>
+
+<ion-content class="trainer-content" [scrollY]="false">
+  <!-- Visor de Cámara y Canvas -->
+  <div class="camera-viewport">
+    <video
+      #video
+      class="video-feed"
+      [class.mirror]="facingMode === 'user'"
+      playsinline
+      webkit-playsinline
+      muted>
+    </video>
+
+    <canvas
+      #canvas
+      class="canvas-feed"
+      [class.mirror]="facingMode === 'user'">
+    </canvas>
+
+    <!-- Estado del Modelo / Cámara -->
+    <div class="status-overlay" *ngIf="estadoModelo !== 'listo' || estadoCamara !== 'activa'">
+      <div class="status-card" *ngIf="estadoModelo === 'descargando'">
+        <ion-spinner name="crescent" color="primary"></ion-spinner>
+        <p>Cargando MediaPipe HandLandmarker…</p>
+      </div>
+
+      <div class="status-card error" *ngIf="estadoModelo === 'error' || estadoCamara === 'denegada'">
+        <ion-icon name="alert-circle"></ion-icon>
+        <p>{{ mensajeError }}</p>
+      </div>
+    </div>
+
+    <!-- Indicador de detección de manos en vivo -->
+    <div class="hand-indicator" *ngIf="estadoCamara === 'activa'">
+      <span class="badge" [class.badge-ok]="manosDetectadasCount >= manosRequeridas" [class.badge-wait]="manosDetectadasCount < manosRequeridas">
+        {{ manosDetectadasCount >= manosRequeridas ? '🟢 ' + manosDetectadasCount + ' mano(s) lista(s)' : '🟡 Coloca ' + (manosRequeridas === 1 ? '1 mano' : '2 manos') }}
+      </span>
+    </div>
+
+    <!-- Overlay de Cuenta Atrás -->
+    <div class="countdown-overlay" *ngIf="estadoGrabacion === 'cuenta_atras'">
+      <div class="countdown-number">{{ cuentaAtras }}</div>
+      <p class="countdown-text">¡Prepárate para hacer la seña!</p>
+    </div>
+
+    <!-- Overlay de Grabación en Progreso -->
+    <div class="recording-overlay" *ngIf="estadoGrabacion === 'grabando'">
+      <div class="rec-badge">
+        <span class="rec-dot"></span>
+        GRABANDO {{ progresoGrabacion }}%
+      </div>
+      <div class="rec-progress-bar">
+        <div class="rec-fill" [style.width.%]="progresoGrabacion"></div>
+      </div>
+      <p class="rec-hint">Haz la seña "{{ sena.palabra }}" de forma fluida</p>
+    </div>
+
+    <!-- Panel de Validación / Prueba en Vivo -->
+    <div class="test-panel" *ngIf="modoPruebaActivo && resultadoEnVivo">
+      <div class="test-header">
+        <span class="test-title">Prueba en Vivo (DTW)</span>
+        <span class="test-score" [class.pass]="resultadoEnVivo.esCoincidente" [class.fail]="!resultadoEnVivo.esCoincidente">
+          {{ resultadoEnVivo.similitudPct }}% Coincidencia
+        </span>
+      </div>
+      <div class="test-progress-bar">
+        <div
+          class="test-fill"
+          [style.width.%]="resultadoEnVivo.similitudPct"
+          [class.pass]="resultadoEnVivo.esCoincidente"
+          [class.fail]="!resultadoEnVivo.esCoincidente">
+        </div>
+      </div>
+      <p class="test-feedback" *ngIf="resultadoEnVivo.esCoincidente">
+        ✅ ¡Excelente! La seña coincide con el vector de referencia.
+      </p>
+      <p class="test-feedback fail" *ngIf="!resultadoEnVivo.esCoincidente">
+        Haz la seña frente a la cámara para probar la coincidencia en tiempo real.
+      </p>
+    </div>
+  </div>
+</ion-content>
+
+<ion-footer class="trainer-footer">
+  <div class="footer-info" *ngIf="modeloExistente && estadoGrabacion !== 'grabando'">
+    <span class="info-badge">
+      <ion-icon name="checkmark-circle"></ion-icon>
+      Modelo guardado ({{ modeloExistente.totalFrames }} frames · {{ modeloExistente.tipo }})
+    </span>
+  </div>
+
+  <div class="footer-actions">
+    <!-- Botón de Iniciar Grabación -->
+    <button
+      class="btn-action btn-record"
+      [disabled]="estadoGrabacion === 'grabando' || estadoCamara !== 'activa' || manosDetectadasCount < manosRequeridas"
+      (click)="iniciarCuentaAtras()">
+      <ion-icon [name]="estadoGrabacion === 'grabado' ? 'refresh-outline' : 'radio-button-on-outline'"></ion-icon>
+      <span>{{ estadoGrabacion === 'grabado' ? 'Re-grabar Seña' : 'Grabar Seña' }}</span>
+    </button>
+
+    <!-- Botón de Guardar en Supabase -->
+    <button
+      class="btn-action btn-save"
+      *ngIf="estadoGrabacion === 'grabado'"
+      [disabled]="guardando"
+      (click)="guardarModelo()">
+      <ion-icon [name]="guardando ? 'refresh-outline' : 'save-outline'" [class.spin]="guardando"></ion-icon>
+      <span>{{ guardando ? 'Guardando…' : 'Guardar Modelo' }}</span>
+    </button>
+  </div>
+</ion-footer>

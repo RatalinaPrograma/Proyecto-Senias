@@ -514,3 +514,222 @@
   border-radius: 12px;
   background: var(--signy-ink-deep);
 }
+
+// ---------- Badges y acciones de IA en lista de señas ----------
+.item-tags-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  flex-wrap: wrap;
+
+  .item-sub {
+    margin: 0;
+  }
+}
+
+.ai-badge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+
+  &.calibrated {
+    background: rgba(44, 166, 164, 0.18);
+    color: var(--signy-mint);
+    border: 1px solid rgba(44, 166, 164, 0.35);
+  }
+
+  &.pending {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--signy-muted);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  ion-icon {
+    font-size: 12px;
+  }
+}
+
+.ai-action-btn {
+  background: var(--signy-ink-deep);
+  color: var(--signy-muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+
+  &.calibrated {
+    color: var(--signy-mint);
+    border-color: rgba(44, 166, 164, 0.4);
+    background: rgba(44, 166, 164, 0.12);
+  }
+
+  &:active {
+    transform: scale(0.92);
+  }
+}
+
+// ---------- Tarjeta de Calibración IA en formulario ----------
+.form-ai-card {
+  background: var(--signy-ink-deep);
+  border: 1px solid rgba(44, 166, 164, 0.25);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+
+  .form-ai-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    .form-ai-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Baloo 2', sans-serif;
+      font-weight: 700;
+      color: var(--signy-cream);
+      font-size: 14px;
+
+      ion-icon {
+        color: var(--signy-mint);
+        font-size: 16px;
+      }
+    }
+
+    .ai-status-pill {
+      font-family: 'Manrope', sans-serif;
+      font-size: 10.5px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--signy-muted);
+
+      &.calibrated {
+        background: rgba(44, 166, 164, 0.2);
+        color: var(--signy-mint);
+        border: 1px solid rgba(44, 166, 164, 0.4);
+      }
+    }
+  }
+
+  .form-ai-desc {
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    color: var(--signy-muted);
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  .btn-calibrar-ai {
+    margin-top: 4px;
+    background: var(--signy-mint);
+    color: #ffffff;
+    border: none;
+    border-radius: 12px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 var(--signy-mint-deep);
+    transition: all 0.15s ease;
+
+    &:active {
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 var(--signy-mint-deep);
+    }
+
+    ion-icon {
+      font-size: 17px;
+    }
+  }
+}
+
+// ---------- Accesos directos a Signy AI Studio ----------
+.ai-studio-nav-btn {
+  margin-left: auto;
+  background: rgba(0, 81, 255, 0.15);
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  color: #00e5ff;
+  border-radius: 12px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.25);
+  transition: all 0.2s ease;
+
+  &:active {
+    transform: scale(0.94);
+    background: rgba(0, 229, 255, 0.25);
+  }
+
+  ion-icon {
+    font-size: 16px;
+  }
+}
+
+.ai-studio-banner {
+  background: linear-gradient(135deg, rgba(3, 11, 23, 0.95), rgba(12, 29, 56, 0.95));
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  margin-bottom: 4px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), inset 0 0 15px rgba(0, 229, 255, 0.1);
+  transition: all 0.2s ease;
+
+  &:active {
+    transform: scale(0.98);
+  }
+
+  .ai-banner-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    .banner-chip-icon {
+      font-size: 24px;
+      color: #00e5ff;
+      filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.6));
+    }
+
+    strong {
+      font-family: 'Baloo 2', sans-serif;
+      font-weight: 800;
+      font-size: 14px;
+      color: #ffffff;
+      display: block;
+    }
+
+    p {
+      margin: 2px 0 0;
+      font-family: 'Manrope', sans-serif;
+      font-size: 11.5px;
+      color: rgba(255, 255, 255, 0.65);
+    }
+  }
+
+  .banner-arrow {
+    color: #00e5ff;
+    font-size: 18px;
+  }
+}

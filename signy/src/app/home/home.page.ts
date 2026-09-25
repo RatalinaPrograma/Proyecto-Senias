@@ -8,9 +8,9 @@ import { NotificationsService } from '../services/notifications';
 import { NivelConEstado, SubnivelConEstado, UserStats } from '../data/db-types';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { addIcons } from 'ionicons';
-import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline, refresh, construct, videocam, arrowForward, hourglassOutline } from 'ionicons/icons';
+import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline, refresh, construct, videocam, arrowForward, hourglassOutline, hardwareChipOutline } from 'ionicons/icons';
 
-addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw, 'log-out-outline': logOutOutline, refresh, construct, videocam, 'arrow-forward': arrowForward, 'hourglass-outline': hourglassOutline });
+addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw, 'log-out-outline': logOutOutline, refresh, construct, videocam, 'arrow-forward': arrowForward, 'hourglass-outline': hourglassOutline, 'hardware-chip-outline': hardwareChipOutline });
 
 @Component({
   selector: 'app-home',
@@ -126,8 +126,8 @@ export class HomePage {
     this.router.navigate(['/admin/vocabulario']);
   }
 
-  irALabMediaPipe() {
-    this.router.navigate(['/mediapipe-test']);
+  irAAIStudio() {
+    this.router.navigate(['/admin/ai-studio']);
   }
 
   async cerrarSesion() {
