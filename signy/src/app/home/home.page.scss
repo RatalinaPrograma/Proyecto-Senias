@@ -7,12 +7,20 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 8px;
 }
 
 .hud-brand {
   display: flex;
   align-items: center;
   gap: 10px;
+  // Deja que este bloque se achique dentro de .hud en vez de forzar el
+  // ancho de su contenido (el mínimo por defecto de un ítem flex es su
+  // contenido completo) — junto con min-width:0 en .hud-greeting es lo
+  // que permite que el saludo se trunque en vez de empujar los badges
+  // fuera de la pantalla en celulares angostos.
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .fox-badge {
@@ -36,17 +44,8 @@
     object-fit: cover;
   }
 
-  &.ai-studio-badge {
-    margin-left: auto;
-    background: rgba(0, 81, 255, 0.2);
-    border: 1.5px solid #00e5ff;
-    box-shadow: 0 0 10px rgba(0, 229, 255, 0.45);
-    color: #00e5ff;
-    font-size: 20px;
-  }
-
   &.admin-badge {
-    margin-left: 6px;
+    margin-left: auto;
     box-shadow: 0 3px 0 var(--signy-mint-deep, var(--signy-mint));
     color: var(--signy-mint);
     font-size: 20px;
@@ -63,6 +62,20 @@
 }
 
 .hud-greeting {
+  // El texto es lo único "elástico" del header: en vez de forzar el ancho
+  // de su contenido y empujar los badges fuera de pantalla, se trunca con
+  // "…" cuando no entra. min-width:0 es necesario porque, por defecto, un
+  // ítem flex no se achica más allá del ancho de su contenido.
+  min-width: 0;
+  flex: 1 1 auto;
+
+  h1,
+  p {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   h1 {
     font-family: 'Baloo 2', sans-serif;
     font-weight: 700;
@@ -83,6 +96,9 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
+  // Los badges/pills de la derecha son la parte "fija" del header — nunca
+  // se achican, es el saludo el que cede espacio (ver .hud-greeting).
+  flex-shrink: 0;
 }
 
 .hud-stats {
@@ -101,8 +117,33 @@
   font-weight: 800;
   font-size: 13px;
   color: var(--signy-cream);
+  flex-shrink: 0;
 
   ion-icon { font-size: 15px; }
+}
+
+// Celulares angostos (Android de gama baja, iPhone SE, etc.): un poco menos
+// de aire en el header para que las 3 pills + botón de salir sigan cómodas
+// junto al saludo truncado.
+@media (max-width: 360px) {
+  .hud {
+    padding-left: 14px;
+    padding-right: 14px;
+    gap: 6px;
+  }
+
+  .hud-brand {
+    gap: 8px;
+  }
+
+  .hud-stats {
+    gap: 6px;
+  }
+
+  .stat-pill {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
 }
 
 .stat-fire { box-shadow: 0 3px 0 var(--signy-fox-deep); }

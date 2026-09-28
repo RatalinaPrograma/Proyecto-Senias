@@ -68,7 +68,6 @@ export class RegisterPage implements OnDestroy {
       await this.supabaseService.upsertProfile({ id: data.user.id, full_name: fullName! });
     }
 
-    console.log('Registro exitoso:', data);
     this.exito = true;
     this.form.reset();
   }

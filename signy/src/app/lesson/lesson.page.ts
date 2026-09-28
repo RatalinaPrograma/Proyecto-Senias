@@ -16,11 +16,11 @@ import { addIcons } from 'ionicons';
 import { close, heart, checkmarkCircle, closeCircle, camera, videocam, volumeHigh, snowOutline, trophy, sparklesOutline } from 'ionicons/icons';
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import {
+  AnclaSesion,
   ModeloReferenciaSena,
   Punto3D,
   compararFrameEstatico,
   compararSecuenciasDTW,
-  normalizarFrame,
 } from '../utils/gesture-math';
 
 addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, 'close-circle': closeCircle, camera, videocam, 'volume-high': volumeHigh, 'snow-outline': snowOutline, trophy, 'sparkles-outline': sparklesOutline });
@@ -188,6 +188,11 @@ export class LessonPage implements OnInit, OnDestroy {
   private handLandmarker: HandLandmarker | null = null;
   private lastVideoTime = -1;
   private framesAlumno: number[][] = [];
+  // Toda la toma de 2.8s del alumno se ancla al primer frame con manos
+  // válidas (igual que en el trainer del admin), para que sea comparable
+  // contra el modelo de referencia v2 y no se pierda la trayectoria de la
+  // mano en señas que dependen de movimiento (ver AnclaSesion).
+  private readonly anclaCaptura = new AnclaSesion();
   tieneModeloReferencia = false;
   modeloReferencia: ModeloReferenciaSena | null = null;
 
@@ -504,7 +509,12 @@ export class LessonPage implements OnInit, OnDestroy {
           ? JSON.parse(this.senaCamara.landmarks_referencia)
           : this.senaCamara.landmarks_referencia;
 
-        if (mod && Array.isArray(mod.frames) && mod.frames.length > 0) {
+        // Un modelo grabado con el formato v1 (auto-centrado por frame, sin
+        // trayectoria) no es comparable contra la captura en vivo del
+        // alumno (v2, anclada a un solo punto por toma) — compararlos daría
+        // puntajes sin sentido. Mientras no se re-grabe, tratamos la seña
+        // como si aún no tuviera modelo (usa el fallback de detección simple).
+        if (mod && Array.isArray(mod.frames) && mod.frames.length > 0 && (mod.version || 1) >= 2) {
           this.modeloReferencia = mod as ModeloReferenciaSena;
           this.tieneModeloReferencia = true;
         }
@@ -589,6 +599,7 @@ export class LessonPage implements OnInit, OnDestroy {
 
   private grabar() {
     this.framesAlumno = [];
+    this.anclaCaptura.reiniciar();
     this.lastVideoTime = -1;
     const inicio = performance.now();
     const duracion = 2800; // ~2.8 segundos de captura continua
@@ -619,7 +630,7 @@ export class LessonPage implements OnInit, OnDestroy {
                 const manos: Punto3D[][] = results.landmarks.map((hand: any[]) =>
                   hand.map((p) => ({ x: p.x, y: p.y, z: p.z || 0 }))
                 );
-                const frameNorm = normalizarFrame(
+                const frameNorm = this.anclaCaptura.normalizar(
                   manos,
                   this.modeloReferencia?.manosRequeridas || 1
                 );
@@ -773,7 +784,7 @@ export class LessonPage implements OnInit, OnDestroy {
     this.xpGanado = xpFinal;
     try {
       await this.contenidoService.marcarSubnivelCompletado(this.userId, this.subnivel.id, xpFinal);
-      const statsFinal = await this.contenidoService.actualizarStatsTrasLeccion(this.userId, xpFinal);
+      const statsFinal = await this.contenidoService.actualizarStatsTrasLeccion(this.userId);
       const { nivelRecienCompletado } = await this.contenidoService.avanzarNivelSiCorresponde(this.userId, this.nivel.id);
 
       if (nivelRecienCompletado) {

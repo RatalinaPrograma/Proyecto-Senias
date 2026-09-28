@@ -26,9 +26,13 @@
           <p>Sigamos aprendiendo LSCh</p>
         </div>
 
-        <button class="fox-badge ai-studio-badge" *ngIf="esAdmin" (click)="irAAIStudio()" aria-label="Signy AI Studio" title="Signy AI Studio">
-          <ion-icon name="hardware-chip-outline"></ion-icon>
-        </button>
+        <!--
+          Antes había un badge más acá (Signy AI Studio) además de este. Con
+          el saludo + 2 badges en una fila sin poder achicarse, en pantallas
+          angostas el header se salía de la pantalla. El acceso a AI Studio
+          ahora vive dentro de Vocabulario (su propio botón "AI Studio"), así
+          que acá queda solo el que lleva a Vocabulario/Admin.
+        -->
         <button class="fox-badge admin-badge" *ngIf="esAdmin" (click)="irAAdmin()" aria-label="Administrar vocabulario" title="Vocabulario">
           <ion-icon name="construct"></ion-icon>
         </button>

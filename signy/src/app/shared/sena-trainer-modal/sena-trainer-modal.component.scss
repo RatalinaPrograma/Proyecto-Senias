@@ -263,6 +263,10 @@
       background: #ffffff;
       animation: blink 0.7s infinite alternate;
     }
+
+    &.waiting {
+      background: rgba(242, 112, 26, 0.9);
+    }
   }
 
   .rec-progress-bar {
@@ -388,6 +392,11 @@
       background: rgba(44, 166, 164, 0.12);
       padding: 4px 12px;
       border-radius: 12px;
+
+      &.warning {
+        color: #f2701a;
+        background: rgba(242, 112, 26, 0.14);
+      }
     }
   }
 
@@ -434,6 +443,17 @@
       &:active:not(:disabled) {
         transform: translateY(2px);
         box-shadow: 0 2px 0 #1f7e7c;
+      }
+    }
+
+    .btn-cancel {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+      box-shadow: none;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+
+      &:active:not(:disabled) {
+        background: rgba(255, 255, 255, 0.16);
       }
     }
   }

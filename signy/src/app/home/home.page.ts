@@ -8,9 +8,9 @@ import { NotificationsService } from '../services/notifications';
 import { NivelConEstado, SubnivelConEstado, UserStats } from '../data/db-types';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { addIcons } from 'ionicons';
-import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline, refresh, construct, videocam, arrowForward, hourglassOutline, hardwareChipOutline } from 'ionicons/icons';
+import { flame, star, heart, checkmark, lockClosed, paw, logOutOutline, refresh, construct, videocam, arrowForward, hourglassOutline } from 'ionicons/icons';
 
-addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw, 'log-out-outline': logOutOutline, refresh, construct, videocam, 'arrow-forward': arrowForward, 'hourglass-outline': hourglassOutline, 'hardware-chip-outline': hardwareChipOutline });
+addIcons({ flame, star, heart, checkmark, 'lock-closed': lockClosed, paw, 'log-out-outline': logOutOutline, refresh, construct, videocam, 'arrow-forward': arrowForward, 'hourglass-outline': hourglassOutline });
 
 @Component({
   selector: 'app-home',
@@ -123,11 +123,11 @@ export class HomePage {
   }
 
   irAAdmin() {
+    // El acceso a Signy AI Studio vive dentro de Vocabulario (botón "AI
+    // Studio" en su topbar) en vez de tener su propio badge acá — con los
+    // dos botones de admin juntos, el header no entraba en pantallas
+    // angostas (ver home.page.scss, .hud-greeting).
     this.router.navigate(['/admin/vocabulario']);
-  }
-
-  irAAIStudio() {
-    this.router.navigate(['/admin/ai-studio']);
   }
 
   async cerrarSesion() {

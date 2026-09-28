@@ -101,19 +101,30 @@
     <!-- Overlay de Cuenta Atrás -->
     <div class="countdown-overlay" *ngIf="estadoGrabacion === 'cuenta_atras'">
       <div class="countdown-number">{{ cuentaAtras }}</div>
-      <p class="countdown-text">¡Prepárate para hacer la seña!</p>
+      <p class="countdown-text">
+        Acomoda {{ manosRequeridas === 1 ? 'tu mano' : 'tus 2 manos' }} frente a la cámara — la grabación arranca sola en cuanto las detecte.
+      </p>
     </div>
 
     <!-- Overlay de Grabación en Progreso -->
     <div class="recording-overlay" *ngIf="estadoGrabacion === 'grabando'">
-      <div class="rec-badge">
-        <span class="rec-dot"></span>
-        GRABANDO {{ progresoGrabacion }}%
-      </div>
-      <div class="rec-progress-bar">
-        <div class="rec-fill" [style.width.%]="progresoGrabacion"></div>
-      </div>
-      <p class="rec-hint">Haz la seña "{{ sena.palabra }}" de forma fluida</p>
+      <ng-container *ngIf="manosDetectadasCount < manosRequeridas; else grabandoActivo">
+        <div class="rec-badge waiting">
+          <span class="rec-dot"></span>
+          ESPERANDO {{ manosRequeridas === 1 ? 'TU MANO' : 'TUS 2 MANOS' }}
+        </div>
+        <p class="rec-hint">Puedes empezar a hacer la seña "{{ sena.palabra }}"; en cuanto la cámara detecte {{ manosRequeridas === 1 ? 'tu mano' : 'tus 2 manos' }} empieza a contar los frames.</p>
+      </ng-container>
+      <ng-template #grabandoActivo>
+        <div class="rec-badge">
+          <span class="rec-dot"></span>
+          GRABANDO {{ progresoGrabacion }}%
+        </div>
+        <div class="rec-progress-bar">
+          <div class="rec-fill" [style.width.%]="progresoGrabacion"></div>
+        </div>
+        <p class="rec-hint">Haz la seña "{{ sena.palabra }}" de forma fluida</p>
+      </ng-template>
     </div>
 
     <!-- Panel de Validación / Prueba en Vivo -->
@@ -144,17 +155,31 @@
 
 <ion-footer class="trainer-footer">
   <div class="footer-info" *ngIf="modeloExistente && estadoGrabacion !== 'grabando'">
-    <span class="info-badge">
+    <span class="info-badge" *ngIf="!modeloDesactualizado">
       <ion-icon name="checkmark-circle"></ion-icon>
       Modelo guardado ({{ modeloExistente.totalFrames }} frames · {{ modeloExistente.tipo }})
+    </span>
+    <span class="info-badge warning" *ngIf="modeloDesactualizado">
+      <ion-icon name="alert-circle"></ion-icon>
+      Modelo grabado con una versión anterior del motor — vuelve a grabarlo para que la detección de movimiento funcione bien.
     </span>
   </div>
 
   <div class="footer-actions">
+    <!-- Botón de Cancelar (solo durante cuenta atrás o grabación) -->
+    <button
+      class="btn-action btn-cancel"
+      *ngIf="estadoGrabacion === 'cuenta_atras' || estadoGrabacion === 'grabando'"
+      (click)="cancelarGrabacion()">
+      <ion-icon name="close-outline"></ion-icon>
+      <span>Cancelar</span>
+    </button>
+
     <!-- Botón de Iniciar Grabación -->
     <button
       class="btn-action btn-record"
-      [disabled]="estadoGrabacion === 'grabando' || estadoCamara !== 'activa' || manosDetectadasCount < manosRequeridas"
+      *ngIf="estadoGrabacion !== 'cuenta_atras' && estadoGrabacion !== 'grabando'"
+      [disabled]="estadoCamara !== 'activa'"
       (click)="iniciarCuentaAtras()">
       <ion-icon [name]="estadoGrabacion === 'grabado' ? 'refresh-outline' : 'radio-button-on-outline'"></ion-icon>
       <span>{{ estadoGrabacion === 'grabado' ? 'Re-grabar Seña' : 'Grabar Seña' }}</span>

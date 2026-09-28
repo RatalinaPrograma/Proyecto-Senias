@@ -237,17 +237,34 @@ export class SupabaseService {
     });
   }
 
-  /** Busca personas por nombre o username, excluyéndome a mí mismo. */
+  /** Busca personas por nombre o username, excluyéndome a mí mismo.
+   *
+   * 
+   *  Antes esto armaba el filtro con `.or(\`full_name.ilike.%${query}%,...\`)`,
+   * interpolando el texto de búsqueda directo dentro de un string de
+   * filtro de PostgREST. Los caracteres `,` `(` `)` tienen significado
+   * propio en esa sintaxis (separan condiciones / agrupan), así que un
+   * texto de búsqueda con una coma, por ejemplo, podía romper el filtro
+   * pensado y colarse como condiciones adicionales sobre otras columnas
+   * -- el equivalente, en una API tipo PostgREST, a una inyección SQL.
+   * `.ilike()` no tiene ese problema: el valor va como parámetro aparte,
+   * no como texto libre dentro de la sintaxis del filtro, así que se hacen
+   * dos búsquedas simples y se combinan acá. */
   async buscarPersonas(query: string, miUserId: string): Promise<Profile[]> {
-    if (!query.trim()) return [];
-    const { data, error } = await this.supabase
-      .from('profiles')
-      .select('*')
-      .neq('id', miUserId)
-      .or(`full_name.ilike.%${query}%,username.ilike.%${query}%`)
-      .limit(20);
-    if (error) throw error;
-    return data ?? [];
+    const texto = query.trim();
+    if (!texto) return [];
+
+    const patron = `%${texto}%`;
+    const [porNombre, porUsername] = await Promise.all([
+      this.supabase.from('profiles').select('*').neq('id', miUserId).ilike('full_name', patron).limit(20),
+      this.supabase.from('profiles').select('*').neq('id', miUserId).ilike('username', patron).limit(20),
+    ]);
+    if (porNombre.error) throw porNombre.error;
+    if (porUsername.error) throw porUsername.error;
+
+    const combinados = new Map<string, Profile>();
+    for (const p of [...(porNombre.data ?? []), ...(porUsername.data ?? [])]) combinados.set(p.id, p);
+    return Array.from(combinados.values()).slice(0, 20);
   }
 
   /** Trae el perfil, y si el usuario no tiene fila todavía (se registró

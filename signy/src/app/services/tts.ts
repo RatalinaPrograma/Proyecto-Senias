@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
-import { TextToSpeech, SpeechSynthesisVoice } from '@capacitor-community/text-to-speech';
+import { SpeechSynthesisVoice } from '@capacitor-community/text-to-speech';
 import { SupabaseService } from './supabase';
+import { TextToSpeechAdapter } from './capacitor-plugins';
 
 /**
  * Servicio de texto a voz (accesibilidad).
@@ -14,7 +15,10 @@ export class TtsService {
   private cacheVoz = new Map<string, string | null>();
   private cacheVoces: SpeechSynthesisVoice[] | null = null;
 
-  constructor(private supabaseService: SupabaseService) {}
+  constructor(
+    private supabaseService: SupabaseService,
+    private textToSpeech: TextToSpeechAdapter
+  ) {}
 
   
   disponible(): boolean {
@@ -82,7 +86,7 @@ export class TtsService {
 
   private async obtenerVocesCrudas(): Promise<SpeechSynthesisVoice[]> {
     try {
-      const { voices } = await TextToSpeech.getSupportedVoices();
+      const { voices } = await this.textToSpeech.getSupportedVoices();
       return voices;
     } catch {
       return [];
@@ -127,7 +131,7 @@ export class TtsService {
     }
 
     try {
-      await TextToSpeech.speak({
+      await this.textToSpeech.speak({
         text: texto,
         lang: 'es-CL',
         rate: 0.95,

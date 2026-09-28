@@ -36,11 +36,11 @@ import { SupabaseService } from '../services/supabase';
 import { Nivel, Subnivel, Sena } from '../data/db-types';
 import { SenaTrainerModalComponent } from '../shared/sena-trainer-modal/sena-trainer-modal.component';
 import {
+  AnclaSesion,
   ModeloReferenciaSena,
   Punto3D,
   compararFrameEstatico,
   compararSecuenciasDTW,
-  normalizarFrame,
 } from '../utils/gesture-math';
 
 addIcons({
@@ -167,7 +167,16 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   private labHandLandmarker: HandLandmarker | null = null;
   private labRafId = 0;
   private labLastVideoTime = -1;
-  private labBuffer: number[][] = [];
+  // Antes había un solo buffer normalizado siempre a 1 mano
+  // (`normalizarFrame(manos, 1)`), así que una seña calibrada a 2 manos
+  // JAMÁS podía coincidir: su vector de referencia mide 126 números y el
+  // buffer solo generaba 63 — `distanciaEntreFrames` los rechaza de
+  // entrada por largo distinto. Se mantienen dos buffers en paralelo,
+  // anclados al mismo punto de referencia, para poder comparar contra
+  // señas de 1 y de 2 manos a la vez.
+  private labBuffer1Mano: number[][] = [];
+  private labBuffer2Manos: number[][] = [];
+  private readonly anclaLab = new AnclaSesion();
   private readonly LAB_BUFFER_MAX = 30;
 
   prediccionesEnVivo: PrediccionEnVivo[] = [];
@@ -600,7 +609,9 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   async iniciarLaboratorioReconocimiento() {
     this.labEstado = 'cargando';
     this.labMensajeError = '';
-    this.labBuffer = [];
+    this.labBuffer1Mano = [];
+    this.labBuffer2Manos = [];
+    this.anclaLab.reiniciar();
     this.prediccionesEnVivo = [];
     this.mejorPrediccion = null;
 
@@ -668,7 +679,9 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     }
     this.labEstado = 'apagado';
     this.manosEnLaboratorio = 0;
-    this.labBuffer = [];
+    this.labBuffer1Mano = [];
+    this.labBuffer2Manos = [];
+    this.anclaLab.reiniciar();
   }
 
   alternarCamaraLab() {
@@ -704,28 +717,43 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
                 // Dibujar esqueleto estilo neon en vivo
                 this.dibujarEsqueletoLab(ctx, canvas.width, canvas.height, results.landmarks);
 
-                // Normalizar frame para comparación con el modelo
+                // Normalizar frame para comparación con el modelo. Ambos
+                // buffers comparten el mismo punto de anclaje (fijado por
+                // `anclaLab` en el primer frame con manos válidas de esta
+                // "toma"), así que se pueden comparar por separado contra
+                // señas de 1 o de 2 manos sin perder la trayectoria real.
                 const manos: Punto3D[][] = results.landmarks.map((hand: any[]) =>
                   hand.map((p) => ({ x: p.x, y: p.y, z: p.z || 0 }))
                 );
 
-                const frameNorm = normalizarFrame(manos, 1);
-                if (frameNorm) {
-                  this.labBuffer.push(frameNorm);
-                  if (this.labBuffer.length > this.LAB_BUFFER_MAX) {
-                    this.labBuffer.shift();
+                const frame1 = this.anclaLab.normalizar(manos, 1);
+                if (frame1) {
+                  this.labBuffer1Mano.push(frame1);
+                  if (this.labBuffer1Mano.length > this.LAB_BUFFER_MAX) {
+                    this.labBuffer1Mano.shift();
                   }
+                }
 
-                  // Evaluar el buffer en tiempo real contra todo nuestro catálogo entrenado
-                  if (this.labBuffer.length >= 12) {
-                    this.evaluarBufferContraModelo();
+                const frame2 = this.anclaLab.normalizar(manos, 2);
+                if (frame2) {
+                  this.labBuffer2Manos.push(frame2);
+                  if (this.labBuffer2Manos.length > this.LAB_BUFFER_MAX) {
+                    this.labBuffer2Manos.shift();
                   }
+                }
+
+                // Evaluar el buffer en tiempo real contra todo nuestro catálogo entrenado
+                if (this.labBuffer1Mano.length >= 12 || this.labBuffer2Manos.length >= 12) {
+                  this.evaluarBufferContraModelo();
                 }
               } else {
-                // Si no hay manos, decaer predicción
-                if (this.labBuffer.length > 0) {
-                  this.labBuffer.shift();
-                }
+                // Si las manos salen de cuadro, se termina la "toma" actual:
+                // limpiamos ambos buffers y el anclaje para que la próxima
+                // aparición arranque una comparación nueva y no arrastre un
+                // origen de coordenadas viejo.
+                this.labBuffer1Mano = [];
+                this.labBuffer2Manos = [];
+                this.anclaLab.reiniciar();
               }
             }
           }
@@ -788,11 +816,9 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
    */
   private evaluarBufferContraModelo() {
     const senasCalibradas = this.senas.filter((s) => !!s.landmarks_referencia);
-    if (!senasCalibradas.length || !this.labBuffer.length) return;
+    if (!senasCalibradas.length || (!this.labBuffer1Mano.length && !this.labBuffer2Manos.length)) return;
 
     const ranking: PrediccionEnVivo[] = [];
-
-    const frameActual = this.labBuffer[this.labBuffer.length - 1];
 
     for (const sena of senasCalibradas) {
       try {
@@ -803,16 +829,27 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
 
         if (!mod || !mod.frames || !mod.frames.length) continue;
 
+        // Un modelo grabado con el formato v1 (auto-centrado por frame, sin
+        // trayectoria) no es comparable contra los buffers en vivo v2 —
+        // compararlos daría un puntaje sin sentido. Se omite del ranking
+        // hasta que se vuelva a calibrar.
+        if ((mod.version || 1) < 2) continue;
+
+        const manosSena = mod.manosRequeridas || 1;
+        const buffer = manosSena === 2 ? this.labBuffer2Manos : this.labBuffer1Mano;
+        if (!buffer.length) continue;
+
         let similitud = 0;
         let esCoincidente = false;
 
         if (mod.tipo === 'estatica') {
+          const frameActual = buffer[buffer.length - 1];
           const res = compararFrameEstatico(mod.frames[0], frameActual, mod.umbralRecomendado || 75);
           similitud = res.similitudPct;
           esCoincidente = res.esCoincidente;
         } else {
-          // Dinámica (DTW contra el buffer)
-          const res = compararSecuenciasDTW(mod.frames, this.labBuffer, mod.umbralRecomendado || 70);
+          // Dinámica (DTW contra el buffer correspondiente)
+          const res = compararSecuenciasDTW(mod.frames, buffer, mod.umbralRecomendado || 70);
           similitud = res.similitudPct;
           esCoincidente = res.esCoincidente;
         }
