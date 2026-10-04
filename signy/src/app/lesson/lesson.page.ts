@@ -481,4 +481,9 @@ export class LessonPage implements OnInit, OnDestroy {
     this.imageCacheService.liberarMemoriaRAM();
     this.router.navigate(['/home']);
   }
+
+  esMp4(url: string | null | undefined): boolean {
+    if (!url) return false;
+    return url.toLowerCase().endsWith('.mp4');
+  }
 }

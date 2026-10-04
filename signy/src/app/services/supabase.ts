@@ -372,11 +372,4 @@ export class SupabaseService {
     }
   }
 
-  /**
-   * Invoca la Edge Function 'generate-master-pack' en Supabase para empaquetar
-   * en la nube todos los archivos WebP/media del bucket en un único archivo ZIP maestro.
-   */
-  async generarPaqueteMaestro() {
-    return this.supabase.functions.invoke('generate-master-pack');
-  }
 }

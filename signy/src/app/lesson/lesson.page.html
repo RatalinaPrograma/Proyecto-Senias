@@ -55,7 +55,8 @@
           <div class="flash-icon-wrap" *ngIf="!senas[flashIndex].video_url">
             <app-sena-icon [seed]="nivel.id * 10 + flashIndex" [size]="80" color="#fff" dark="rgba(0,0,0,0.2)"></app-sena-icon>
           </div>
-          <img *ngIf="senas[flashIndex].video_url" [appCachedSrc]="senas[flashIndex].video_url" [alt]="senas[flashIndex].palabra" class="real-media" decoding="async" />
+          <video *ngIf="senas[flashIndex].video_url && esMp4(senas[flashIndex].video_url)" [appCachedSrc]="senas[flashIndex].video_url" class="real-media" autoplay loop muted playsinline></video>
+          <img *ngIf="senas[flashIndex].video_url && !esMp4(senas[flashIndex].video_url)" [appCachedSrc]="senas[flashIndex].video_url" [alt]="senas[flashIndex].palabra" class="real-media" decoding="async" />
         </ng-container>
         <div class="flash-word" *ngIf="flipped">{{ senas[flashIndex].palabra }}</div>
         <span class="flash-hint">toca para {{ flipped ? 'ver la seña' : 'revelar la palabra' }}</span>

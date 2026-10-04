@@ -7,7 +7,8 @@
 
   <div class="onboarding-wrap">
     <div class="slide-image-wrap">
-      <img [appCachedSrc]="slides[paso].imagen" [alt]="slides[paso].titulo" class="slide-image" />
+      <img *ngIf="!esMp4(slides[paso].imagen)" [appCachedSrc]="slides[paso].imagen" [alt]="slides[paso].titulo" class="slide-image" />
+      <video *ngIf="esMp4(slides[paso].imagen)" [appCachedSrc]="slides[paso].imagen" autoplay loop muted playsinline class="slide-image"></video>
     </div>
 
     <div class="slide-text">

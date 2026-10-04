@@ -92,6 +92,10 @@ export class OnboardingPage implements OnInit {
     return this.paso === this.slides.length - 1;
   }
 
+  esMp4(url: string): boolean {
+    return url.toLowerCase().endsWith('.mp4');
+  }
+
   siguiente() {
     if (this.esUltimo) {
       this.terminar();
