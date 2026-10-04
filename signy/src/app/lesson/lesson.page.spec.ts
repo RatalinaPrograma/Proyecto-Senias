@@ -46,6 +46,8 @@ describe('LessonPage', () => {
     contenidoSpy.getSubnivelPorId.and.resolveTo(subnivel);
     contenidoSpy.getNivelPorId.and.resolveTo(nivel);
     contenidoSpy.getSenas.and.resolveTo(senas);
+    contenidoSpy.getSenasDeRepaso.and.resolveTo([]);
+    contenidoSpy.getSenasSenuelo.and.resolveTo([]);
     contenidoSpy.getMisStats.and.resolveTo(statsDePrueba({ vidas: 5, ultima_fecha_practica: null, racha_congeladores: 0 }));
     contenidoSpy.getPoolDePalabras.and.resolveTo(pool);
     contenidoSpy.minutosParaProximaVida.and.returnValue(0);
@@ -76,6 +78,7 @@ describe('LessonPage', () => {
     supabaseSpy = jasmine.createSpyObj('SupabaseService', ['getUsuarioLocal', 'getProfile']);
     contenidoSpy = jasmine.createSpyObj('ContenidoService', [
       'getSubnivelPorId', 'getNivelPorId', 'getSenas', 'getMisStats', 'getPoolDePalabras',
+      'getSenasDeRepaso', 'getSenasSenuelo',
       'minutosParaProximaVida', 'fechaHoy', 'sumarDias', 'descontarVida', 'registrarIntento',
       'marcarSubnivelCompletado', 'actualizarStatsTrasLeccion', 'avanzarNivelSiCorresponde',
       'obtenerHistorialRacha', 'otorgarLogroPorCodigo',

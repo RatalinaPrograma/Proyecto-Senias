@@ -77,6 +77,32 @@ export class ContenidoService {
     return data ?? [];
   }
 
+  /** Señas con video de los subniveles que `subnivel` ya dejó atrás: los anteriores
+   * de su mismo nivel y todos los de niveles anteriores. */
+  async getSenasDeRepaso(subnivel: Subnivel): Promise<Sena[]> {
+    const [niveles, subniveles] = await Promise.all([this.getNiveles(), this.getSubnivelesTodos()]);
+    const numeroNivel = new Map(niveles.map(n => [n.id, n.numero_nivel]));
+    const miNumero = numeroNivel.get(subnivel.nivel_id) ?? 0;
+    const ids = subniveles
+      .filter(s => (numeroNivel.get(s.nivel_id) ?? 0) < miNumero
+        || (s.nivel_id === subnivel.nivel_id && s.numero_subnivel < subnivel.numero_subnivel))
+      .map(s => s.id);
+    return this.getSenasDeSubniveles(ids);
+  }
+
+  /** Señas con video de OTROS subniveles del mismo nivel (señuelos del primer subnivel). */
+  async getSenasSenuelo(subnivel: Subnivel): Promise<Sena[]> {
+    const subniveles = await this.getSubniveles(subnivel.nivel_id);
+    return this.getSenasDeSubniveles(subniveles.filter(s => s.id !== subnivel.id).map(s => s.id));
+  }
+
+  private async getSenasDeSubniveles(ids: number[]): Promise<Sena[]> {
+    if (!ids.length) return [];
+    const { data, error } = await this.db.from('senas').select('*').in('subnivel_id', ids).not('video_url', 'is', null);
+    if (error) throw error;
+    return data ?? [];
+  }
+
   // ---------- Progreso (propio del usuario) ----------
   async getMisProgresosNivel(userId: string): Promise<ProgresoNivelUsuario[]> {
     const { data, error } = await this.db.from('progreso_nivel_usuario').select('*').eq('user_id', userId);

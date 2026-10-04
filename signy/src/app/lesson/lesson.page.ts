@@ -32,7 +32,7 @@ type Fase = 'cargando' | 'flash' | 'match' | 'quiz' | 'record' | 'complete' | 'n
 /** Fases con la lección a medio hacer: salir de ellas pide confirmación. */
 const FASES_EN_CURSO: readonly Fase[] = ['flash', 'match', 'quiz', 'record'];
 
-interface Par { palabra: string; senaId: number; seed: number; videoUrl: string | null; }
+interface Par { palabra: string; senaId: number; seed: number; videoUrl: string | null; esDecoy?: boolean; }
 interface Pregunta { palabra: string; senaId: number; opciones: string[]; seed: number; videoUrl: string | null; }
 
 const MENSAJES_OK = ['¡Mano correcta!', '¡Excelente forma!', '¡Así se hace!'];
@@ -95,6 +95,10 @@ export class LessonPage implements OnInit, OnDestroy {
   nivel!: Nivel;
   subnivel!: Subnivel;
   senas: Sena[] = [];
+  /** Señas de lecciones previas que se repasan en el emparejar. */
+  private repaso: Sena[] = [];
+  /** Solo 1.1: videos de otras señas que no tienen palabra (para confundir). */
+  private senuelos: Sena[] = [];
 
   vidas = 5;
   xpGanado = 0;
@@ -230,12 +234,13 @@ export class LessonPage implements OnInit, OnDestroy {
 
       // El pool de palabras del quiz se trae acá, en paralelo con lo demás,
       // en vez de en serie justo antes de arrancar las flashcards.
-      const [nivel, senas, stats, pool, perfilRes] = await Promise.all([
+      const [nivel, senas, stats, pool, perfilRes, repaso] = await Promise.all([
         this.contenidoService.getNivelPorId(subnivel.nivel_id),
         this.contenidoService.getSenas(subnivelId),
         this.contenidoService.getMisStats(this.userId),
         this.contenidoService.getPoolDePalabras(),
         this.supabaseService.getProfile(this.userId),
+        this.contenidoService.getSenasDeRepaso(subnivel),
       ]);
 
       if (!nivel) { this.fase = 'error'; this.errorMsg = 'No se encontró la categoría de esta lección.'; return; }
@@ -243,6 +248,11 @@ export class LessonPage implements OnInit, OnDestroy {
 
       this.nivel = nivel;
       this.senas = senas;
+      // ponytail: tope de 6 repasos al azar para que el emparejar no se haga eterno en niveles avanzados
+      this.repaso = this.mezclar([...repaso]).slice(0, 6);
+      if (nivel.numero_nivel === 1 && subnivel.numero_subnivel === 1) {
+        this.senuelos = await this.contenidoService.getSenasSenuelo(subnivel);
+      }
       this.vidas = stats.vidas ?? 5;
       this.minutosParaVida = this.contenidoService.minutosParaProximaVida(stats);
 
@@ -259,7 +269,7 @@ export class LessonPage implements OnInit, OnDestroy {
       // Suele ser la etapa más lenta y variable, así que se reparte el 35%-90%
       // de la barra proporcional a cuántos recursos van descargados. El
       // mensaje se mantiene simple y cercano, sin exponer detalles técnicos.
-      const urlsMedia = senas.map(s => s.video_url).filter((u): u is string => !!u);
+      const urlsMedia = [...senas, ...this.repaso, ...this.senuelos].map(s => s.video_url).filter((u): u is string => !!u);
       if (urlsMedia.length > 0) {
         await this.imageCacheService.precargarSubnivel(urlsMedia, (completados, total) => {
           this.cargaProgreso = 35 + Math.round((completados / total) * 55);
@@ -269,7 +279,7 @@ export class LessonPage implements OnInit, OnDestroy {
         this.cargaProgreso = 90;
       }
 
-      const pares: Par[] = senas.map((s, i) => ({ palabra: s.palabra, senaId: s.id, seed: this.nivel.id * 10 + i, videoUrl: s.video_url }));
+      const pares: Par[] = [...senas, ...this.repaso].map((s, i) => ({ palabra: s.palabra, senaId: s.id, seed: this.nivel.id * 10 + i, videoUrl: s.video_url }));
       this.rondas = this.armarRondas(pares);
       this.cargarRonda(0);
       this.cargaMensaje = '¡Ya casi! Últimos detalles…';
@@ -438,7 +448,7 @@ export class LessonPage implements OnInit, OnDestroy {
   }
 
   get matchCompleto(): boolean {
-    return this.emparejados.length === this.manos.length;
+    return this.emparejados.length === this.palabrasMezcladas.length;
   }
 
   get totalRondas(): number {
@@ -461,12 +471,24 @@ export class LessonPage implements OnInit, OnDestroy {
   private cargarRonda(indice: number) {
     this.rondaActual = indice;
     const grupo = this.rondas[indice];
-    this.manos = this.mezclar([...grupo]);
+
+    this.manos = this.mezclar([...grupo, ...this.senuelosDeRonda()]);
     this.palabrasMezcladas = this.mezclar([...grupo]);
     this.emparejados = [];
     this.selMano = null;
     this.selPalabra = null;
     this.matchMal = false;
+  }
+
+  /** Manos extra sin palabra: ninguna palabra las empareja, así que tocarlas siempre da error. */
+  private senuelosDeRonda(): Par[] {
+    return this.mezclar([...this.senuelos]).slice(0, 3).map((s, i) => ({
+      palabra: `__senuelo_${s.id}`,
+      senaId: s.id,
+      seed: 999 + i,
+      videoUrl: s.video_url,
+      esDecoy: true,
+    }));
   }
 
   siguienteRondaOQuiz() {
