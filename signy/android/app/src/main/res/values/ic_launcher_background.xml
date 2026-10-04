@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- Azul de Signy (signy-ink). El fondo del ícono es un degradado en
+         mipmap-*/ic_launcher_background.png; este color se usa en la pantalla
+         de carga de Android 12+ (styles.xml). -->
+    <color name="ic_launcher_background">#12213B</color>
 </resources>
