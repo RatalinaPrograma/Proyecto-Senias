@@ -397,6 +397,30 @@
         color: #f2701a;
         background: rgba(242, 112, 26, 0.14);
       }
+
+      &.dataset {
+        color: #93a3c4;
+        background: rgba(147, 163, 196, 0.12);
+        margin-left: 6px;
+      }
+    }
+
+    .dataset-msg {
+      margin: 8px 0 0;
+      font-size: 0.78rem;
+      color: #f7f5f0;
+    }
+
+    .link-btn {
+      background: none;
+      border: none;
+      color: #2ca6a4;
+      font-weight: 700;
+      font-size: 0.78rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
     }
   }
 
@@ -446,6 +470,18 @@
       }
     }
 
+    .btn-dataset {
+      background: #1b2e4e;
+      color: #ffffff;
+      border: 1px solid rgba(147, 163, 196, 0.45);
+      box-shadow: 0 4px 0 #0a1526;
+
+      &:active:not(:disabled) {
+        transform: translateY(2px);
+        box-shadow: 0 2px 0 #0a1526;
+      }
+    }
+
     .btn-cancel {
       background: rgba(255, 255, 255, 0.08);
       color: #ffffff;
@@ -455,6 +491,33 @@
       &:active:not(:disabled) {
         background: rgba(255, 255, 255, 0.16);
       }
+    }
+  }
+}
+
+.rafaga-tag {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: rgba(44, 166, 164, 0.9);
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.trainer-footer .footer-info .rafaga-btn {
+  display: flex;
+  margin: 8px auto 0;
+}
+
+@media (max-width: 380px) {
+  .trainer-footer .footer-actions {
+    gap: 8px;
+
+    .btn-action {
+      font-size: 0.82rem;
+      gap: 6px;
     }
   }
 }

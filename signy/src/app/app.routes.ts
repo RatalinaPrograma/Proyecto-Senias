@@ -62,7 +62,9 @@ export const routes: Routes = [
     loadComponent: () => import('./admin-ai-studio/admin-ai-studio.page').then(m => m.AdminAiStudioPage)
   },
   {
+    // Laboratorio técnico de MediaPipe: solo para el equipo.
     path: 'mediapipe-test',
+    canActivate: [adminGuard],
     loadComponent: () => import('./mediapipe-test/mediapipe-test.page').then(m => m.MediapipeTestPage)
   }
 ];

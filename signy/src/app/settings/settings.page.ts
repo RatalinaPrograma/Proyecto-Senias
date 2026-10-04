@@ -1,9 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
+import { BotonAtrasService } from '../services/boton-atras';
 import { TtsService } from '../services/tts';
 import { ContenidoService } from '../services/contenido';
 import { NotificationsService, NotifConfig } from '../services/notifications';
@@ -408,6 +409,34 @@ export class SettingsPage implements OnInit {
     await this.notificationsService.cancelarTodo();
     await this.supabaseService.signOut();
     this.router.navigate(['/onboarding']);
+  }
+
+
+  // ---- botón atrás del teléfono ----
+  private readonly atras = inject(BotonAtrasService).paraPantalla(() => this.alPresionarAtras());
+
+  ionViewWillEnter() {
+    this.atras.activar();
+  }
+
+  ionViewWillLeave() {
+    this.atras.desactivar();
+  }
+
+  /** Atrás cancela primero lo que esté a medio confirmar (eliminar cuenta, activar 2FA). */
+  alPresionarAtras(): boolean {
+    if (this.eliminandoCuenta) return true;
+    if (this.confirmandoEliminar) {
+      this.confirmandoEliminar = false;
+      this.textoConfirmacion = '';
+      this.errorEliminar = '';
+      return true;
+    }
+    if (this.inscribiendoMfa) {
+      this.cancelarActivacionMfa();
+      return true;
+    }
+    return false;
   }
 
   volver() {

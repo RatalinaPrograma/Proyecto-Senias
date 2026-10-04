@@ -1,10 +1,11 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { SupabaseService } from '../services/supabase';
 import { PreferencesAdapter } from '../services/capacitor-plugins';
+import { BotonAtrasService } from '../services/boton-atras';
 import { addIcons } from 'ionicons';
 import { paw, people, settingsOutline } from 'ionicons/icons';
 
@@ -117,6 +118,24 @@ export class OnboardingPage implements OnInit {
 
   irAPaso(i: number) {
     this.paso = i;
+  }
+
+  // ---- botón atrás del teléfono ----
+  private readonly atras = inject(BotonAtrasService).paraPantalla(() => this.alPresionarAtras());
+
+  ionViewWillEnter() {
+    this.atras.activar();
+  }
+
+  ionViewWillLeave() {
+    this.atras.desactivar();
+  }
+
+  /** Atrás retrocede una diapositiva; en la primera, sale de la app como cualquier pantalla de inicio. */
+  alPresionarAtras(): boolean {
+    if (!this.listo || this.paso === 0) return false;
+    this.anterior();
+    return true;
   }
 
   saltar() {

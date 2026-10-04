@@ -818,3 +818,22 @@
   0% { top: 0; }
   100% { top: 100%; }
 }
+
+.sign-samples {
+  color: #93a3c4;
+  font-size: 0.72rem;
+
+  &.low {
+    color: #f59e0b;
+  }
+}
+
+.spin {
+  animation: spin-studio 1s linear infinite;
+}
+
+@keyframes spin-studio {
+  100% {
+    transform: rotate(360deg);
+  }
+}

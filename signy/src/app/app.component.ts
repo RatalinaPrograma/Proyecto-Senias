@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { IonicModule } from '@ionic/angular';
+import { BotonAtrasService } from './services/boton-atras';
 
 @Component({
   selector: 'app-root',
@@ -8,5 +9,8 @@ import { IonicModule } from '@ionic/angular';
   imports: [IonicModule],
 })
 export class AppComponent {
-  constructor() {}
+  constructor() {
+    // Botón atrás de Android: vuelve a la pantalla anterior en vez de cerrar la app.
+    inject(BotonAtrasService).iniciar();
+  }
 }

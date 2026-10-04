@@ -148,6 +148,26 @@ describe('TtsService', () => {
       expect(ttsSpy.speak).toHaveBeenCalledWith(jasmine.objectContaining({ voice: 1 }));
     });
 
+    it('usa el índice del orden NATIVO del plugin aunque la lista mostrada esté reordenada', async () => {
+      // Regresión: listarVoces() pone el español primero para el selector, pero
+      // el plugin indexa `voice` contra su propia lista. 'Español Chile' es la
+      // posición 1 en el plugin (y la 0 en la lista reordenada).
+      ttsSpy.getSupportedVoices.and.resolveTo({
+        voices: [
+          { name: 'English US', lang: 'en-US' } as any,
+          { name: 'Español Chile', lang: 'es-CL' } as any,
+          { name: 'English UK', lang: 'en-GB' } as any,
+        ],
+      });
+
+      const mostradas = await service.listarVoces();
+      expect(mostradas[0].name).toBe('Español Chile'); // la lista visible sigue con el español primero
+
+      await service.hablar('hola', 'Español Chile');
+
+      expect(ttsSpy.speak).toHaveBeenCalledWith(jasmine.objectContaining({ voice: 1 }));
+    });
+
     it('no revienta si el plugin de voz falla', async () => {
       ttsSpy.speak.and.rejectWith(new Error('boom'));
       await expectAsync(service.hablar('hola')).toBeResolved();

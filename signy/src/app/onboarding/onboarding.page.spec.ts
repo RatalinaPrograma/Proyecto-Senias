@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { OnboardingPage } from './onboarding.page';
 import { SupabaseService } from '../services/supabase';
 import { PreferencesAdapter } from '../services/capacitor-plugins';
+import { BotonAtrasService } from '../services/boton-atras';
 
 describe('OnboardingPage', () => {
   let component: OnboardingPage;
@@ -110,4 +111,29 @@ describe('OnboardingPage', () => {
   // 'irALab' (acceso al laboratorio de prueba /mediapipe-test) se eliminó
   // en la integración del motor DTW: el flujo de práctica quedó dentro de
   // la lección real, ya no hay laboratorio aparte que probar desde acá.
+
+  describe('botón atrás del teléfono', () => {
+    beforeEach(async () => { await component.ngOnInit(); });
+
+    it('retrocede una diapositiva', () => {
+      component.paso = 2;
+      expect(component.alPresionarAtras()).toBeTrue();
+      expect(component.paso).toBe(1);
+    });
+
+    it('en la primera diapositiva deja que la app se minimice', () => {
+      component.paso = 0;
+      expect(component.alPresionarAtras()).toBeFalse();
+    });
+
+    it('se hace cargo del botón atrás al entrar y lo suelta al salir', () => {
+      const servicio = TestBed.inject(BotonAtrasService);
+      const quitar = jasmine.createSpy('quitar');
+      spyOn(servicio, 'registrar').and.returnValue(quitar);
+      component.ionViewWillEnter();
+      expect(servicio.registrar).toHaveBeenCalledTimes(1);
+      component.ionViewWillLeave();
+      expect(quitar).toHaveBeenCalled();
+    });
+  });
 });

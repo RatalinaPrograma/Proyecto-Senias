@@ -203,6 +203,15 @@
   ion-toggle {
     --track-background-checked: var(--signy-mint);
   }
+
+  /* El valor mostrado del selector (y su placeholder, que Ionic atenúa al 33%)
+     debe leerse bien sobre la tarjeta oscura. */
+  ion-select {
+    --placeholder-color: var(--signy-muted);
+    --placeholder-opacity: 1;
+    color: var(--signy-cream);
+    font-family: 'Manrope', sans-serif;
+  }
 }
 
 .btn-danger {

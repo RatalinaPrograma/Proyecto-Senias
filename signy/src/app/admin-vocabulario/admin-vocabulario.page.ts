@@ -1,10 +1,11 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { IonicModule, ModalController } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
+import { BotonAtrasService } from '../services/boton-atras';
 import { Nivel, Subnivel, Sena } from '../data/db-types';
 import { addIcons } from 'ionicons';
 import { esVideoMp4 } from '../shared/media-utils';
@@ -194,6 +195,35 @@ export class AdminVocabularioPage implements OnInit {
     } else {
       this.router.navigate(['/home']);
     }
+  }
+
+  // ---- botón atrás del teléfono ----
+  private readonly atras = inject(BotonAtrasService).paraPantalla(() => this.alPresionarAtras());
+
+  ionViewWillEnter() {
+    this.atras.activar();
+  }
+
+  ionViewWillLeave() {
+    this.atras.desactivar();
+  }
+
+  /**
+   * Atrás cierra primero el formulario abierto y después sube un escalón
+   * (señas → subniveles → niveles), igual que la flecha del topbar; recién
+   * en la lista de niveles sale de la pantalla.
+   */
+  alPresionarAtras(): boolean {
+    if (this.guardando) return true;
+    if (this.formNivelAbierto || this.formSubnivelAbierto || this.formSenaAbierto) {
+      this.cancelarFormulario();
+      return true;
+    }
+    if (this.vista !== 'niveles') {
+      this.volver();
+      return true;
+    }
+    return false;
   }
 
   abrirNivel(n: Nivel) {

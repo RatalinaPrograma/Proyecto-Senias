@@ -19,7 +19,7 @@
           [class.active]="tipoSena === 'dinamica'"
           [disabled]="estadoGrabacion === 'grabando'"
           (click)="tipoSena = 'dinamica'">
-          Dinámica (30 frames)
+          Dinámica
         </button>
         <button
           type="button"
@@ -50,6 +50,21 @@
           [disabled]="estadoGrabacion === 'grabando'"
           (click)="manosRequeridas = 2">
           2 Manos
+        </button>
+      </div>
+    </div>
+
+    <div class="config-group" *ngIf="tipoSena === 'dinamica'">
+      <label>Duración:</label>
+      <div class="pill-selector">
+        <button
+          type="button"
+          class="pill-btn"
+          *ngFor="let d of duracionesDinamica"
+          [class.active]="duracionDinamicaMs === d"
+          [disabled]="estadoGrabacion === 'grabando'"
+          (click)="duracionDinamicaMs = d">
+          {{ d / 1000 }} s
         </button>
       </div>
     </div>
@@ -100,6 +115,7 @@
 
     <!-- Overlay de Cuenta Atrás -->
     <div class="countdown-overlay" *ngIf="estadoGrabacion === 'cuenta_atras'">
+      <div class="rafaga-tag" *ngIf="enRafaga">Ráfaga · muestra {{ rafagaHechas + 1 }} de {{ rafagaTotal }}</div>
       <div class="countdown-number">{{ cuentaAtras }}</div>
       <p class="countdown-text">
         Acomoda {{ manosRequeridas === 1 ? 'tu mano' : 'tus 2 manos' }} frente a la cámara — la grabación arranca sola en cuanto las detecte.
@@ -108,14 +124,15 @@
 
     <!-- Overlay de Grabación en Progreso -->
     <div class="recording-overlay" *ngIf="estadoGrabacion === 'grabando'">
-      <ng-container *ngIf="manosDetectadasCount < manosRequeridas; else grabandoActivo">
+      <ng-container *ngIf="esperandoManos; else grabandoActivo">
         <div class="rec-badge waiting">
           <span class="rec-dot"></span>
           ESPERANDO {{ manosRequeridas === 1 ? 'TU MANO' : 'TUS 2 MANOS' }}
         </div>
-        <p class="rec-hint">Puedes empezar a hacer la seña "{{ sena.palabra }}"; en cuanto la cámara detecte {{ manosRequeridas === 1 ? 'tu mano' : 'tus 2 manos' }} empieza a contar los frames.</p>
+        <p class="rec-hint">En cuanto la cámara detecte {{ manosRequeridas === 1 ? 'tu mano' : 'tus 2 manos' }} empieza la grabación de "{{ sena.palabra }}".</p>
       </ng-container>
       <ng-template #grabandoActivo>
+        <div class="rafaga-tag" *ngIf="enRafaga">Ráfaga · muestra {{ rafagaHechas + 1 }} de {{ rafagaTotal }}</div>
         <div class="rec-badge">
           <span class="rec-dot"></span>
           GRABANDO {{ progresoGrabacion }}%
@@ -123,14 +140,14 @@
         <div class="rec-progress-bar">
           <div class="rec-fill" [style.width.%]="progresoGrabacion"></div>
         </div>
-        <p class="rec-hint">Haz la seña "{{ sena.palabra }}" de forma fluida</p>
+        <p class="rec-hint">{{ tipoSena === 'estatica' ? 'Mantén la postura de' : 'Haz de forma fluida la seña' }} "{{ sena.palabra }}"</p>
       </ng-template>
     </div>
 
     <!-- Panel de Validación / Prueba en Vivo -->
     <div class="test-panel" *ngIf="modoPruebaActivo && resultadoEnVivo">
       <div class="test-header">
-        <span class="test-title">Prueba en Vivo (DTW)</span>
+        <span class="test-title">Prueba en vivo{{ resultadoEnVivo.espejo ? ' · espejo' : '' }}</span>
         <span class="test-score" [class.pass]="resultadoEnVivo.esCoincidente" [class.fail]="!resultadoEnVivo.esCoincidente">
           {{ resultadoEnVivo.similitudPct }}% Coincidencia
         </span>
@@ -154,19 +171,39 @@
 </ion-content>
 
 <ion-footer class="trainer-footer">
-  <div class="footer-info" *ngIf="modeloExistente && estadoGrabacion !== 'grabando'">
-    <span class="info-badge" *ngIf="!modeloDesactualizado">
+  <div class="footer-info" *ngIf="estadoGrabacion !== 'grabando'">
+    <span class="info-badge" *ngIf="modeloNuevo">
+      <ion-icon name="sparkles-outline"></ion-icon>
+      Grabación lista ({{ modeloNuevo.totalFrames }} frames · {{ modeloNuevo.tipo === 'estatica' ? 'estática' : 'dinámica' }}) — pruébala y guárdala como referencia
+    </span>
+    <span class="info-badge" *ngIf="!modeloNuevo && modeloExistente && !modeloDesactualizado">
       <ion-icon name="checkmark-circle"></ion-icon>
-      Modelo guardado ({{ modeloExistente.totalFrames }} frames · {{ modeloExistente.tipo }})
+      Referencia guardada ({{ modeloExistente.totalFrames }} frames · {{ modeloExistente.tipo === 'estatica' ? 'estática' : 'dinámica' }})
     </span>
-    <span class="info-badge warning" *ngIf="modeloDesactualizado">
+    <span class="info-badge warning" *ngIf="!modeloNuevo && modeloDesactualizado">
       <ion-icon name="alert-circle"></ion-icon>
-      Modelo grabado con una versión anterior del motor — vuelve a grabarlo para que la detección de movimiento funcione bien.
+      Referencia grabada con una versión anterior del motor — vuelve a grabarla para mejorar la precisión.
     </span>
+    <span class="info-badge dataset" *ngIf="muestrasEnDataset !== null">
+      <ion-icon name="layers-outline"></ion-icon>
+      Dataset: {{ muestrasEnDataset }} muestra(s){{ muestrasEnDataset < 10 ? ' · se recomiendan 10 o más' : '' }}
+    </span>
+    <button
+      type="button"
+      class="link-btn rafaga-btn"
+      *ngIf="muestrasEnDataset !== null && estadoCamara === 'activa' && !enRafaga"
+      (click)="iniciarRafaga()">
+      <ion-icon name="layers-outline"></ion-icon> Grabar {{ tamanoRafaga }} seguidas al dataset
+    </button>
+    <p class="dataset-msg" *ngIf="mensajeDataset">
+      {{ mensajeDataset }}
+      <button type="button" class="link-btn" *ngIf="muestraRecienGuardada" (click)="deshacerUltimaMuestra()">
+        <ion-icon name="arrow-undo-outline"></ion-icon> Deshacer
+      </button>
+    </p>
   </div>
 
   <div class="footer-actions">
-    <!-- Botón de Cancelar (solo durante cuenta atrás o grabación) -->
     <button
       class="btn-action btn-cancel"
       *ngIf="estadoGrabacion === 'cuenta_atras' || estadoGrabacion === 'grabando'"
@@ -175,24 +212,31 @@
       <span>Cancelar</span>
     </button>
 
-    <!-- Botón de Iniciar Grabación -->
     <button
       class="btn-action btn-record"
       *ngIf="estadoGrabacion !== 'cuenta_atras' && estadoGrabacion !== 'grabando'"
       [disabled]="estadoCamara !== 'activa'"
       (click)="iniciarCuentaAtras()">
       <ion-icon [name]="estadoGrabacion === 'grabado' ? 'refresh-outline' : 'radio-button-on-outline'"></ion-icon>
-      <span>{{ estadoGrabacion === 'grabado' ? 'Re-grabar Seña' : 'Grabar Seña' }}</span>
+      <span>{{ estadoGrabacion === 'grabado' ? 'Grabar otra vez' : 'Grabar seña' }}</span>
     </button>
 
-    <!-- Botón de Guardar en Supabase -->
+    <button
+      class="btn-action btn-dataset"
+      *ngIf="puedeAgregarAlDataset"
+      [disabled]="guardandoMuestra"
+      (click)="agregarAlDataset()">
+      <ion-icon [name]="guardandoMuestra ? 'refresh-outline' : 'layers-outline'" [class.spin]="guardandoMuestra"></ion-icon>
+      <span>{{ guardandoMuestra ? 'Guardando…' : 'Al dataset' }}</span>
+    </button>
+
     <button
       class="btn-action btn-save"
-      *ngIf="estadoGrabacion === 'grabado'"
+      *ngIf="modeloNuevo && estadoGrabacion === 'grabado'"
       [disabled]="guardando"
       (click)="guardarModelo()">
       <ion-icon [name]="guardando ? 'refresh-outline' : 'save-outline'" [class.spin]="guardando"></ion-icon>
-      <span>{{ guardando ? 'Guardando…' : 'Guardar Modelo' }}</span>
+      <span>{{ guardando ? 'Guardando…' : 'Usar como referencia' }}</span>
     </button>
   </div>
 </ion-footer>

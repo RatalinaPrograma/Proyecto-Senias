@@ -5,6 +5,7 @@ import {
   OnDestroy,
   OnInit,
   ViewChild,
+  inject,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -30,18 +31,25 @@ import {
   playOutline,
   stopOutline,
   flameOutline,
+  downloadOutline,
 } from 'ionicons/icons';
-import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+import type { HandLandmarker } from '@mediapipe/tasks-vision';
+import { Capacitor } from '@capacitor/core';
 import { SupabaseService } from '../services/supabase';
+import { BotonAtrasService } from '../services/boton-atras';
 import { Nivel, Subnivel, Sena } from '../data/db-types';
 import { SenaTrainerModalComponent } from '../shared/sena-trainer-modal/sena-trainer-modal.component';
 import {
-  AnclaSesion,
-  ModeloReferenciaSena,
-  Punto3D,
-  compararFrameEstatico,
-  compararSecuenciasDTW,
-} from '../utils/gesture-math';
+  ControlFramesVideo,
+  GrabadorCaptura,
+  MediaPipeManosService,
+  Prediccion,
+  ReconocedorSenasService,
+  construirDatasetExportable,
+  dibujarManos,
+  evaluarCaptura,
+  modeloDeSena,
+} from '../motor-senas';
 
 addIcons({
   'arrow-back': arrowBack,
@@ -62,15 +70,14 @@ addIcons({
   'play-outline': playOutline,
   'stop-outline': stopOutline,
   'flame-outline': flameOutline,
+  'download-outline': downloadOutline,
 });
 
-const HAND_CONNECTIONS: [number, number][] = [
-  [0, 1], [1, 2], [2, 3], [3, 4],
-  [0, 5], [5, 6], [6, 7], [7, 8],
-  [5, 9], [9, 10], [10, 11], [11, 12],
-  [9, 13], [13, 14], [14, 15], [15, 16],
-  [13, 17], [0, 17], [17, 18], [18, 19], [19, 20],
-];
+const ESTILO_LAB = { linea: '#00e5ff', punta: '#0051ff', nudillo: '#ffffff', borde: '#030b17', brillo: '#00e5ff' };
+/** El reconocimiento en vivo se recalcula ~5 veces por segundo, no en cada frame. */
+const INTERVALO_EVALUACION_LAB_MS = 200;
+/** Sin manos durante este tiempo, se descarta lo acumulado (empieza otra "toma"). */
+const PAUSA_REINICIO_LAB_MS = 700;
 
 interface NodoRed {
   id: string;
@@ -166,27 +173,31 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   private labStream: MediaStream | null = null;
   private labHandLandmarker: HandLandmarker | null = null;
   private labRafId = 0;
-  private labLastVideoTime = -1;
-  // Antes había un solo buffer normalizado siempre a 1 mano
-  // (`normalizarFrame(manos, 1)`), así que una seña calibrada a 2 manos
-  // JAMÁS podía coincidir: su vector de referencia mide 126 números y el
-  // buffer solo generaba 63 — `distanciaEntreFrames` los rechaza de
-  // entrada por largo distinto. Se mantienen dos buffers en paralelo,
-  // anclados al mismo punto de referencia, para poder comparar contra
-  // señas de 1 y de 2 manos a la vez.
-  private labBuffer1Mano: number[][] = [];
-  private labBuffer2Manos: number[][] = [];
-  private readonly anclaLab = new AnclaSesion();
-  private readonly LAB_BUFFER_MAX = 30;
+  private readonly labControl = new ControlFramesVideo();
+  /** Últimos 3 s de captura cruda: se compara contra señas de 1 y de 2 manos por igual. */
+  private readonly labBuffer = new GrabadorCaptura(3000);
+  private labUltimaEvaluacion = 0;
+  private labUltimaMano = 0;
 
   prediccionesEnVivo: PrediccionEnVivo[] = [];
   mejorPrediccion: PrediccionEnVivo | null = null;
+  /** Top 3 del clasificador entrenado (vacío si todavía no hay modelo entrenado). */
+  prediccionesClasificador: Prediccion[] = [];
+  hayClasificador = false;
   manosEnLaboratorio = 0;
+
+  // Dataset de entrenamiento
+  muestrasPorSena: Map<number, number> | null = null;
+  totalMuestras = 0;
+  exportando = false;
+  progresoExportacion = '';
 
   constructor(
     private supabaseService: SupabaseService,
     private modalCtrl: ModalController,
-    private router: Router
+    private router: Router,
+    private mediaPipe: MediaPipeManosService,
+    private reconocedor: ReconocedorSenasService
   ) {}
 
   async ngOnInit() {
@@ -194,13 +205,9 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    // El HandLandmarker es compartido (MediaPipeManosService): no se cierra acá.
     this.detenerAnimacionGrafo();
     this.detenerLaboratorioReconocimiento();
-    if (this.labHandLandmarker) {
-      try {
-        this.labHandLandmarker.close();
-      } catch {}
-    }
   }
 
   @HostListener('window:resize')
@@ -247,6 +254,7 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
       this.senas = senas;
 
       this.recalcularMetricas();
+      this.cargarConteoMuestras();
 
       setTimeout(() => {
         this.inicializarGrafoRed();
@@ -258,9 +266,65 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     }
   }
 
+  private async cargarConteoMuestras() {
+    try {
+      this.muestrasPorSena = await this.supabaseService.contarMuestrasPorSena();
+      this.totalMuestras = Array.from(this.muestrasPorSena.values()).reduce((a, b) => a + b, 0);
+    } catch {
+      this.muestrasPorSena = null; // tabla aún no creada (migración pendiente) o sin conexión
+    }
+  }
+
+  muestrasDe(senaId: number): number {
+    return this.muestrasPorSena?.get(senaId) ?? 0;
+  }
+
+  /**
+   * Descarga el dataset (todas las muestras crudas) en el formato que lee
+   * `ml/entrenar.py`. Los ids de usuario se reemplazan por p1, p2, …
+   */
+  async exportarDataset() {
+    if (this.exportando) return;
+    if (Capacitor.isNativePlatform()) {
+      // El WebView de Android no descarga archivos generados en el navegador.
+      alert(
+        'Desde la app del celular no se puede descargar el archivo. Para entrenar, en el computador corre:\n\n' +
+          'python ml/entrenar.py --supabase --email <tu correo de admin>\n\n' +
+          'o abre AI Studio en el navegador del computador y usa este botón.'
+      );
+      return;
+    }
+    this.exportando = true;
+    this.progresoExportacion = 'Descargando muestras…';
+    try {
+      const muestras = await this.supabaseService.listarMuestrasSena((n) => (this.progresoExportacion = `${n} muestras descargadas…`));
+      if (!muestras.length) {
+        alert('Todavía no hay muestras en el dataset. Graba algunas desde el entrenador de cada seña ("Al dataset").');
+        return;
+      }
+      const dataset = construirDatasetExportable(this.senas, muestras);
+      const blob = new Blob([JSON.stringify(dataset)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const hoy = new Date();
+      const fecha = `${hoy.getFullYear()}${String(hoy.getMonth() + 1).padStart(2, '0')}${String(hoy.getDate()).padStart(2, '0')}`;
+      a.href = url;
+      a.download = `signy-dataset-${fecha}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e: any) {
+      alert('No se pudo exportar el dataset: ' + (e?.message || 'error desconocido'));
+    } finally {
+      this.exportando = false;
+      this.progresoExportacion = '';
+    }
+  }
+
   recalcularMetricas() {
     this.totalSenas = this.senas.length;
-    this.calibradasCount = this.senas.filter((s) => !!s.landmarks_referencia).length;
+    this.calibradasCount = this.senas.filter((s) => !!modeloDeSena(s)).length;
     this.pendientesCount = this.totalSenas - this.calibradasCount;
     this.porcentajeCalibrado = this.totalSenas
       ? Math.round((this.calibradasCount / this.totalSenas) * 100)
@@ -273,7 +337,7 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
         !this.busqueda ||
         s.palabra.toLowerCase().includes(this.busqueda.toLowerCase().trim());
 
-      const esCalibrada = !!s.landmarks_referencia;
+      const esCalibrada = !!modeloDeSena(s);
       const coincideEstado =
         this.filtroEstado === 'todas' ||
         (this.filtroEstado === 'calibradas' && esCalibrada) ||
@@ -284,6 +348,15 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
 
       return coincideBusqueda && coincideEstado && coincideSubnivel;
     });
+  }
+
+  estaCalibrada(sena: Sena): boolean {
+    return !!modeloDeSena(sena);
+  }
+
+  umbralDe(sena: Sena): number {
+    const m = modeloDeSena(sena);
+    return m?.umbralRecomendado ?? (m?.tipo === 'estatica' ? 75 : 70);
   }
 
   nombreSubnivelDe(subnivelId: number): string {
@@ -386,7 +459,7 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
       const senaX = centroX + Math.cos(angulo) * distRadio;
       const senaY = centroY + Math.sin(angulo) * distRadio;
 
-      const estaCalibrada = !!sena.landmarks_referencia;
+      const estaCalibrada = !!modeloDeSena(sena);
 
       const nSena: NodoRed = {
         id: `sena_${sena.id}`,
@@ -609,42 +682,23 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   async iniciarLaboratorioReconocimiento() {
     this.labEstado = 'cargando';
     this.labMensajeError = '';
-    this.labBuffer1Mano = [];
-    this.labBuffer2Manos = [];
-    this.anclaLab.reiniciar();
+    this.labBuffer.reiniciar();
     this.prediccionesEnVivo = [];
+    this.prediccionesClasificador = [];
     this.mejorPrediccion = null;
 
     try {
-      if (!this.labHandLandmarker) {
-        const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-        );
-        this.labHandLandmarker = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath:
-              'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
-            delegate: 'GPU',
-          },
-          runningMode: 'VIDEO',
-          numHands: 2,
-          minHandDetectionConfidence: 0.5,
-          minHandPresenceConfidence: 0.5,
-          minTrackingConfidence: 0.5,
-        });
-      }
+      this.labHandLandmarker = await this.mediaPipe.obtener();
+      this.hayClasificador = !!(await this.reconocedor.clasificador());
 
-      let stream: MediaStream | null = null;
+      let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: this.labFacingMode, width: { ideal: 640 }, height: { ideal: 480 } },
           audio: false,
         });
       } catch {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: this.labFacingMode },
-          audio: false,
-        });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: this.labFacingMode }, audio: false });
       }
 
       this.labStream = stream;
@@ -679,9 +733,7 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     }
     this.labEstado = 'apagado';
     this.manosEnLaboratorio = 0;
-    this.labBuffer1Mano = [];
-    this.labBuffer2Manos = [];
-    this.anclaLab.reiniciar();
+    this.labBuffer.reiniciar();
   }
 
   alternarCamaraLab() {
@@ -691,72 +743,43 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   }
 
   private bucleReconocimientoReal() {
+    this.labControl.reiniciar();
     const loop = () => {
       const video = this.labVideoRef?.nativeElement;
       const canvas = this.labCanvasRef?.nativeElement;
 
-      if (video && canvas && this.labEstado === 'activo' && video.videoWidth > 0 && !video.paused) {
+      if (video && canvas && this.labHandLandmarker && this.labEstado === 'activo' && video.videoWidth > 0 && !video.paused && this.labControl.esFrameNuevo(video)) {
         if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
         }
-
         const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx?.clearRect(0, 0, canvas.width, canvas.height);
+        const marca = this.labControl.marcaDeTiempo();
+        try {
+          const results = this.labHandLandmarker.detectForVideo(video, marca);
+          this.manosEnLaboratorio = results?.landmarks?.length || 0;
 
-          if (this.labHandLandmarker) {
-            const nowInMs = Date.now();
-            if (nowInMs !== this.labLastVideoTime) {
-              this.labLastVideoTime = nowInMs;
-              const results = this.labHandLandmarker.detectForVideo(video, nowInMs);
-
-              this.manosEnLaboratorio = results?.landmarks?.length || 0;
-
-              if (results?.landmarks && results.landmarks.length > 0) {
-                // Dibujar esqueleto estilo neon en vivo
-                this.dibujarEsqueletoLab(ctx, canvas.width, canvas.height, results.landmarks);
-
-                // Normalizar frame para comparación con el modelo. Ambos
-                // buffers comparten el mismo punto de anclaje (fijado por
-                // `anclaLab` en el primer frame con manos válidas de esta
-                // "toma"), así que se pueden comparar por separado contra
-                // señas de 1 o de 2 manos sin perder la trayectoria real.
-                const manos: Punto3D[][] = results.landmarks.map((hand: any[]) =>
-                  hand.map((p) => ({ x: p.x, y: p.y, z: p.z || 0 }))
-                );
-
-                const frame1 = this.anclaLab.normalizar(manos, 1);
-                if (frame1) {
-                  this.labBuffer1Mano.push(frame1);
-                  if (this.labBuffer1Mano.length > this.LAB_BUFFER_MAX) {
-                    this.labBuffer1Mano.shift();
-                  }
-                }
-
-                const frame2 = this.anclaLab.normalizar(manos, 2);
-                if (frame2) {
-                  this.labBuffer2Manos.push(frame2);
-                  if (this.labBuffer2Manos.length > this.LAB_BUFFER_MAX) {
-                    this.labBuffer2Manos.shift();
-                  }
-                }
-
-                // Evaluar el buffer en tiempo real contra todo nuestro catálogo entrenado
-                if (this.labBuffer1Mano.length >= 12 || this.labBuffer2Manos.length >= 12) {
-                  this.evaluarBufferContraModelo();
-                }
-              } else {
-                // Si las manos salen de cuadro, se termina la "toma" actual:
-                // limpiamos ambos buffers y el anclaje para que la próxima
-                // aparición arranque una comparación nueva y no arrastre un
-                // origen de coordenadas viejo.
-                this.labBuffer1Mano = [];
-                this.labBuffer2Manos = [];
-                this.anclaLab.reiniciar();
-              }
-            }
+          if (this.manosEnLaboratorio > 0) {
+            this.labUltimaMano = marca;
+            if (ctx) dibujarManos(ctx, canvas.width, canvas.height, results.landmarks, ESTILO_LAB);
+          } else if (marca - this.labUltimaMano > PAUSA_REINICIO_LAB_MS && this.labBuffer.totalFrames) {
+            // Las manos salieron de cuadro: termina la "toma" actual.
+            this.labBuffer.reiniciar();
+            this.prediccionesEnVivo = [];
+            this.prediccionesClasificador = [];
+            this.mejorPrediccion = null;
           }
+
+          if (this.manosEnLaboratorio > 0 || this.labBuffer.totalFrames) {
+            this.labBuffer.agregar(results, marca, video.videoWidth, video.videoHeight);
+          }
+          if (marca - this.labUltimaEvaluacion >= INTERVALO_EVALUACION_LAB_MS && this.labBuffer.framesConManos(1) >= 8) {
+            this.labUltimaEvaluacion = marca;
+            this.evaluarBufferContraModelo();
+          }
+        } catch (e) {
+          console.warn('MediaPipe no pudo procesar el frame:', e);
         }
       }
 
@@ -768,111 +791,28 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     this.labRafId = requestAnimationFrame(loop);
   }
 
-  private dibujarEsqueletoLab(
-    ctx: CanvasRenderingContext2D,
-    width: number,
-    height: number,
-    allLandmarks: any[]
-  ) {
-    for (const landmarks of allLandmarks) {
-      ctx.strokeStyle = '#00e5ff';
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
-      for (const [start, end] of HAND_CONNECTIONS) {
-        const p1 = landmarks[start];
-        const p2 = landmarks[end];
-        ctx.beginPath();
-        ctx.moveTo(p1.x * width, p1.y * height);
-        ctx.lineTo(p2.x * width, p2.y * height);
-        ctx.stroke();
-      }
-
-      for (let i = 0; i < landmarks.length; i++) {
-        const pt = landmarks[i];
-        const x = pt.x * width;
-        const y = pt.y * height;
-        ctx.beginPath();
-        if ([4, 8, 12, 16, 20].includes(i)) {
-          ctx.arc(x, y, 6, 0, 2 * Math.PI);
-          ctx.fillStyle = '#0051ff';
-          ctx.shadowColor = '#00e5ff';
-          ctx.shadowBlur = 8;
-        } else {
-          ctx.arc(x, y, 4, 0, 2 * Math.PI);
-          ctx.fillStyle = '#ffffff';
-        }
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = '#030b17';
-        ctx.stroke();
-      }
-    }
-  }
-
   /**
-   * Compara el buffer deslizante de la cámara en tiempo real contra
-   * TODAS las señas calibradas en nuestro modelo de Supabase con DTW.
+   * Compara los últimos 3 s de cámara contra TODAS las señas con modelo de
+   * referencia (y, si existe, con el clasificador entrenado).
    */
-  private evaluarBufferContraModelo() {
-    const senasCalibradas = this.senas.filter((s) => !!s.landmarks_referencia);
-    if (!senasCalibradas.length || (!this.labBuffer1Mano.length && !this.labBuffer2Manos.length)) return;
-
+  private async evaluarBufferContraModelo() {
+    const captura = this.labBuffer.captura();
     const ranking: PrediccionEnVivo[] = [];
 
-    for (const sena of senasCalibradas) {
-      try {
-        const mod: ModeloReferenciaSena =
-          typeof sena.landmarks_referencia === 'string'
-            ? JSON.parse(sena.landmarks_referencia)
-            : sena.landmarks_referencia;
-
-        if (!mod || !mod.frames || !mod.frames.length) continue;
-
-        // Un modelo grabado con el formato v1 (auto-centrado por frame, sin
-        // trayectoria) no es comparable contra los buffers en vivo v2 —
-        // compararlos daría un puntaje sin sentido. Se omite del ranking
-        // hasta que se vuelva a calibrar.
-        if ((mod.version || 1) < 2) continue;
-
-        const manosSena = mod.manosRequeridas || 1;
-        const buffer = manosSena === 2 ? this.labBuffer2Manos : this.labBuffer1Mano;
-        if (!buffer.length) continue;
-
-        let similitud = 0;
-        let esCoincidente = false;
-
-        if (mod.tipo === 'estatica') {
-          const frameActual = buffer[buffer.length - 1];
-          const res = compararFrameEstatico(mod.frames[0], frameActual, mod.umbralRecomendado || 75);
-          similitud = res.similitudPct;
-          esCoincidente = res.esCoincidente;
-        } else {
-          // Dinámica (DTW contra el buffer correspondiente)
-          const res = compararSecuenciasDTW(mod.frames, buffer, mod.umbralRecomendado || 70);
-          similitud = res.similitudPct;
-          esCoincidente = res.esCoincidente;
-        }
-
-        ranking.push({
-          palabra: sena.palabra,
-          similitud,
-          esCoincidente,
-          tipo: mod.tipo || 'dinamica',
-          senaRef: sena,
-        });
-      } catch (e) {
-        // Ignorar seña corrupta
-      }
+    for (const sena of this.senas) {
+      const modelo = modeloDeSena(sena);
+      if (!modelo) continue;
+      const r = evaluarCaptura(modelo, captura);
+      if (r.motivo) continue;
+      ranking.push({ palabra: sena.palabra, similitud: r.similitudPct, esCoincidente: r.esCoincidente, tipo: modelo.tipo, senaRef: sena });
     }
 
-    // Ordenar de mayor a menor coincidencia
     ranking.sort((a, b) => b.similitud - a.similitud);
-
     this.prediccionesEnVivo = ranking.slice(0, 4);
-    if (this.prediccionesEnVivo.length > 0) {
-      this.mejorPrediccion = this.prediccionesEnVivo[0];
-    }
+    this.mejorPrediccion = this.prediccionesEnVivo[0] ?? null;
+
+    const clf = await this.reconocedor.clasificador();
+    this.prediccionesClasificador = clf ? clf.predecir(captura).slice(0, 3) : [];
   }
 
   // ================= Calibrar / Entrenar Seña =================
@@ -896,6 +836,7 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
           landmarks_referencia: senaActualizada.landmarks_referencia,
         };
         this.recalcularMetricas();
+        this.cargarConteoMuestras();
         this.inicializarGrafoRed();
         if (this.senaSeleccionada?.id === senaActualizada.id) {
           this.senaSeleccionada = this.senas[idx];
@@ -941,6 +882,30 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     } finally {
       this.guardandoNueva = false;
     }
+  }
+
+  // ---- botón atrás del teléfono ----
+  private readonly atras = inject(BotonAtrasService).paraPantalla(() => this.alPresionarAtras());
+
+  ionViewWillEnter() {
+    this.atras.activar();
+  }
+
+  ionViewWillLeave() {
+    this.atras.desactivar();
+  }
+
+  /** Atrás cierra primero el modal de nueva seña o la ficha de la seña elegida en el grafo. */
+  alPresionarAtras(): boolean {
+    if (this.modalCrearAbierto) {
+      if (!this.guardandoNueva) this.cerrarModalCrear();
+      return true;
+    }
+    if (this.senaSeleccionada) {
+      this.senaSeleccionada = null;
+      return true;
+    }
+    return false;
   }
 
   volver() {

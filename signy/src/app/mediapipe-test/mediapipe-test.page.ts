@@ -5,7 +5,8 @@ import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { addIcons } from 'ionicons';
 import { arrowBack, cameraReverse, videocam, refresh, eye, eyeOff, analytics, checkmarkCircle } from 'ionicons/icons';
-import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+import type { HandLandmarker } from '@mediapipe/tasks-vision';
+import { ControlFramesVideo, MediaPipeManosService } from '../motor-senas';
 
 addIcons({
   'arrow-back': arrowBack,
@@ -58,7 +59,7 @@ export class MediapipeTestPage implements OnInit, OnDestroy {
   private stream: MediaStream | null = null;
   private handLandmarker: HandLandmarker | null = null;
   private animationFrameId = 0;
-  private lastVideoTime = -1;
+  private readonly controlFrames = new ControlFramesVideo();
 
   // Métricas y diagnósticos en tiempo real
   fps = 0;
@@ -72,21 +73,15 @@ export class MediapipeTestPage implements OnInit, OnDestroy {
   mostrarPuntos = true;
   mostrarEtiquetas = true;
 
-  constructor(private router: Router) {}
+  constructor(private router: Router, private mediaPipe: MediaPipeManosService) {}
 
   async ngOnInit() {
     await this.inicializarMediaPipe();
   }
 
   ngOnDestroy() {
+    // El HandLandmarker es compartido (MediaPipeManosService): no se cierra acá.
     this.detenerCamara();
-    if (this.handLandmarker) {
-      try {
-        this.handLandmarker.close();
-      } catch (e) {
-        console.warn('Error al cerrar HandLandmarker:', e);
-      }
-    }
   }
 
   // ---------- Inicialización del Modelo ----------
@@ -95,21 +90,7 @@ export class MediapipeTestPage implements OnInit, OnDestroy {
     this.mensajeError = '';
 
     try {
-      const vision = await FilesetResolver.forVisionTasks(
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-      );
-
-      this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
-          delegate: 'GPU',
-        },
-        runningMode: 'VIDEO',
-        numHands: 2,
-        minHandDetectionConfidence: 0.5,
-        minHandPresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-      });
+      this.handLandmarker = await this.mediaPipe.obtener();
 
       this.estadoModelo = 'listo';
       // Iniciar cámara automáticamente una vez cargado el modelo
@@ -230,12 +211,14 @@ export class MediapipeTestPage implements OnInit, OnDestroy {
 
   // ---------- Bucle de Detección y Renderizado en Canvas ----------
   private iniciarBucleDeteccion() {
+    this.controlFrames.reiniciar();
     const render = () => {
       const video = this.videoRef?.nativeElement;
       const canvas = this.canvasRef?.nativeElement;
 
       if (video && canvas && this.handLandmarker && this.estadoCamara === 'activa') {
-        if (video.videoWidth > 0 && !video.paused) {
+        // Solo cuando la cámara entregó un frame nuevo: así el FPS mostrado es el real.
+        if (video.videoWidth > 0 && !video.paused && this.controlFrames.esFrameNuevo(video)) {
           // Ajustar resolución del canvas al video real
           if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
             canvas.width = video.videoWidth;
@@ -247,17 +230,12 @@ export class MediapipeTestPage implements OnInit, OnDestroy {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             const startTime = performance.now();
-            const nowInMs = Date.now();
+            const results = this.handLandmarker.detectForVideo(video, this.controlFrames.marcaDeTiempo(startTime));
+            this.latenciaMs = Math.round(performance.now() - startTime);
 
-            if (nowInMs !== this.lastVideoTime) {
-              this.lastVideoTime = nowInMs;
-              const results = this.handLandmarker.detectForVideo(video, nowInMs);
-              this.latenciaMs = Math.round(performance.now() - startTime);
-
-              // Procesar resultados
-              this.actualizarMetricas();
-              this.dibujarResultados(ctx, canvas.width, canvas.height, results);
-            }
+            // Procesar resultados
+            this.actualizarMetricas();
+            this.dibujarResultados(ctx, canvas.width, canvas.height, results);
           }
         }
       }

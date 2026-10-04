@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { ModalController } from '@ionic/angular';
 import { AdminVocabularioPage } from './admin-vocabulario.page';
 import { SupabaseService } from '../services/supabase';
+import { BotonAtrasService } from '../services/boton-atras';
 import { Nivel, Subnivel, Sena } from '../data/db-types';
 
 describe('AdminVocabularioPage', () => {
@@ -374,6 +375,48 @@ describe('AdminVocabularioPage', () => {
     it('elegirIcono asigna el emoji al formulario', () => {
       component.elegirIcono('🐶');
       expect(component.formSena.icono).toBe('🐶');
+    });
+  });
+
+  describe('botón atrás del teléfono', () => {
+    beforeEach(async () => { prepararCargaExitosa(); await component.ngOnInit(); });
+
+    it('cierra primero el formulario abierto, sin cambiar de vista', () => {
+      component.abrirNuevoNivel();
+      expect(component.formNivelAbierto).toBeTrue();
+      expect(component.alPresionarAtras()).toBeTrue();
+      expect(component.formNivelAbierto).toBeFalse();
+      expect(component.vista).toBe('niveles');
+    });
+
+    it('sube un escalón a la vez: señas → subniveles → niveles → sale de la pantalla', () => {
+      component.abrirNivel(nivel1);
+      component.abrirSubnivel(sub1);
+      expect(component.vista).toBe('senas');
+
+      expect(component.alPresionarAtras()).toBeTrue();
+      expect(component.vista).toBe('subniveles');
+      expect(component.alPresionarAtras()).toBeTrue();
+      expect(component.vista).toBe('niveles');
+      expect(component.alPresionarAtras()).toBeFalse();
+      expect(routerSpy.navigate).not.toHaveBeenCalled(); // la navegación la hace el servicio
+    });
+
+    it('mientras guarda no cierra el formulario', () => {
+      component.abrirNuevoNivel();
+      component.guardando = true;
+      expect(component.alPresionarAtras()).toBeTrue();
+      expect(component.formNivelAbierto).toBeTrue();
+    });
+
+    it('se hace cargo del botón atrás al entrar y lo suelta al salir', () => {
+      const servicio = TestBed.inject(BotonAtrasService);
+      const quitar = jasmine.createSpy('quitar');
+      spyOn(servicio, 'registrar').and.returnValue(quitar);
+      component.ionViewWillEnter();
+      expect(servicio.registrar).toHaveBeenCalledTimes(1);
+      component.ionViewWillLeave();
+      expect(quitar).toHaveBeenCalled();
     });
   });
 });

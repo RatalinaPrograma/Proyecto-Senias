@@ -104,6 +104,107 @@ body {
   font-family: var(--ion-font-family);
 }
 
+/*
+ * Action-sheet de <ion-select interface="action-sheet">. Sin la paleta oscura de
+ * Ionic, el texto de los botones cae a --ion-color-step-850 (#262626) sobre el
+ * fondo navy. Va en global porque el overlay se monta fuera del componente.
+ * Se usa .md/.ios y no `ion-action-sheet` a secas: Ionic define sus valores con
+ * la clase .sc-ion-action-sheet-md-h, que gana por especificidad.
+ */
+ion-action-sheet.md,
+ion-action-sheet.ios {
+  --background: var(--signy-card);
+  --color: var(--signy-muted);                     /* título / subtítulo */
+  --button-color: var(--signy-cream);              /* opciones */
+  --button-color-disabled: var(--signy-muted);
+  --button-color-selected: var(--signy-fox-light); /* opción elegida */
+  --button-background-selected: var(--signy-fox);
+  --button-background-selected-opacity: 0.18;
+  --button-background-hover: var(--signy-cream);
+  --button-background-hover-opacity: 0.08;
+  --button-background-focused: var(--signy-cream);
+  --button-background-focused-opacity: 0.14;
+  --backdrop-opacity: 0.6;
+}
+
+/*
+ * Avisos de confirmación (AlertController con cssClass: 'signy-alert'), p. ej.
+ * "¿Salir de la lección?". Sin esto, el mensaje queda gris (#737373) sobre el
+ * navy. Botones apilados: el de role 'cancel' (seguir) es el principal y el
+ * 'destructive' (salir) queda como texto rojo, para que lo cómodo sea quedarse.
+ */
+ion-alert.signy-alert {
+  --background: var(--signy-card);
+  --max-width: 340px;
+  --backdrop-opacity: 0.6;
+
+  .alert-wrapper {
+    border-radius: 22px;
+    border: 1px solid rgba(147, 163, 196, 0.18);
+    box-shadow: var(--signy-shadow-card);
+    outline: none; /* Ionic enfoca el contenedor al abrir (para lectores de pantalla), no es un control */
+  }
+
+  .alert-head {
+    padding: 26px 22px 6px;
+    text-align: center;
+  }
+
+  .alert-title {
+    color: var(--signy-cream);
+    font-family: 'Baloo 2', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .alert-message {
+    padding: 4px 22px 18px;
+    color: var(--signy-muted);
+    font-family: 'Manrope', sans-serif;
+    font-size: 15px;
+    line-height: 1.45;
+    text-align: center;
+  }
+
+  .alert-button-group {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 0 20px 18px;
+  }
+
+  .alert-button {
+    width: 100%;
+    height: 50px;
+    margin: 0;
+    padding: 0 16px;
+    border-radius: 14px;
+    font-family: 'Manrope', sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--signy-cream);
+  }
+
+  .alert-button-inner {
+    justify-content: center;
+  }
+
+  .alert-button-role-cancel {
+    background: var(--signy-fox);
+    color: #fff;
+    box-shadow: 0 4px 0 var(--signy-fox-deep);
+    margin-bottom: 4px;
+  }
+
+  .alert-button-role-destructive {
+    background: transparent;
+    color: var(--ion-color-danger-tint); /* #FF6E5E: 4.9:1 sobre la tarjeta (el rojo base no llega a 4.5) */
+  }
+}
+
 /* Reglas globales para inputs y textareas de formularios */
 .signy-input,
 ion-input.signy-input,

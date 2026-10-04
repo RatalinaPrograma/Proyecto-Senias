@@ -86,6 +86,8 @@
           [disabled]="guardandoVoz"
           placeholder="Predeterminada del sistema"
           interface="action-sheet"
+          cancelText="Cancelar"
+          aria-label="Voz de texto a voz"
           (ionChange)="cambiarVoz($event)">
           <ion-select-option [value]="null">Predeterminada del sistema</ion-select-option>
           <ion-select-option *ngFor="let v of voces" [value]="v.name">
@@ -132,6 +134,8 @@
           [value]="horaRecordatorio"
           [disabled]="guardandoNotif"
           interface="action-sheet"
+          cancelText="Cancelar"
+          aria-label="Hora del recordatorio"
           (ionChange)="cambiarHoraRecordatorio($event)">
           <ion-select-option *ngFor="let h of horasDisponibles" [value]="h">
             {{ labelHora(h) }}

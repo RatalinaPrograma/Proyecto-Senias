@@ -27,7 +27,7 @@
 
   <ng-container *ngIf="fase !== 'cargando' && fase !== 'error' && fase !== 'sinvidas' && fase !== 'complete' && fase !== 'nivel' && fase !== 'racha'">
     <div class="lesson-topbar">
-      <button class="icon-btn" (click)="salir()" aria-label="Salir de la lección"><ion-icon name="close"></ion-icon></button>
+      <button class="icon-btn" (click)="alPresionarAtras()" aria-label="Salir de la lección"><ion-icon name="close"></ion-icon></button>
 
       <div class="phase-track" *ngIf="fase !== 'quiz'">
         <div class="phase-dot" [class.active]="true"></div>
@@ -173,7 +173,7 @@
           <app-sena-icon [seed]="7" [size]="70" [color]="nivel.color || '#F2701A'" [dark]="nivel.color_oscuro || '#C6560E'"></app-sena-icon>
           <h3>Haz la seña de:</h3>
           <p class="cam-word" [style.color]="nivel.color || '#F2701A'">{{ senaCamara.palabra }}</p>
-          <span class="cam-ai-tag" *ngIf="senaCamara.landmarks_referencia">
+          <span class="cam-ai-tag" *ngIf="camConModelo">
             <ion-icon name="sparkles-outline"></ion-icon> Evaluada con Modelo IA Experto
           </span>
           <ion-button class="btn-fox" (click)="iniciarCamara()">
@@ -206,11 +206,11 @@
         <div class="cam-idle" *ngIf="camStage === 'result'">
           <span class="cam-emoji">{{ camPassed ? '✅' : '🤔' }}</span>
           <h3>{{ camMsg }}</h3>
-          <p class="cam-sub" *ngIf="tieneModeloReferencia">
-            Coincidencia con el modelo experto (DTW): <strong>{{ camScore }}%</strong>
-          </p>
-          <p class="cam-sub" *ngIf="!tieneModeloReferencia">
-            Detección de postura de manos: <strong>{{ camScore }}%</strong>
+          <p class="cam-sub" [ngSwitch]="camFuente">
+            <ng-container *ngSwitchCase="'referencia'">Coincidencia con el modelo experto:</ng-container>
+            <ng-container *ngSwitchCase="'clasificador'">Confianza del modelo entrenado:</ng-container>
+            <ng-container *ngSwitchDefault>Detección de manos:</ng-container>
+            <strong>{{ camScore }}%</strong>
           </p>
           <div class="cam-result-actions">
             <ion-button fill="outline" (click)="reintentarCamara()">Reintentar</ion-button>
@@ -220,7 +220,7 @@
       </div>
 
       <p class="cam-footnote">
-        ⚡ Evaluado en tu dispositivo con Signy Edge AI: MediaPipe HandLandmarker y Dynamic Time Warping (DTW) en tiempo real.
+        ⚡ Evaluado en tu dispositivo con Signy Edge AI: MediaPipe HandLandmarker y Dynamic Time Warping (DTW), sin enviar video a ningún servidor.
       </p>
     </div>
   </ng-container>

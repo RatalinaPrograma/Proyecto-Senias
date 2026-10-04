@@ -1,6 +1,6 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { IonicModule } from '@ionic/angular';
+import { AlertController, IonicModule } from '@ionic/angular';
 import { ActivatedRoute, Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
 import { ContenidoService } from '../services/contenido';
@@ -12,28 +12,25 @@ import { esVideoMp4 } from '../shared/media-utils';
 import { GifTileComponent } from '../shared/gif-tile/gif-tile.component';
 import { RachaCalendarComponent, DiaRachaVista } from '../shared/racha-calendar/racha-calendar.component';
 import { ImageCacheService } from '../services/image-cache';
+import { BotonAtrasService } from '../services/boton-atras';
 import { addIcons } from 'ionicons';
 import { close, heart, checkmarkCircle, closeCircle, camera, videocam, volumeHigh, snowOutline, trophy, sparklesOutline } from 'ionicons/icons';
-import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+import type { HandLandmarker } from '@mediapipe/tasks-vision';
 import {
-  AnclaSesion,
-  ModeloReferenciaSena,
-  Punto3D,
-  compararFrameEstatico,
-  compararSecuenciasDTW,
-} from '../utils/gesture-math';
+  ControlFramesVideo,
+  GrabadorCaptura,
+  MediaPipeManosService,
+  ReconocedorSenasService,
+  dibujarManos,
+  modeloDeSena,
+} from '../motor-senas';
 
 addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, 'close-circle': closeCircle, camera, videocam, 'volume-high': volumeHigh, 'snow-outline': snowOutline, trophy, 'sparkles-outline': sparklesOutline });
 
-const HAND_CONNECTIONS: [number, number][] = [
-  [0, 1], [1, 2], [2, 3], [3, 4],
-  [0, 5], [5, 6], [6, 7], [7, 8],
-  [5, 9], [9, 10], [10, 11], [11, 12],
-  [9, 13], [13, 14], [14, 15], [15, 16],
-  [13, 17], [0, 17], [17, 18], [18, 19], [19, 20],
-];
-
 type Fase = 'cargando' | 'flash' | 'match' | 'quiz' | 'record' | 'complete' | 'nivel' | 'racha' | 'sinvidas' | 'error';
+
+/** Fases con la lección a medio hacer: salir de ellas pide confirmación. */
+const FASES_EN_CURSO: readonly Fase[] = ['flash', 'match', 'quiz', 'record'];
 
 interface Par { palabra: string; senaId: number; seed: number; videoUrl: string | null; }
 interface Pregunta { palabra: string; senaId: number; opciones: string[]; seed: number; videoUrl: string | null; }
@@ -177,24 +174,28 @@ export class LessonPage implements OnInit, OnDestroy {
       : '¡Sigue así, no te detengas!';
   }
 
-  // ---- cámara y Signy Edge AI (MediaPipe + DTW) ----
+  // ---- cámara y reconocimiento de señas (MediaPipe + motor-senas) ----
   camStage: 'idle' | 'requesting' | 'denied' | 'countdown' | 'recording' | 'result' = 'idle';
   camCount = 3;
   camScore = 0;
   camPassed = false;
   camMsg = '';
+  /** Qué motor decidió el resultado (para el texto bajo el puntaje). */
+  camFuente: 'referencia' | 'clasificador' | 'deteccion' = 'deteccion';
   private stream: MediaStream | null = null;
   private rafId = 0;
+  private intervaloCuenta: ReturnType<typeof setInterval> | null = null;
   private handLandmarker: HandLandmarker | null = null;
-  private lastVideoTime = -1;
-  private framesAlumno: number[][] = [];
-  // Toda la toma de 2.8s del alumno se ancla al primer frame con manos
-  // válidas (igual que en el trainer del admin), para que sea comparable
-  // contra el modelo de referencia v2 y no se pierda la trayectoria de la
-  // mano en señas que dependen de movimiento (ver AnclaSesion).
-  private readonly anclaCaptura = new AnclaSesion();
-  tieneModeloReferencia = false;
-  modeloReferencia: ModeloReferenciaSena | null = null;
+  private readonly controlFrames = new ControlFramesVideo();
+  private readonly grabador = new GrabadorCaptura();
+  private destruida = false;
+
+  // ---- salir de la lección (botón atrás del teléfono y la X) ----
+  private readonly alertCtrl = inject(AlertController);
+  private readonly atras = inject(BotonAtrasService).paraPantalla(() => this.alPresionarAtras());
+  private alertaSalida: HTMLIonAlertElement | null = null;
+  /** Mientras se guarda el progreso final no se puede salir a medias. */
+  private finalizando = false;
 
   constructor(
     private route: ActivatedRoute,
@@ -202,7 +203,9 @@ export class LessonPage implements OnInit, OnDestroy {
     private supabaseService: SupabaseService,
     private contenidoService: ContenidoService,
     private ttsService: TtsService,
-    private imageCacheService: ImageCacheService
+    private imageCacheService: ImageCacheService,
+    private mediaPipe: MediaPipeManosService,
+    private reconocedor: ReconocedorSenasService
   ) {}
 
   async ngOnInit() {
@@ -290,14 +293,64 @@ export class LessonPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.destruida = true;
+    // El HandLandmarker es compartido (MediaPipeManosService): no se cierra acá.
     this.detenerCamara();
-    if (this.rafId) cancelAnimationFrame(this.rafId);
-    if (this.handLandmarker) {
-      try {
-        this.handLandmarker.close();
-      } catch (e) {}
-    }
     this.imageCacheService.liberarMemoriaRAM();
+    this.ionViewWillLeave();
+    this.alertaSalida?.dismiss().catch(() => {});
+  }
+
+  // ---------- Botón atrás y salida ----------
+  ionViewWillEnter() {
+    this.atras.activar();
+  }
+
+  ionViewWillLeave() {
+    this.atras.desactivar();
+  }
+
+  /**
+   * Botón atrás del teléfono y la X de la barra superior. Con la lección a
+   * medio hacer pregunta antes de salir (el avance se perdería); en la carga,
+   * los errores y las pantallas finales (el progreso ya quedó guardado) sale
+   * directo.
+   */
+  alPresionarAtras(): boolean {
+    if (this.finalizando) return true;
+    if (FASES_EN_CURSO.includes(this.fase)) {
+      void this.confirmarSalida();
+    } else {
+      this.salir();
+    }
+    return true;
+  }
+
+  private async confirmarSalida() {
+    if (this.alertaSalida) return;
+    // Una grabación que sigue corriendo detrás del aviso se evaluaría (y
+    // registraría como intento fallido) sin que la persona esté haciendo la seña.
+    this.pausarCamara();
+    const alerta = await this.alertCtrl.create({
+      header: '¿Salir de la lección?',
+      message: 'Si sales ahora, perderás tu avance en esta lección y tendrás que empezarla de nuevo.',
+      cssClass: 'signy-alert',
+      buttons: [
+        { text: 'Seguir practicando', role: 'cancel' },
+        { text: 'Salir', role: 'destructive', handler: () => this.salir() },
+      ],
+    });
+    this.alertaSalida = alerta;
+    alerta.onDidDismiss().then(() => {
+      if (this.alertaSalida === alerta) this.alertaSalida = null;
+    });
+    await alerta.present();
+  }
+
+  /** Si la app pasa a segundo plano a mitad de la grabación, se corta: al volver, se graba de nuevo. */
+  @HostListener('document:visibilitychange')
+  alCambiarVisibilidad() {
+    if (document.hidden) this.pausarCamara();
   }
 
   private mezclar<T>(arr: T[]): T[] {
@@ -495,61 +548,28 @@ export class LessonPage implements OnInit, OnDestroy {
     this.estado = null;
   }
 
-  // ---------- Cámara y Signy Edge AI (MediaPipe + DTW) ----------
+  // ---------- Cámara y reconocimiento de señas ----------
   get senaCamara(): Sena {
     return this.senas[this.senas.length - 1];
   }
 
-  private cargarModeloReferencia() {
-    this.modeloReferencia = null;
-    this.tieneModeloReferencia = false;
-    if (this.senaCamara?.landmarks_referencia) {
-      try {
-        const mod = typeof this.senaCamara.landmarks_referencia === 'string'
-          ? JSON.parse(this.senaCamara.landmarks_referencia)
-          : this.senaCamara.landmarks_referencia;
-
-        // Un modelo grabado con el formato v1 (auto-centrado por frame, sin
-        // trayectoria) no es comparable contra la captura en vivo del
-        // alumno (v2, anclada a un solo punto por toma) — compararlos daría
-        // puntajes sin sentido. Mientras no se re-grabe, tratamos la seña
-        // como si aún no tuviera modelo (usa el fallback de detección simple).
-        if (mod && Array.isArray(mod.frames) && mod.frames.length > 0 && (mod.version || 1) >= 2) {
-          this.modeloReferencia = mod as ModeloReferenciaSena;
-          this.tieneModeloReferencia = true;
-        }
-      } catch (e) {
-        console.warn('Error al parsear landmarks_referencia:', e);
-      }
-    }
+  /** La seña tiene modelo de referencia utilizable (para la etiqueta "Evaluada con IA"). */
+  get camConModelo(): boolean {
+    return !!modeloDeSena(this.senaCamara);
   }
 
   private async inicializarMediaPipe() {
-    if (this.handLandmarker) return;
     try {
-      const vision = await FilesetResolver.forVisionTasks(
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-      );
-      this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath:
-            'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
-          delegate: 'GPU',
-        },
-        runningMode: 'VIDEO',
-        numHands: 2,
-        minHandDetectionConfidence: 0.5,
-        minHandPresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-      });
+      this.handLandmarker = await this.mediaPipe.obtener();
     } catch (e) {
+      // Sin MediaPipe (sin conexión la primera vez, WebView sin soporte) la
+      // práctica igual se puede hacer: se evalúa como "sin manos detectadas".
       console.warn('Error al cargar MediaPipe en lección:', e);
     }
   }
 
   async iniciarCamara() {
     this.camStage = 'requesting';
-    this.cargarModeloReferencia();
 
     try {
       const promesaMediaPipe = this.inicializarMediaPipe();
@@ -569,6 +589,12 @@ export class LessonPage implements OnInit, OnDestroy {
 
       await promesaMediaPipe;
 
+      // Se salió de la lección (o se pausó) mientras se pedía la cámara: no dejarla encendida.
+      if (this.destruida || this.camStage !== 'requesting') {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
       this.stream = stream;
       if (this.videoRef?.nativeElement) {
         this.videoRef.nativeElement.srcObject = this.stream;
@@ -587,62 +613,56 @@ export class LessonPage implements OnInit, OnDestroy {
 
   private contarRegresiva() {
     this.camCount = 3;
-    const iv = setInterval(() => {
+    this.detenerCuentaRegresiva();
+    this.intervaloCuenta = setInterval(() => {
       this.camCount--;
       if (this.camCount <= 0) {
-        clearInterval(iv);
+        this.detenerCuentaRegresiva();
         this.camStage = 'recording';
         this.grabar();
       }
     }, 800);
   }
 
+  private detenerCuentaRegresiva() {
+    if (this.intervaloCuenta) {
+      clearInterval(this.intervaloCuenta);
+      this.intervaloCuenta = null;
+    }
+  }
+
   private grabar() {
-    this.framesAlumno = [];
-    this.anclaCaptura.reiniciar();
-    this.lastVideoTime = -1;
+    this.grabador.reiniciar();
+    this.controlFrames.reiniciar();
     const inicio = performance.now();
-    const duracion = 2800; // ~2.8 segundos de captura continua
+    const duracion = 2800; // ~2,8 s: alcanza para la seña con algo de margen antes y después
 
     const loop = () => {
       const video = this.videoRef?.nativeElement;
       const canvas = this.canvasRef?.nativeElement;
 
-      if (video && canvas && this.camStage === 'recording' && video.videoWidth > 0) {
+      // Solo se procesa cuando la cámara entregó un frame nuevo (ver ControlFramesVideo).
+      if (video && canvas && this.camStage === 'recording' && video.videoWidth > 0 && this.controlFrames.esFrameNuevo(video)) {
         if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
         }
-
         const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx?.clearRect(0, 0, canvas.width, canvas.height);
 
-          if (this.handLandmarker) {
-            const nowInMs = Date.now();
-            if (nowInMs !== this.lastVideoTime) {
-              this.lastVideoTime = nowInMs;
-              const results = this.handLandmarker.detectForVideo(video, nowInMs);
-
-              if (results?.landmarks && results.landmarks.length > 0) {
-                this.dibujarEsqueleto(ctx, canvas.width, canvas.height, results.landmarks);
-
-                const manos: Punto3D[][] = results.landmarks.map((hand: any[]) =>
-                  hand.map((p) => ({ x: p.x, y: p.y, z: p.z || 0 }))
-                );
-                const frameNorm = this.anclaCaptura.normalizar(
-                  manos,
-                  this.modeloReferencia?.manosRequeridas || 1
-                );
-                if (frameNorm) {
-                  this.framesAlumno.push(frameNorm);
-                }
-              }
-            }
+        if (this.handLandmarker) {
+          const marca = this.controlFrames.marcaDeTiempo();
+          try {
+            const results = this.handLandmarker.detectForVideo(video, marca);
+            this.grabador.agregar(results, marca, video.videoWidth, video.videoHeight);
+            if (ctx && results?.landmarks?.length) dibujarManos(ctx, canvas.width, canvas.height, results.landmarks);
+          } catch (e) {
+            console.warn('MediaPipe no pudo procesar el frame:', e);
           }
         }
       }
 
+      if (this.camStage !== 'recording') return;
       if (performance.now() - inicio < duracion) {
         this.rafId = requestAnimationFrame(loop);
       } else {
@@ -653,112 +673,54 @@ export class LessonPage implements OnInit, OnDestroy {
     this.rafId = requestAnimationFrame(loop);
   }
 
-  private dibujarEsqueleto(
-    ctx: CanvasRenderingContext2D,
-    width: number,
-    height: number,
-    allLandmarks: any[]
-  ) {
-    for (const landmarks of allLandmarks) {
-      ctx.strokeStyle = '#2CA6A4';
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
-      for (const [start, end] of HAND_CONNECTIONS) {
-        const p1 = landmarks[start];
-        const p2 = landmarks[end];
-        ctx.beginPath();
-        ctx.moveTo(p1.x * width, p1.y * height);
-        ctx.lineTo(p2.x * width, p2.y * height);
-        ctx.stroke();
-      }
-
-      for (let i = 0; i < landmarks.length; i++) {
-        const pt = landmarks[i];
-        const x = pt.x * width;
-        const y = pt.y * height;
-        ctx.beginPath();
-        if ([4, 8, 12, 16, 20].includes(i)) {
-          ctx.arc(x, y, 5, 0, 2 * Math.PI);
-          ctx.fillStyle = '#F2701A';
-        } else {
-          ctx.arc(x, y, 3, 0, 2 * Math.PI);
-          ctx.fillStyle = '#FFFFFF';
-        }
-        ctx.fill();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = '#0A1526';
-        ctx.stroke();
-      }
-    }
-  }
-
   private async terminarGrabacion() {
     this.detenerCamara();
 
     const canvas = this.canvasRef?.nativeElement;
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      ctx?.clearRect(0, 0, canvas.width, canvas.height);
-    }
+    canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
 
-    if (this.tieneModeloReferencia && this.modeloReferencia) {
-      // EVALUACIÓN REAL CON SIGNY EDGE AI (DTW / Estática)
-      if (this.framesAlumno.length < 5) {
-        this.camPassed = false;
-        this.camScore = 0;
-        this.camMsg = 'No pudimos registrar suficientes movimientos de tu mano. Intenta centrar tu mano.';
-      } else if (this.modeloReferencia.tipo === 'estatica') {
-        let mejorSimilitud = 0;
-        for (const frame of this.framesAlumno) {
-          const res = compararFrameEstatico(
-            this.modeloReferencia.frames[0],
-            frame,
-            this.modeloReferencia.umbralRecomendado || 75
-          );
-          if (res.similitudPct > mejorSimilitud) {
-            mejorSimilitud = res.similitudPct;
-          }
-        }
-        this.camScore = mejorSimilitud;
-        this.camPassed = this.camScore >= (this.modeloReferencia.umbralRecomendado || 75);
-        this.camMsg = this.camPassed
-          ? '¡Excelente postura! Coincide con el modelo experto.'
-          : 'Casi, la postura de tus dedos varió un poco. ¡Inténtalo de nuevo!';
-      } else {
-        const resultado = compararSecuenciasDTW(
-          this.modeloReferencia.frames,
-          this.framesAlumno,
-          this.modeloReferencia.umbralRecomendado || 70
-        );
-        this.camScore = resultado.similitudPct;
-        this.camPassed = resultado.esCoincidente;
-        this.camMsg = this.camPassed
-          ? '¡Excelente! Movimiento reconocido con el modelo experto.'
-          : 'La trayectoria o ritmo varió. ¡Prueba a hacer el gesto de nuevo!';
-      }
+    const resultado = await this.reconocedor.evaluar(this.senaCamara, this.grabador.captura());
+    this.camScore = resultado.similitudPct;
+    this.camPassed = resultado.aprobado;
+    this.camFuente = resultado.fuente;
+
+    if (resultado.sinManos) {
+      this.camMsg = 'No logramos ver bien tus manos. Ponte frente a la cámara con buena luz y vuelve a intentarlo.';
+    } else if (resultado.fuente === 'deteccion') {
+      this.camMsg = '¡Buena práctica de manos! (Seña en proceso de calibración)';
+    } else if (this.camPassed) {
+      this.camMsg = resultado.referencia && modeloDeSena(this.senaCamara)?.tipo === 'estatica'
+        ? '¡Excelente postura! Coincide con el modelo experto.'
+        : '¡Excelente! Seña reconocida.';
     } else {
-      // Fallback si la seña aún no tiene un modelo grabado
-      const huboDeteccion = this.framesAlumno.length >= 8;
-      this.camScore = huboDeteccion ? 80 : 20;
-      this.camPassed = huboDeteccion;
-      this.camMsg = huboDeteccion
-        ? '¡Buena práctica de manos! (Seña en proceso de calibración)'
-        : 'No logramos detectar tus manos con claridad frente a la cámara.';
+      this.camMsg = modeloDeSena(this.senaCamara)?.tipo === 'estatica'
+        ? 'Casi, la postura de tus dedos varió un poco. ¡Inténtalo de nuevo!'
+        : 'El movimiento no coincidió del todo. Mira el video de nuevo y vuelve a intentarlo.';
     }
 
     this.camStage = 'result';
 
-    // Registrar intento con el score real en la base de datos
-    await this.contenidoService.registrarIntento(
-      this.userId,
-      this.senaCamara.id,
-      this.camPassed,
-      this.camScore
-    );
+    try {
+      await this.contenidoService.registrarIntento(this.userId, this.senaCamara.id, this.camPassed, this.camScore);
+    } catch (e) {
+      console.error('No se pudo registrar el intento de cámara:', e);
+    }
     this.contenidoService.otorgarLogroPorCodigo(this.userId, 'practica_camara').catch(console.error);
   }
 
+  /** Corta una cuenta regresiva o grabación en curso sin evaluarla. */
+  private pausarCamara() {
+    if (this.camStage === 'countdown' || this.camStage === 'recording') {
+      this.detenerCamara();
+      this.grabador.reiniciar();
+      const canvas = this.canvasRef?.nativeElement;
+      canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+      this.camStage = 'idle';
+    }
+  }
+
   private detenerCamara() {
+    this.detenerCuentaRegresiva();
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
       this.rafId = 0;
@@ -781,6 +743,8 @@ export class LessonPage implements OnInit, OnDestroy {
   }
 
   private async terminarLeccion(xpFinal: number) {
+    if (this.finalizando) return;
+    this.finalizando = true;
     this.xpGanado = xpFinal;
     try {
       await this.contenidoService.marcarSubnivelCompletado(this.userId, this.subnivel.id, xpFinal);
@@ -806,6 +770,7 @@ export class LessonPage implements OnInit, OnDestroy {
     } catch (e) {
       console.error('No se pudo guardar el progreso', e);
     }
+    this.finalizando = false;
     this.fase = 'complete';
   }
 

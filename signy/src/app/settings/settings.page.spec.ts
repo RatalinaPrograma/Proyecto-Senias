@@ -5,6 +5,7 @@ import { SupabaseService } from '../services/supabase';
 import { TtsService } from '../services/tts';
 import { ContenidoService } from '../services/contenido';
 import { NotificationsService } from '../services/notifications';
+import { BotonAtrasService } from '../services/boton-atras';
 import { statsDePrueba, perfilDePrueba } from '../../testing/supabase-mock';
 
 describe('SettingsPage', () => {
@@ -414,5 +415,44 @@ describe('SettingsPage', () => {
     await component.ngOnInit();
     component.volver();
     expect(routerSpy.navigate).toHaveBeenCalledWith(['/profile']);
+  });
+
+  describe('botón atrás del teléfono', () => {
+    it('cancela primero la confirmación de eliminar cuenta', () => {
+      component.confirmandoEliminar = true;
+      component.textoConfirmacion = 'ELIMI';
+      expect(component.alPresionarAtras()).toBeTrue();
+      expect(component.confirmandoEliminar).toBeFalse();
+      expect(component.textoConfirmacion).toBe('');
+    });
+
+    it('cancela una activación de 2FA a medias', () => {
+      component.inscribiendoMfa = true;
+      component.qrCode = 'data:image/svg+xml;base64,x';
+      expect(component.alPresionarAtras()).toBeTrue();
+      expect(component.inscribiendoMfa).toBeFalse();
+      expect(component.qrCode).toBeNull();
+    });
+
+    it('mientras se elimina la cuenta no interrumpe nada', () => {
+      component.confirmandoEliminar = true;
+      component.eliminandoCuenta = true;
+      expect(component.alPresionarAtras()).toBeTrue();
+      expect(component.confirmandoEliminar).toBeTrue();
+    });
+
+    it('sin nada pendiente, deja volver a la pantalla anterior', () => {
+      expect(component.alPresionarAtras()).toBeFalse();
+    });
+
+    it('se hace cargo del botón atrás al entrar y lo suelta al salir', () => {
+      const servicio = TestBed.inject(BotonAtrasService);
+      const quitar = jasmine.createSpy('quitar');
+      spyOn(servicio, 'registrar').and.returnValue(quitar);
+      component.ionViewWillEnter();
+      expect(servicio.registrar).toHaveBeenCalledTimes(1);
+      component.ionViewWillLeave();
+      expect(quitar).toHaveBeenCalled();
+    });
   });
 });

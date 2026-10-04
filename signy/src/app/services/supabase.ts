@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { environment } from '../../environments/environment';
 import { Profile, Nivel, Subnivel, Sena } from '../data/db-types';
+import { MuestraSena } from '../motor-senas/dataset';
 
 @Injectable({ providedIn: 'root' })
 export class SupabaseService {
@@ -359,6 +360,44 @@ export class SupabaseService {
 
   async eliminarSena(id: number) {
     return this.supabase.from('senas').delete().eq('id', id);
+  }
+
+  // ---- Dataset de entrenamiento (tabla muestras_sena, solo admins por RLS) ----
+  async agregarMuestraSena(muestra: Omit<MuestraSena, 'id' | 'autor_id' | 'created_at' | 'formato'>) {
+    return this.supabase.from('muestras_sena').insert(muestra).select('id').single();
+  }
+
+  /** Cuántas muestras tiene cada seña (solo trae la columna sena_id). */
+  async contarMuestrasPorSena(): Promise<Map<number, number>> {
+    const conteo = new Map<number, number>();
+    const pagina = 1000;
+    for (let desde = 0; ; desde += pagina) {
+      const { data, error } = await this.supabase.from('muestras_sena').select('sena_id').range(desde, desde + pagina - 1);
+      if (error) throw error;
+      for (const fila of data ?? []) conteo.set(fila.sena_id, (conteo.get(fila.sena_id) ?? 0) + 1);
+      if (!data || data.length < pagina) return conteo;
+    }
+  }
+
+  /** Todas las muestras, paginadas (cada una pesa decenas de KB). */
+  async listarMuestrasSena(alAvanzar?: (cargadas: number) => void): Promise<MuestraSena[]> {
+    const todas: MuestraSena[] = [];
+    const pagina = 100;
+    for (let desde = 0; ; desde += pagina) {
+      const { data, error } = await this.supabase
+        .from('muestras_sena')
+        .select('*')
+        .order('id')
+        .range(desde, desde + pagina - 1);
+      if (error) throw error;
+      todas.push(...((data ?? []) as MuestraSena[]));
+      alAvanzar?.(todas.length);
+      if (!data || data.length < pagina) return todas;
+    }
+  }
+
+  async eliminarMuestraSena(id: number) {
+    return this.supabase.from('muestras_sena').delete().eq('id', id);
   }
 
   /**

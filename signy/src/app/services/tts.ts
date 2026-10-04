@@ -14,6 +14,9 @@ export class TtsService {
   private cacheHabilitado = new Map<string, boolean>();
   private cacheVoz = new Map<string, string | null>();
   private cacheVoces: SpeechSynthesisVoice[] | null = null;
+  /** Orden nativo del plugin: `voice` en `speak()` es índice de ESTA lista,
+   * no de `cacheVoces` (reordenada con el español primero solo para mostrar). */
+  private cacheVocesNativas: SpeechSynthesisVoice[] | null = null;
 
   constructor(
     private supabaseService: SupabaseService,
@@ -78,10 +81,17 @@ export class TtsService {
       voices = await this.esperarVocesAsincronas();
     }
 
+    this.cacheVocesNativas = voices;
     const enEspanol = voices.filter(v => v.lang?.toLowerCase().startsWith('es'));
     const resto = voices.filter(v => !v.lang?.toLowerCase().startsWith('es'));
     this.cacheVoces = [...enEspanol, ...resto];
     return this.cacheVoces;
+  }
+
+  /** Voces en el orden nativo del plugin (el que usa el índice de `speak`). */
+  private async vocesEnOrdenNativo(): Promise<SpeechSynthesisVoice[]> {
+    if (!this.cacheVocesNativas) await this.listarVoces();
+    return this.cacheVocesNativas ?? [];
   }
 
   private async obtenerVocesCrudas(): Promise<SpeechSynthesisVoice[]> {
@@ -125,7 +135,7 @@ export class TtsService {
 
     let indiceVoz: number | undefined;
     if (nombreVoz) {
-      const voces = await this.listarVoces();
+      const voces = await this.vocesEnOrdenNativo();
       const indice = voces.findIndex(v => v.name === nombreVoz);
       if (indice >= 0) indiceVoz = indice;
     }

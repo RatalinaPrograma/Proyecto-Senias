@@ -1,5 +1,6 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import { AlertController } from '@ionic/angular';
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import { LessonPage } from './lesson.page';
 import { SupabaseService } from '../services/supabase';
@@ -8,6 +9,8 @@ import { TtsService } from '../services/tts';
 import { ImageCacheService } from '../services/image-cache';
 import { statsDePrueba } from '../../testing/supabase-mock';
 import { Sena, Nivel, Subnivel } from '../data/db-types';
+import { EvaluacionSena, MediaPipeManosService, ReconocedorSenasService } from '../motor-senas';
+import { BotonAtrasService } from '../services/boton-atras';
 
 describe('LessonPage', () => {
   let component: LessonPage;
@@ -17,6 +20,10 @@ describe('LessonPage', () => {
   let ttsSpy: jasmine.SpyObj<TtsService>;
   let cacheSpy: jasmine.SpyObj<ImageCacheService>;
   let routerSpy: jasmine.SpyObj<Router>;
+  let botonAtrasSpy: jasmine.SpyObj<BotonAtrasService>;
+  let quitarManejador: jasmine.Spy;
+  let alertCtrlSpy: jasmine.SpyObj<AlertController>;
+  let alertaFalsa: { present: jasmine.Spy; dismiss: jasmine.Spy; onDidDismiss: () => Promise<unknown>; cerrar: () => void };
 
   const nivel: Nivel = { id: 1, numero_nivel: 1, nombre: 'Nivel 1', descripcion: null, dificultad: null, etiqueta: null, color: null, color_oscuro: null, icono: null, created_at: null };
   const subnivel: Subnivel = { id: 10, nivel_id: 1, numero_subnivel: 1, nombre: 'Sub 1', tipo: null, pagina_quiz_local: null, descripcion: null, created_at: null };
@@ -56,6 +63,8 @@ describe('LessonPage', () => {
         { provide: ImageCacheService, useValue: cacheSpy },
         { provide: ActivatedRoute, useValue: ruta },
         { provide: Router, useValue: routerSpy },
+        { provide: BotonAtrasService, useValue: botonAtrasSpy },
+        { provide: AlertController, useValue: alertCtrlSpy },
       ],
     }).compileComponents();
 
@@ -74,6 +83,21 @@ describe('LessonPage', () => {
     ttsSpy = jasmine.createSpyObj('TtsService', ['hablarSiHabilitado']);
     cacheSpy = jasmine.createSpyObj('ImageCacheService', ['precargarSubnivel', 'liberarMemoriaRAM']);
     routerSpy = jasmine.createSpyObj('Router', ['navigate']);
+    quitarManejador = jasmine.createSpy('quitarManejador');
+    botonAtrasSpy = jasmine.createSpyObj('BotonAtrasService', ['registrar', 'paraPantalla']);
+    botonAtrasSpy.registrar.and.returnValue(quitarManejador);
+    // paraPantalla real (es solo azúcar sobre registrar).
+    botonAtrasSpy.paraPantalla.and.callFake((m) => BotonAtrasService.prototype.paraPantalla.call(botonAtrasSpy, m));
+    let alCerrar: (v: unknown) => void = () => {};
+    const cerrada = new Promise((r) => (alCerrar = r));
+    alertaFalsa = {
+      present: jasmine.createSpy('present').and.resolveTo(),
+      dismiss: jasmine.createSpy('dismiss').and.resolveTo(true),
+      onDidDismiss: () => cerrada,
+      cerrar: () => alCerrar({ role: 'cancel' }),
+    };
+    alertCtrlSpy = jasmine.createSpyObj('AlertController', ['create']);
+    alertCtrlSpy.create.and.resolveTo(alertaFalsa as any);
 
     contenidoSpy.registrarIntento.and.resolveTo();
     contenidoSpy.otorgarLogroPorCodigo.and.resolveTo();
@@ -469,6 +493,75 @@ describe('LessonPage', () => {
     });
   });
 
+  describe('cámara — evaluación con el motor de señas', () => {
+    let evaluar: jasmine.Spy;
+
+    beforeEach(async () => {
+      prepararCargaExitosa();
+      await crearComponente();
+      await component.ngOnInit();
+      evaluar = spyOn(TestBed.inject(ReconocedorSenasService), 'evaluar');
+      contenidoSpy.registrarIntento.and.resolveTo();
+      contenidoSpy.otorgarLogroPorCodigo.and.resolveTo();
+    });
+
+    const resultado = (r: Partial<EvaluacionSena>): EvaluacionSena => ({
+      similitudPct: 0, aprobado: false, fuente: 'referencia', espejo: false, sinManos: false, ...r,
+    });
+
+    it('registra el intento con el puntaje real del reconocedor', async () => {
+      evaluar.and.resolveTo(resultado({ similitudPct: 88, aprobado: true }));
+      await (component as any).terminarGrabacion();
+      expect(component.camStage).toBe('result');
+      expect(component.camPassed).toBeTrue();
+      expect(component.camScore).toBe(88);
+      expect(component.camFuente).toBe('referencia');
+      expect(contenidoSpy.registrarIntento).toHaveBeenCalledWith('user-1', component.senaCamara.id, true, 88);
+    });
+
+    it('evalúa la seña de la práctica de cámara (la última de la lección)', async () => {
+      evaluar.and.resolveTo(resultado({}));
+      await (component as any).terminarGrabacion();
+      expect(evaluar.calls.mostRecent().args[0]).toBe(component.senaCamara);
+    });
+
+    it('si no se vieron las manos, lo dice claramente', async () => {
+      evaluar.and.resolveTo(resultado({ sinManos: true }));
+      await (component as any).terminarGrabacion();
+      expect(component.camMsg).toContain('No logramos ver bien tus manos');
+      expect(component.camPassed).toBeFalse();
+    });
+
+    it('informa cuando la decisión la tomó el modelo entrenado', async () => {
+      evaluar.and.resolveTo(resultado({ similitudPct: 91, aprobado: true, fuente: 'clasificador' }));
+      await (component as any).terminarGrabacion();
+      expect(component.camFuente).toBe('clasificador');
+    });
+
+    it('si falla el registro del intento (sin red), igual muestra el resultado', async () => {
+      evaluar.and.resolveTo(resultado({ aprobado: true, similitudPct: 80 }));
+      contenidoSpy.registrarIntento.and.rejectWith(new Error('sin red'));
+      await expectAsync((component as any).terminarGrabacion()).toBeResolved();
+      expect(component.camStage).toBe('result');
+    });
+
+    it('salir de la lección durante la cuenta regresiva no deja una grabación corriendo', fakeAsync(() => {
+      const grabar = spyOn(component as any, 'grabar');
+      component.camStage = 'countdown';
+      (component as any).contarRegresiva();
+      component.ngOnDestroy();
+      tick(5000);
+      expect(grabar).not.toHaveBeenCalled();
+    }));
+
+    it('no cierra el HandLandmarker compartido al salir', () => {
+      const cerrar = jasmine.createSpy('close');
+      (component as any).handLandmarker = { close: cerrar };
+      component.ngOnDestroy();
+      expect(cerrar).not.toHaveBeenCalled();
+    });
+  });
+
   describe('terminarLeccion (vía saltarCamara) — celebraciones', () => {
     // OJO: saltarCamara()/confirmarCamara() son "fire-and-forget" en el
     // código fuente (llaman a terminarLeccion() SIN esperarlo), así que
@@ -567,6 +660,168 @@ describe('LessonPage', () => {
       component.salir();
       expect(cacheSpy.liberarMemoriaRAM).toHaveBeenCalled();
       expect(routerSpy.navigate).toHaveBeenCalledWith(['/home']);
+    });
+  });
+
+  describe('salir de la lección (botón atrás del teléfono y la X)', () => {
+    beforeEach(async () => { prepararCargaExitosa(); await crearComponente(); await component.ngOnInit(); });
+
+    /** Opciones con las que se creó el aviso de confirmación. */
+    const opcionesAviso = () => alertCtrlSpy.create.calls.mostRecent().args[0]!;
+    const boton = (rol: string) => (opcionesAviso().buttons as any[]).find((b) => b.role === rol);
+
+    it('al entrar se hace cargo del botón atrás, y lo suelta al salir', () => {
+      component.ionViewWillEnter();
+      expect(botonAtrasSpy.registrar).toHaveBeenCalledTimes(1);
+
+      // El botón del teléfono ejecuta lo mismo que la X.
+      const manejador = botonAtrasSpy.registrar.calls.mostRecent().args[0];
+      expect(manejador()).toBeTrue();
+      expect(alertCtrlSpy.create).toHaveBeenCalled();
+
+      component.ionViewWillLeave();
+      expect(quitarManejador).toHaveBeenCalled();
+    });
+
+    it('también lo suelta si se destruye sin pasar por ionViewWillLeave', () => {
+      component.ionViewWillEnter();
+      component.ngOnDestroy();
+      expect(quitarManejador).toHaveBeenCalled();
+    });
+
+    for (const fase of ['flash', 'match', 'quiz', 'record'] as const) {
+      it(`a mitad de la lección (${fase}) pregunta antes de salir`, async () => {
+        component.fase = fase;
+        expect(component.alPresionarAtras()).toBeTrue();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(opcionesAviso().header).toBe('¿Salir de la lección?');
+        expect(opcionesAviso().message).toContain('empezarla de nuevo');
+        expect(alertaFalsa.present).toHaveBeenCalled();
+        expect(routerSpy.navigate).not.toHaveBeenCalled();
+      });
+    }
+
+    it('"Salir" vuelve al camino; "Seguir practicando" solo cierra el aviso', async () => {
+      component.fase = 'quiz';
+      component.alPresionarAtras();
+      await Promise.resolve();
+
+      expect(boton('cancel').text).toBe('Seguir practicando');
+      expect(boton('cancel').handler).toBeUndefined();
+      expect(boton('destructive').text).toBe('Salir');
+
+      boton('destructive').handler();
+      expect(routerSpy.navigate).toHaveBeenCalledWith(['/home']);
+      expect(cacheSpy.liberarMemoriaRAM).toHaveBeenCalled();
+    });
+
+    it('presionar atrás varias veces no apila avisos', async () => {
+      component.fase = 'flash';
+      component.alPresionarAtras();
+      await Promise.resolve();
+      await Promise.resolve();
+      component.alPresionarAtras();
+      component.alPresionarAtras();
+      await Promise.resolve();
+      expect(alertCtrlSpy.create).toHaveBeenCalledTimes(1);
+
+      // Cerrado el aviso, se puede volver a abrir.
+      alertaFalsa.cerrar();
+      await new Promise((r) => setTimeout(r));
+      component.alPresionarAtras();
+      await Promise.resolve();
+      expect(alertCtrlSpy.create).toHaveBeenCalledTimes(2);
+    });
+
+    for (const fase of ['cargando', 'error', 'sinvidas', 'complete', 'nivel', 'racha'] as const) {
+      it(`en "${fase}" sale directo, sin preguntar`, () => {
+        component.fase = fase;
+        expect(component.alPresionarAtras()).toBeTrue();
+        expect(alertCtrlSpy.create).not.toHaveBeenCalled();
+        expect(routerSpy.navigate).toHaveBeenCalledWith(['/home']);
+      });
+    }
+
+    it('mientras se guarda el progreso final, atrás no hace nada', fakeAsync(() => {
+      contenidoSpy.marcarSubnivelCompletado.and.returnValue(new Promise(() => {})); // queda guardando
+      component.fase = 'record';
+      component.saltarCamara();
+      tick();
+
+      expect(component.alPresionarAtras()).toBeTrue();
+      tick();
+      expect(alertCtrlSpy.create).not.toHaveBeenCalled();
+      expect(routerSpy.navigate).not.toHaveBeenCalled();
+    }));
+
+    it('el aviso corta la cuenta regresiva: no se graba ni se evalúa detrás del aviso', fakeAsync(() => {
+      const grabar = spyOn(component as any, 'grabar');
+      component.fase = 'record';
+      component.camStage = 'countdown';
+      (component as any).contarRegresiva();
+
+      component.alPresionarAtras();
+      tick(5000);
+
+      expect(grabar).not.toHaveBeenCalled();
+      expect(component.camStage).toBe('idle');
+    }));
+
+    it('si se cierra la lección con el aviso abierto, el aviso también se cierra', async () => {
+      component.fase = 'match';
+      component.alPresionarAtras();
+      await Promise.resolve();
+      await Promise.resolve();
+      component.ngOnDestroy();
+      expect(alertaFalsa.dismiss).toHaveBeenCalled();
+    });
+  });
+
+  describe('cámara y segundo plano', () => {
+    let oculto: jasmine.Spy;
+
+    beforeEach(async () => {
+      prepararCargaExitosa();
+      await crearComponente();
+      await component.ngOnInit();
+      oculto = spyOnProperty(document, 'hidden').and.returnValue(true);
+    });
+
+    it('si la app pasa a segundo plano a mitad de la grabación, se corta sin evaluar', () => {
+      const evaluar = spyOn(TestBed.inject(ReconocedorSenasService), 'evaluar');
+      component.camStage = 'recording';
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(component.camStage).toBe('idle');
+      expect(evaluar).not.toHaveBeenCalled();
+    });
+
+    it('volver a primer plano o salir con un resultado a la vista no toca nada', () => {
+      component.camStage = 'result';
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(component.camStage).toBe('result');
+
+      oculto.and.returnValue(false);
+      component.camStage = 'recording';
+      component.alCambiarVisibilidad();
+      expect(component.camStage).toBe('recording');
+      (component as any).detenerCamara();
+    });
+
+    it('si se sale de la lección mientras se pedía permiso, la cámara no queda encendida', async () => {
+      const detener = jasmine.createSpy('stop');
+      let darPermiso: (s: MediaStream) => void = () => {};
+      spyOn(navigator.mediaDevices, 'getUserMedia').and.returnValue(new Promise((r) => (darPermiso = r)));
+      spyOn(TestBed.inject(MediaPipeManosService), 'obtener').and.resolveTo(null as any);
+
+      const pedido = component.iniciarCamara();
+      component.ngOnDestroy();
+      darPermiso({ getTracks: () => [{ stop: detener }] } as any);
+      await pedido;
+
+      expect(detener).toHaveBeenCalled();
+      expect(component.camStage).not.toBe('countdown');
     });
   });
 

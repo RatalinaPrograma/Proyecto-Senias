@@ -1,7 +1,9 @@
 /**
- * gesture-math.ts
- * Motor matemático de normalización y Dynamic Time Warping (DTW)
- * para comparación geométrica de landmarks de MediaPipe en Signy Edge AI.
+ * gesture-math.ts — motor v2 (anterior).
+ *
+ * El motor actual está en `app/motor-senas/`. De este archivo se sigue usando
+ * `distanciaEntreFrames`; el resto se conserva para leer referencias v2 y para
+ * las pruebas que comparan el motor anterior con el nuevo.
  */
 
 export interface Punto3D {

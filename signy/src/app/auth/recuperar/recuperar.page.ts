@@ -1,9 +1,10 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../../services/supabase';
+import { BotonAtrasService } from '../../services/boton-atras';
 import { passwordStrengthValidator, passwordsMatchValidator } from '../../shared/validators';
 import { CachedSrcDirective } from '../../shared/cached-src.directive';
 
@@ -87,5 +88,24 @@ export class RecuperarPage {
 
   irALogin() {
     this.router.navigate(['/auth/login']);
+  }
+
+  // ---- botón atrás del teléfono ----
+  private readonly atras = inject(BotonAtrasService).paraPantalla(() => this.alPresionarAtras());
+
+  ionViewWillEnter() {
+    this.atras.activar();
+  }
+
+  ionViewWillLeave() {
+    this.atras.desactivar();
+  }
+
+  /** Desde el paso del código, atrás vuelve al del correo; si no, a la pantalla anterior (login). */
+  alPresionarAtras(): boolean {
+    if (this.cargando) return true;
+    if (this.paso !== 'codigo') return false;
+    this.volverAEmail();
+    return true;
   }
 }
