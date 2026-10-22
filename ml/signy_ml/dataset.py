@@ -47,6 +47,18 @@ class Dataset:
     def participantes(self) -> set[str]:
         return {m.participante for m in self.muestras}
 
+    def palabras_repetidas(self) -> dict[str, list[int]]:
+        """Palabras que aparecen en más de una seña con muestras (p. ej. "hola" en dos subniveles)."""
+        por_palabra: dict[str, list[int]] = {}
+        for sena_id in sorted(self.conteo_por_sena()):
+            por_palabra.setdefault(self.senas[sena_id].strip().lower(), []).append(sena_id)
+        return {palabra: ids for palabra, ids in por_palabra.items() if len(ids) > 1}
+
+    def nombre(self, sena_id: int) -> str:
+        """Nombre para reportes: la palabra, o "palabra (#id)" si otra seña se llama igual."""
+        palabra = self.senas[sena_id]
+        return f"{palabra} (#{sena_id})" if palabra.strip().lower() in self.palabras_repetidas() else palabra
+
     def personas_por_sena(self) -> dict[int, int]:
         """Cuántas personas distintas grabaron cada seña."""
         personas: dict[int, set[str]] = {}

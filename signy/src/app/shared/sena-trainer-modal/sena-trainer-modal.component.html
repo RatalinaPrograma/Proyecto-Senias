@@ -2,7 +2,7 @@
   <ion-toolbar class="trainer-toolbar">
     <ion-title>Entrenar Seña: <strong>{{ sena.palabra }}</strong></ion-title>
     <ion-buttons slot="end">
-      <button class="icon-btn-close" (click)="cerrar()" aria-label="Cerrar">
+      <button class="icon-btn-close" (click)="cerrar()" [disabled]="guardando || guardandoMuestra || borrandoMuestra" aria-label="Cerrar">
         <ion-icon name="close-outline"></ion-icon>
       </button>
     </ion-buttons>
@@ -69,7 +69,11 @@
       </div>
     </div>
 
-    <button class="flip-btn" (click)="alternarCamara()" aria-label="Cambiar cámara">
+    <button
+      class="flip-btn"
+      (click)="alternarCamara()"
+      [disabled]="enRafaga || estadoGrabacion === 'cuenta_atras' || estadoGrabacion === 'grabando'"
+      aria-label="Cambiar cámara">
       <ion-icon name="camera-reverse-outline"></ion-icon>
     </button>
   </div>
@@ -107,7 +111,7 @@
     </div>
 
     <!-- Indicador de detección de manos en vivo -->
-    <div class="hand-indicator" *ngIf="estadoCamara === 'activa'">
+    <div class="hand-indicator" *ngIf="estadoCamara === 'activa' && estadoGrabacion !== 'grabando'">
       <span class="badge" [class.badge-ok]="manosDetectadasCount >= manosRequeridas" [class.badge-wait]="manosDetectadasCount < manosRequeridas">
         {{ manosDetectadasCount >= manosRequeridas ? '🟢 ' + manosDetectadasCount + ' mano(s) lista(s)' : '🟡 Coloca ' + (manosRequeridas === 1 ? '1 mano' : '2 manos') }}
       </span>
@@ -212,7 +216,7 @@
     </button>
     <p class="dataset-msg" *ngIf="mensajeDataset">
       {{ mensajeDataset }}
-      <button type="button" class="link-btn" *ngIf="muestraRecienGuardada" (click)="deshacerUltimaMuestra()">
+      <button type="button" class="link-btn" *ngIf="muestraRecienGuardada" [disabled]="borrandoMuestra" (click)="deshacerUltimaMuestra()">
         <ion-icon name="arrow-undo-outline"></ion-icon> Deshacer
       </button>
     </p>

@@ -45,6 +45,7 @@ class FalsoSupabase(BaseHTTPRequestHandler):
     muestras: list[dict] = []
     sin_tabla = False
     sin_columna_participante = False
+    cortar_respuesta = False
     pedidos: list[str] = []
 
     def log_message(self, *args):  # silencio
@@ -81,6 +82,16 @@ class FalsoSupabase(BaseHTTPRequestHandler):
             columnas = q.get("select", "*").split(",")
             if "participante" in columnas and self.sin_columna_participante:
                 return self._responder(400, {"code": "42703", "message": "column muestras_sena.participante does not exist"})
+            if self.cortar_respuesta:  # se corta el wifi a mitad de la página
+                datos = json.dumps(self.muestras[:50]).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(datos)))
+                self.end_headers()
+                self.wfile.write(datos[: len(datos) // 2])
+                self.wfile.flush()
+                self.close_connection = True
+                return
             visibles = self.muestras if token == "tok-admin" else []  # RLS: solo admins
             filas = [{k: v for k, v in m.items() if columnas == ["*"] or k in columnas} for m in visibles[offset:offset + limit]]
             return self._responder(200, filas)
@@ -106,6 +117,7 @@ class TestDescargaSupabase(unittest.TestCase):
     def setUp(self):
         FalsoSupabase.sin_tabla = False
         FalsoSupabase.sin_columna_participante = False
+        FalsoSupabase.cortar_respuesta = False
         FalsoSupabase.pedidos = []
 
     def test_admin_descarga_todo_paginado_y_anonimizado(self):
@@ -142,6 +154,11 @@ class TestDescargaSupabase(unittest.TestCase):
         self.assertEqual(sb.clave_persona({"participante": "   ", "autor_id": "x"}), "cuenta:x")
         self.assertEqual(sb.clave_persona({"autor_id": None}), "cuenta:sin-autor")
         self.assertEqual(len(sb.limpiar_participante("x" * 60)), 40)
+
+    def test_corte_de_red_a_mitad_de_la_descarga_da_un_mensaje_claro(self):
+        FalsoSupabase.cortar_respuesta = True
+        with self.assertRaisesRegex(sb.ErrorSupabase, "Se cortó la conexión"):
+            sb.descargar_dataset(self.url, CLAVE, "admin@signy.cl", "clave-admin")
 
     def test_contrasena_incorrecta(self):
         with self.assertRaisesRegex(sb.ErrorSupabase, "incorrectos"):

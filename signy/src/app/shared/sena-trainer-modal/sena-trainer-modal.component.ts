@@ -1,4 +1,4 @@
-import { Component, ElementRef, EventEmitter, Input, OnDestroy, OnInit, Output, ViewChild, inject } from '@angular/core';
+import { Component, ElementRef, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IonicModule, ModalController } from '@ionic/angular';
@@ -57,6 +57,13 @@ const DURACION_ESTATICA_MS = 1500;
 const INTERVALO_PRUEBA_MS = 200;
 /** Dónde se recuerda quién está grabando, para no escribirlo en cada seña. */
 const CLAVE_PARTICIPANTE = 'signy.dataset.participante';
+/**
+ * Si entre dos frames de una grabación pasa más que esto, la cámara se
+ * interrumpió (se cambió de cámara, se apagó la pantalla, la app pasó a
+ * segundo plano): esa toma tendría un hueco y no sirve para entrenar. Un
+ * celular lento procesa ~3-5 frames por segundo, muy por debajo de este límite.
+ */
+const HUECO_MAXIMO_MS = 1000;
 
 @Component({
   selector: 'app-sena-trainer-modal',
@@ -132,6 +139,12 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
   readonly largoMaximoParticipante = LARGO_MAXIMO_PARTICIPANTE;
   muestrasEnDataset: number | null = null;
   guardandoMuestra = false;
+  borrandoMuestra = false;
+  /** Quién estaba frente a la cámara cuando empezó la grabación pendiente de guardar. */
+  private participanteCaptura: string | null = null;
+  private ultimaMarcaGrabacion = 0;
+  /** Mantiene la pantalla encendida mientras la cámara está activa (una ráfaga dura ~40 s sin tocar nada). */
+  private bloqueoPantalla: { release(): Promise<void>; addEventListener?: (t: string, f: () => void) => void } | null = null;
   mensajeDataset = '';
   muestraRecienGuardada = false;
   private idMuestraReciente: number | null = null;
@@ -169,6 +182,43 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
     this.detenerCamara();
     this.limpiarTemporizadores();
     this.terminarRafaga();
+  }
+
+  /**
+   * Si la app pasa a segundo plano o se bloquea la pantalla a mitad de una
+   * cuenta atrás o grabación, se cancela esa toma: si no, se guardaba (en
+   * ráfaga, sola) una muestra con un hueco de tiempo. Al volver, se vuelve a
+   * pedir que la pantalla no se apague.
+   */
+  @HostListener('document:visibilitychange')
+  alCambiarVisibilidad() {
+    if (document.hidden) {
+      if (this.enRafaga || this.estadoGrabacion === 'cuenta_atras' || this.estadoGrabacion === 'grabando') {
+        this.cancelarGrabacion();
+        this.mensajeDataset = 'La grabación se detuvo porque la app quedó en segundo plano. Esa toma no se guardó: vuelve a grabarla.';
+      }
+    } else if (this.estadoCamara === 'activa') {
+      void this.mantenerPantallaEncendida();
+    }
+  }
+
+  private async mantenerPantallaEncendida() {
+    try {
+      const wakeLock = (navigator as any).wakeLock;
+      if (!wakeLock || this.bloqueoPantalla) return;
+      const bloqueo = await wakeLock.request('screen');
+      this.bloqueoPantalla = bloqueo;
+      bloqueo.addEventListener?.('release', () => {
+        if (this.bloqueoPantalla === bloqueo) this.bloqueoPantalla = null;
+      });
+    } catch {
+      // No soportado o denegado: la pantalla se apaga según el ajuste del celular.
+    }
+  }
+
+  private liberarPantalla() {
+    this.bloqueoPantalla?.release().catch(() => {});
+    this.bloqueoPantalla = null;
   }
 
   get enRafaga(): boolean {
@@ -245,6 +295,7 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
       }
       this.stream = stream;
       this.estadoCamara = 'activa';
+      void this.mantenerPantallaEncendida();
 
       setTimeout(async () => {
         const video = this.videoRef?.nativeElement;
@@ -273,10 +324,13 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
       this.stream.getTracks().forEach((track) => track.stop());
       this.stream = null;
     }
+    this.liberarPantalla();
     this.estadoCamara = 'apagada';
   }
 
   alternarCamara() {
+    // Cambiar de cámara a mitad de una toma la dejaría con un hueco (y mezclando dos cámaras).
+    if (this.enRafaga || this.estadoGrabacion === 'cuenta_atras' || this.estadoGrabacion === 'grabando') return;
     this.facingMode = this.facingMode === 'user' ? 'environment' : 'user';
     this.iniciarCamara();
   }
@@ -320,7 +374,15 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
         if (this.manosDetectadasCount < this.manosRequeridas) return;
         this.inicioGrabacion = marca;
         this.esperandoManos = false;
+        // La muestra es de quien está frente a la cámara AHORA, aunque después
+        // se escriba el nombre de la siguiente persona antes de apretar "Al dataset".
+        this.participanteCaptura = limpiarParticipante(this.participante);
+      } else if (marca - this.ultimaMarcaGrabacion > HUECO_MAXIMO_MS) {
+        this.cancelarGrabacion();
+        this.mensajeDataset = 'La cámara se interrumpió durante la grabación. Esa toma no se guardó: vuelve a grabarla.';
+        return;
       }
+      this.ultimaMarcaGrabacion = marca;
       this.grabador.agregar(results, marca, ancho, alto);
       const duracion = this.tipoSena === 'estatica' ? DURACION_ESTATICA_MS : this.duracionDinamicaMs;
       const transcurrido = marca - this.inicioGrabacion;
@@ -479,7 +541,7 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
       this.modeloNuevo = null;
       this.modeloDesactualizado = false;
       this.senaActualizada.emit(this.sena);
-      await this.cerrar();
+      await this.cerrarModal();
     } catch (e: any) {
       console.error('Error al guardar modelo de seña:', e);
       alert('Error al guardar en Supabase: ' + (e?.message || 'Error desconocido'));
@@ -517,7 +579,7 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
     if (!captura || this.guardandoMuestra) return false;
     this.guardandoMuestra = true;
     this.mensajeDataset = '';
-    const participante = limpiarParticipante(this.participante);
+    const participante = this.participanteCaptura;
     try {
       const { data, error } = await this.supabaseService.agregarMuestraSena({
         sena_id: this.sena.id,
@@ -534,8 +596,14 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
       if (error) throw error;
       this.idMuestraReciente = data?.id ?? null;
       this.muestraRecienGuardada = true;
-      this.muestrasEnDataset = (this.muestrasEnDataset ?? 0) + 1;
-      this.mensajeDataset = `Muestra${participante ? ` de ${participante}` : ''} guardada (${this.muestrasEnDataset} en total). Graba otra para seguir sumando.`;
+      if (this.muestrasEnDataset === null) {
+        // No se pudo contar al abrir (red caída): se cuenta de nuevo en vez de mostrar "1 en total".
+        await this.cargarConteoDataset();
+      } else {
+        this.muestrasEnDataset++;
+      }
+      const total = this.muestrasEnDataset === null ? '' : ` (${this.muestrasEnDataset} en total)`;
+      this.mensajeDataset = `Muestra${participante ? ` de ${participante}` : ''} guardada${total}. Graba otra para seguir sumando.`;
       return true;
     } catch (e: any) {
       const mensaje: string = e?.message ?? '';
@@ -554,19 +622,35 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
 
   /** Borra la muestra que se acaba de agregar (por si la grabación salió mal). */
   async deshacerUltimaMuestra() {
-    if (this.idMuestraReciente === null) return;
-    const { error } = await this.supabaseService.eliminarMuestraSena(this.idMuestraReciente);
-    if (error) {
-      this.mensajeDataset = 'No se pudo borrar la muestra: ' + error.message;
-      return;
+    const id = this.idMuestraReciente;
+    if (id === null || this.borrandoMuestra) return; // un doble toque no borra (ni descuenta) dos veces
+    this.borrandoMuestra = true;
+    try {
+      const { error } = await this.supabaseService.eliminarMuestraSena(id);
+      if (error) {
+        this.mensajeDataset = 'No se pudo borrar la muestra: ' + error.message;
+        return;
+      }
+      if (this.muestrasEnDataset !== null) this.muestrasEnDataset = Math.max(0, this.muestrasEnDataset - 1);
+      // Con la red lenta, en una ráfaga pudo guardarse otra muestra mientras se borraba esta:
+      // esa nueva sigue siendo la "reciente" y no se vuelve a ofrecer "Al dataset".
+      if (this.idMuestraReciente === id) {
+        this.idMuestraReciente = null;
+        this.muestraRecienGuardada = false;
+      }
+      this.mensajeDataset = 'Se borró la muestra.';
+    } finally {
+      this.borrandoMuestra = false;
     }
-    this.idMuestraReciente = null;
-    this.muestrasEnDataset = Math.max(0, (this.muestrasEnDataset ?? 1) - 1);
-    this.muestraRecienGuardada = false;
-    this.mensajeDataset = 'Se borró la muestra.';
   }
 
+  /** La X: no cierra mientras se guarda o borra (el conteo del catálogo quedaba desactualizado). */
   async cerrar() {
+    if (this.guardando || this.guardandoMuestra || this.borrandoMuestra) return;
+    await this.cerrarModal();
+  }
+
+  private async cerrarModal() {
     this.detenerCamara();
     await this.modalCtrl.dismiss(this.sena);
   }
@@ -576,7 +660,7 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
    * hay nada en curso, cierra el modal (como la X). Mientras se guarda, espera.
    */
   alPresionarAtras(): boolean {
-    if (this.guardando || this.guardandoMuestra) return true;
+    if (this.guardando || this.guardandoMuestra || this.borrandoMuestra) return true;
     if (this.enRafaga || this.estadoGrabacion === 'cuenta_atras' || this.estadoGrabacion === 'grabando') {
       this.cancelarGrabacion();
       return true;

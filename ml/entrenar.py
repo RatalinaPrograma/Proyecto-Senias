@@ -49,6 +49,8 @@ def escribir_reporte(ruta: Path, ds, metricas: dict, modelo: dict, destino: Path
         "",
         f"- Señas: **{len(conteo)}** · muestras: **{len(ds.muestras)}** · personas: **{len(ds.participantes())}**",
         f"- Partición de prueba: {metricas['particion']}",
+        f"- Muestras de prueba: {metricas['muestrasPrueba']} de {len(ds.muestras)}"
+        f" ({metricas.get('personasPrueba', 0)} persona(s))",
         f"- Exactitud en prueba: **{_pct(metricas['exactitud'])}**",
         f"- Con umbral de confianza {modelo['umbralSugerido']}: exactitud {_pct(metricas['exactitudSobreUmbral'])}, "
         f"responde en el {_pct(metricas['coberturaUmbral'])} de los casos",
@@ -60,13 +62,18 @@ def escribir_reporte(ruta: Path, ds, metricas: dict, modelo: dict, destino: Path
         "|---|---|---|---|---|",
     ]
     reporte = metricas.get("reporte", {})
-    for sena_id, n in sorted(conteo.items(), key=lambda x: ds.senas[x[0]]):
-        nombre = ds.senas[sena_id]
+    for sena_id, n in sorted(conteo.items(), key=lambda x: ds.nombre(x[0])):
+        nombre = ds.nombre(sena_id)
         r = reporte.get(nombre, {})
         aviso = " ⚠️ pocas" if n < MINIMO_RECOMENDADO else ""
         aviso_personas = " ⚠️" if personas.get(sena_id, 0) < PERSONAS_RECOMENDADAS else ""
+        # Sin muestras de esta seña en la prueba no hay nada que medir: "0.0 %" haría creer que falla.
+        if r.get("support", 0) > 0:
+            precision, sensibilidad = _pct(r.get("precision")), _pct(r.get("recall"))
+        else:
+            precision = sensibilidad = "— (sin prueba)"
         lineas.append(f"| {nombre} | {n}{aviso} | {personas.get(sena_id, 0)}{aviso_personas} "
-                      f"| {_pct(r.get('precision'))} | {_pct(r.get('recall'))} |")
+                      f"| {precision} | {sensibilidad} |")
 
     confusiones = []
     nombres, matriz = metricas.get("clasesConfusion", []), metricas.get("confusion", [])
@@ -140,6 +147,9 @@ def main(argv=None) -> int:
     pocas = [ds.senas[s] for s, n in conteo.items() if n < MINIMO_RECOMENDADO]
     if pocas:
         print(f"⚠️  Menos de {MINIMO_RECOMENDADO} muestras en: {', '.join(sorted(pocas))}. Graba más para mejorar la precisión.")
+    for palabra, ids in ds.palabras_repetidas().items():
+        print(f"⚠️  La palabra \"{palabra}\" está en {len(ids)} señas distintas (ids {', '.join(map(str, ids))}). "
+              "El modelo las trata como señas diferentes y no las va a distinguir: graba esa palabra en una sola.")
     if len(ds.participantes()) < PERSONAS_RECOMENDADAS:
         print(f"⚠️  Solo {len(ds.participantes())} persona(s) en el dataset: graba a {PERSONAS_RECOMENDADAS} o más "
               "(campo \"Persona\" del entrenador) para que el modelo funcione con alumnos nuevos.")
@@ -164,6 +174,7 @@ def main(argv=None) -> int:
     escribir_reporte(ruta_reporte, ds, metricas, modelo, destino, kb)
 
     print(f"Partición de prueba: {metricas['particion']}")
+    print(f"Muestras de prueba: {metricas['muestrasPrueba']} de {len(ds.muestras)} ({metricas.get('personasPrueba', 0)} persona(s))")
     print(f"Exactitud en prueba: {_pct(metricas['exactitud'])}")
     print(f"✔ Modelo guardado en {destino} ({kb:.0f} KB)")
     print(f"✔ Reporte en {ruta_reporte}")

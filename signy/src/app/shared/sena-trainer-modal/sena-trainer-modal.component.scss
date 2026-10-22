@@ -41,6 +41,10 @@
     &:active {
       background: rgba(255, 255, 255, 0.2);
     }
+
+    &:disabled {
+      opacity: 0.35;
+    }
   }
 }
 
@@ -103,6 +107,11 @@
     justify-content: center;
     font-size: 1.2rem;
     cursor: pointer;
+
+    &:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
 
     &:active {
       background: rgba(255, 255, 255, 0.2);

@@ -204,6 +204,38 @@ class TestPocasMuestras(unittest.TestCase):
         self.assertIn("| hola | 4 ⚠️ pocas | 2 ⚠️ |", texto)
 
 
+class TestReporte(unittest.TestCase):
+    def test_sena_sin_muestras_de_prueba_no_aparece_como_0_por_ciento(self):
+        ds = _ds(["HOLA", "SI"], participantes=1, repeticiones=2)
+        metricas = {"particion": "por persona", "muestrasPrueba": 2, "personasPrueba": 1, "exactitud": 1.0,
+                    "exactitudSobreUmbral": 1.0, "coberturaUmbral": 1.0,
+                    "reporte": {"hola": {"precision": 1.0, "recall": 1.0, "support": 2}}, "confusion": [], "clasesConfusion": []}
+        ruta = Path(tempfile.mkdtemp()) / "reporte.md"
+        cli.escribir_reporte(ruta, ds, metricas, {"umbralSugerido": 0.6}, Path("m.json"), 1)
+        texto = ruta.read_text(encoding="utf-8")
+        self.assertIn("Muestras de prueba: 2 de 4 (1 persona(s))", texto)
+        self.assertIn("| si | 2 ⚠️ pocas | 1 ⚠️ | — (sin prueba) | — (sin prueba) |", texto)
+        self.assertIn("| hola | 2 ⚠️ pocas | 1 ⚠️ | 100.0 % | 100.0 % |", texto)
+
+    def test_palabra_repetida_en_dos_senas_avisa_y_se_distingue_en_el_reporte(self):
+        crudo = dataset_sintetico(["HOLA", "SI", "L"], 2, 2)
+        for sena in crudo["senas"]:
+            if sena["palabra"] == "l":
+                sena["palabra"] = "Hola "  # misma palabra que la seña 1, en otro subnivel
+        ruta = Path(tempfile.mkdtemp()) / "ds.json"
+        ruta.write_text(json.dumps(crudo), encoding="utf-8")
+        ds = cargar_dataset(ruta)
+        self.assertEqual(ds.palabras_repetidas(), {"hola": [1, 3]})
+        self.assertEqual((ds.nombre(1), ds.nombre(3), ds.nombre(2)), ("hola (#1)", "Hola  (#3)", "si"))
+        from contextlib import redirect_stdout
+        from io import StringIO
+        salida = StringIO()
+        with redirect_stdout(salida):
+            codigo = cli.main(["--dataset", str(ruta), "--salida", str(ruta.parent / "m.json"), "--aumentos", "1", "--capas", "8"])
+        self.assertEqual(codigo, 0)
+        self.assertIn('La palabra "hola" está en 2 señas distintas (ids 1, 3)', salida.getvalue())
+
+
 class TestCLI(unittest.TestCase):
     def test_demo_sintetico_genera_modelo_y_reporte(self):
         salida = Path(tempfile.mkdtemp()) / "modelo.json"

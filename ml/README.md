@@ -20,8 +20,13 @@ propia app y lo deja dentro de la app, liviano y funcionando sin internet.
    where table_schema = 'public' and table_name = 'muestras_sena' order by ordinal_position;
    ```
    Debe listar, entre otras, `captura` y `participante`.
-2. En el computador: `pip install -r ml/requirements.txt` (para entrenar bastan numpy y scikit-learn;
-   `tflite` solo hace falta para `importar_tflite.py`).
+2. En el computador, con Python 3.9 o más nuevo, **desde la carpeta raíz del repo** (`Proyecto-Senias`):
+   ```bash
+   python -m pip install -r ml/requirements.txt
+   ```
+   En Windows, si `python` o `pip` "no se reconoce" (o se abre la Microsoft Store), usar `py` en su lugar:
+   `py -m pip install -r ml\requirements.txt`. Para entrenar bastan numpy y scikit-learn;
+   `tflite` solo hace falta para `importar_tflite.py`.
 3. Las cuentas que graben tienen que ser admin (`profiles.es_admin = true`).
 
 ## 2. Grabar muestras
@@ -72,8 +77,13 @@ haya suficientes para separar una parte de prueba. Un modelo con pocas muestras 
 conviene dejarlo en la app: usar `--salida ml/reportes/prueba.json` para no
 reemplazar el de la app mientras se junta el dataset.
 
-En Windows conviene usar PowerShell o CMD. En Git Bash, `getpass` no puede pedir la
-contraseña: definirla antes con `export SIGNY_PASSWORD='...'` (o usar `winpty python ...`).
+En Windows, desde PowerShell o CMD en la carpeta raíz del repo:
+`py ml\entrenar.py --supabase --email admin@correo.cl` (o `python ...` si ese comando funciona).
+En Git Bash, `getpass` no puede pedir la contraseña: definirla antes con `export SIGNY_PASSWORD='...'`
+(en PowerShell: `$env:SIGNY_PASSWORD='...'`), o usar `winpty python ...`.
+
+El reporte dice cuántas muestras y personas quedaron para la prueba. Una seña marcada
+"— (sin prueba)" no tuvo muestras en esa parte: no significa que el modelo falle con ella.
 
 Alternativa sin conexión desde Python: AI Studio en el navegador del computador →
 botón **Dataset (N)** → `python ml/entrenar.py --dataset signy-dataset-AAAAMMDD.json`.

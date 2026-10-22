@@ -254,6 +254,94 @@ describe('SenaTrainerModalComponent', () => {
       expect(c.mensajeDataset).toContain('20261013120000_participante_muestras_sena.sql');
     });
 
+    it('la muestra queda a nombre de quien estaba grabando, aunque se cambie el campo antes de guardar', async () => {
+      supabaseSpy.agregarMuestraSena.and.resolveTo({ data: { id: 55 }, error: null } as any);
+      c.participante = 'Cata';
+      grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });
+      c.participante = 'Benja'; // ya se escribió el nombre de la siguiente persona
+      await c.agregarAlDataset();
+      expect(supabaseSpy.agregarMuestraSena.calls.mostRecent().args[0].participante).toBe('Cata');
+      expect(c.mensajeDataset).toContain('Muestra de Cata guardada');
+    });
+
+    it('si la cámara se interrumpe a mitad de la grabación, cancela esa toma en vez de guardarla con un hueco', () => {
+      const captura = generarCaptura('HOLA', { pausaAntesMs: 0, duracionMs: 1500 });
+      c.estadoGrabacion = 'grabando';
+      (c as any).inicioGrabacion = null;
+      (c as any).grabador.reiniciar();
+      captura.frames.slice(0, 10).forEach((f) => {
+        c.manosDetectadasCount = f.manos.length;
+        (c as any).procesarFrame({ landmarks: f.manos }, 10000 + f.t, captura.ancho, captura.alto);
+      });
+      expect(c.estadoGrabacion).toBe('grabando');
+      const f = captura.frames[11];
+      (c as any).procesarFrame({ landmarks: f.manos }, 10000 + f.t + 2000, captura.ancho, captura.alto);
+      expect(c.estadoGrabacion).toBe('inactivo');
+      expect(c.modeloNuevo).toBeNull();
+      expect(c.puedeAgregarAlDataset).toBeFalse();
+      expect(c.mensajeDataset).toContain('se interrumpió');
+    });
+
+    it('si la app pasa a segundo plano mientras graba, cancela la toma', () => {
+      c.estadoGrabacion = 'grabando';
+      spyOnProperty(document, 'hidden', 'get').and.returnValue(true);
+      c.alCambiarVisibilidad();
+      expect(c.estadoGrabacion).toBe('inactivo');
+      expect(c.mensajeDataset).toContain('segundo plano');
+    });
+
+    it('no deja cambiar de cámara mientras graba', () => {
+      c.estadoGrabacion = 'grabando';
+      c.alternarCamara();
+      expect(c.facingMode).toBe('user');
+    });
+
+    it('"Deshacer" con doble toque borra y descuenta una sola vez', async () => {
+      supabaseSpy.agregarMuestraSena.and.resolveTo({ data: { id: 55 }, error: null } as any);
+      supabaseSpy.eliminarMuestraSena.and.resolveTo({ error: null } as any);
+      grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });
+      await c.agregarAlDataset();
+      await Promise.all([c.deshacerUltimaMuestra(), c.deshacerUltimaMuestra()]);
+      expect(supabaseSpy.eliminarMuestraSena).toHaveBeenCalledTimes(1);
+      expect(c.muestrasEnDataset).toBe(4);
+    });
+
+    it('si mientras se borra se guardó otra muestra (ráfaga con red lenta), la nueva sigue siendo la reciente', async () => {
+      supabaseSpy.agregarMuestraSena.and.resolveTo({ data: { id: 55 }, error: null } as any);
+      let terminarBorrado!: (v: any) => void;
+      supabaseSpy.eliminarMuestraSena.and.returnValue(new Promise((r) => (terminarBorrado = r)) as any);
+      grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });
+      await c.agregarAlDataset();
+      const borrado = c.deshacerUltimaMuestra();
+      (c as any).idMuestraReciente = 56; // la ráfaga guardó la siguiente mientras tanto
+      terminarBorrado({ error: null });
+      await borrado;
+      expect((c as any).idMuestraReciente).toBe(56);
+      expect(c.muestraRecienGuardada).toBeTrue();
+      expect(c.puedeAgregarAlDataset).toBeFalse();
+    });
+
+    it('la X cierra normalmente cuando no hay nada guardándose', async () => {
+      await c.cerrar();
+      expect(modalSpy.dismiss).toHaveBeenCalledWith(c.sena);
+    });
+
+    it('no se cierra mientras está guardando una muestra', async () => {
+      c.guardandoMuestra = true;
+      await c.cerrar();
+      expect(modalSpy.dismiss).not.toHaveBeenCalled();
+    });
+
+    it('si no se pudo contar al abrir, después de guardar vuelve a contar en vez de decir "1 en total"', async () => {
+      supabaseSpy.agregarMuestraSena.and.resolveTo({ data: { id: 55 }, error: null } as any);
+      (c as any).muestrasEnDataset = null; // no se pudo contar al abrir
+      supabaseSpy.contarMuestrasPorSena.and.resolveTo(new Map([[7, 23]]));
+      grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });
+      await c.agregarAlDataset();
+      expect(c.muestrasEnDataset).toBe(23);
+      expect(c.mensajeDataset).toContain('23 en total');
+    });
+
     it('si falta la migración, lo explica en vez de mostrar un error críptico', async () => {
       supabaseSpy.agregarMuestraSena.and.resolveTo({ data: null, error: { code: '42P01', message: 'relation "muestras_sena" does not exist' } } as any);
       grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });

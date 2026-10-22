@@ -9,6 +9,7 @@ así que no hay que configurar nada aparte. La contraseña nunca se guarda.
 """
 from __future__ import annotations
 
+import http.client
 import json
 import re
 import unicodedata
@@ -52,6 +53,9 @@ def _pedir(metodo: str, url: str, cabeceras: dict, cuerpo: Optional[dict] = None
         raise ErrorSupabase(_mensaje_error(e.code, detalle), str(detalle.get("code") or "")) from None
     except urllib.error.URLError as e:
         raise ErrorSupabase(f"No se pudo conectar con Supabase: {e.reason}") from None
+    except (http.client.HTTPException, OSError, ValueError) as e:
+        # Corte de wifi a mitad de una página, timeout o respuesta incompleta: no es un error de datos.
+        raise ErrorSupabase(f"Se cortó la conexión con Supabase ({e.__class__.__name__}). Vuelve a intentarlo.") from None
 
 
 def _mensaje_error(estado: int, detalle: dict) -> str:

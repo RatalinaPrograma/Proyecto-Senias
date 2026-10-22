@@ -116,6 +116,7 @@ def entrenar(ds: Dataset, op: OpcionesEntrenamiento = OpcionesEntrenamiento()) -
     metricas = {
         "particion": tipo_particion,
         "muestrasEntrenamiento": int(len(tr)), "muestrasPrueba": int(len(te)),
+        "personasPrueba": len({ds.muestras[i].participante for i in te}),
         "vectoresEntrenamiento": 0,
         "exactitud": None, "exactitudSobreUmbral": None, "coberturaUmbral": None,
         "reporte": {}, "confusion": [], "clasesConfusion": [],
@@ -129,7 +130,7 @@ def entrenar(ds: Dataset, op: OpcionesEntrenamiento = OpcionesEntrenamiento()) -
         acepta = prob.max(axis=1) >= op.umbral_sugerido
         # Señas que solo aparecen en la prueba (las grabó solo una persona) también cuentan en el reporte.
         etiquetas_reporte = np.union1d(red.classes_, yte)
-        nombres = [ds.senas[int(c)] for c in etiquetas_reporte]
+        nombres = [ds.nombre(int(c)) for c in etiquetas_reporte]
         metricas.update({
             "vectoresEntrenamiento": int(len(Xtr)),
             "exactitud": float(accuracy_score(yte, pred)),
