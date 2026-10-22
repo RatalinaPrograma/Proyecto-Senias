@@ -117,6 +117,7 @@
     <div class="countdown-overlay" *ngIf="estadoGrabacion === 'cuenta_atras'">
       <div class="rafaga-tag" *ngIf="enRafaga">Ráfaga · muestra {{ rafagaHechas + 1 }} de {{ rafagaTotal }}</div>
       <div class="countdown-number">{{ cuentaAtras }}</div>
+      <div class="persona-tag">Persona: {{ participante.trim() || 'tú (tu cuenta)' }}</div>
       <p class="countdown-text">
         Acomoda {{ manosRequeridas === 1 ? 'tu mano' : 'tus 2 manos' }} frente a la cámara — la grabación arranca sola en cuanto las detecte.
       </p>
@@ -184,6 +185,20 @@
       <ion-icon name="alert-circle"></ion-icon>
       Referencia grabada con una versión anterior del motor — vuelve a grabarla para mejorar la precisión.
     </span>
+    <div class="persona-row">
+      <label for="participante-input">Persona que hace la seña:</label>
+      <input
+        id="participante-input"
+        class="persona-input"
+        type="text"
+        autocomplete="off"
+        placeholder="Tú (tu cuenta)"
+        title="Apodo o iniciales de quien hace la seña. Cámbialo cada vez que grabes a otra persona."
+        [maxlength]="largoMaximoParticipante"
+        [(ngModel)]="participante"
+        (ngModelChange)="recordarParticipante()"
+        [disabled]="enRafaga || estadoGrabacion === 'cuenta_atras'" />
+    </div>
     <span class="info-badge dataset" *ngIf="muestrasEnDataset !== null">
       <ion-icon name="layers-outline"></ion-icon>
       Dataset: {{ muestrasEnDataset }} muestra(s){{ muestrasEnDataset < 10 ? ' · se recomiendan 10 o más' : '' }}

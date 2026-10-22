@@ -30,6 +30,11 @@
       <ion-spinner name="dots"></ion-spinner>
     </div>
 
+    <p class="empty-hint" *ngIf="!buscando && !query">
+      <ion-icon name="search"></ion-icon>
+      Escribe el nombre o el usuario de alguien para encontrarle y seguir su avance.
+    </p>
+
     <p class="empty-hint" *ngIf="!buscando && query && resultadosBusqueda.length === 0">
       <ion-icon name="people-outline"></ion-icon>
       No encontramos a nadie con "{{ query }}"

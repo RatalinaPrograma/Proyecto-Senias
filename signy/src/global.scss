@@ -105,6 +105,19 @@ body {
 }
 
 /*
+ * En computador o tablet la app es una columna centrada, como en el celular.
+ * Sin esto, en una pantalla ancha todo se estiraba de borde a borde (el
+ * camino de lecciones quedaba disperso y los botones larguísimos). El fondo
+ * sigue cubriendo toda la pantalla porque es del ion-content, no del scroll.
+ */
+@media (min-width: 768px) {
+  ion-content::part(scroll) {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+}
+
+/*
  * Action-sheet de <ion-select interface="action-sheet">. Sin la paleta oscura de
  * Ionic, el texto de los botones cae a --ion-color-step-850 (#262626) sobre el
  * fondo navy. Va en global porque el overlay se monta fuera del componente.

@@ -44,6 +44,7 @@ def _muestras(n: int) -> list[dict]:
 class FalsoSupabase(BaseHTTPRequestHandler):
     muestras: list[dict] = []
     sin_tabla = False
+    sin_columna_participante = False
     pedidos: list[str] = []
 
     def log_message(self, *args):  # silencio
@@ -77,8 +78,12 @@ class FalsoSupabase(BaseHTTPRequestHandler):
         if u.path == "/rest/v1/muestras_sena":
             if self.sin_tabla:
                 return self._responder(404, {"code": "PGRST205", "message": "Could not find the table 'public.muestras_sena' in the schema cache"})
+            columnas = q.get("select", "*").split(",")
+            if "participante" in columnas and self.sin_columna_participante:
+                return self._responder(400, {"code": "42703", "message": "column muestras_sena.participante does not exist"})
             visibles = self.muestras if token == "tok-admin" else []  # RLS: solo admins
-            return self._responder(200, visibles[offset:offset + limit])
+            filas = [{k: v for k, v in m.items() if columnas == ["*"] or k in columnas} for m in visibles[offset:offset + limit]]
+            return self._responder(200, filas)
         if u.path == "/rest/v1/senas":
             senas = [{"id": 10, "palabra": "hola", "subnivel_id": 1}, {"id": 11, "palabra": "si", "subnivel_id": 1}, {"id": 12, "palabra": "chao", "subnivel_id": 1}]
             return self._responder(200, senas[offset:offset + limit])
@@ -100,6 +105,7 @@ class TestDescargaSupabase(unittest.TestCase):
 
     def setUp(self):
         FalsoSupabase.sin_tabla = False
+        FalsoSupabase.sin_columna_participante = False
         FalsoSupabase.pedidos = []
 
     def test_admin_descarga_todo_paginado_y_anonimizado(self):
@@ -112,6 +118,30 @@ class TestDescargaSupabase(unittest.TestCase):
         ruta = Path(tempfile.mkdtemp()) / "ds.json"
         ruta.write_text(json.dumps(ds))
         self.assertEqual(len(cargar_dataset(ruta).muestras), 230)
+
+    def test_cada_persona_cuenta_aunque_las_grabe_la_misma_cuenta(self):
+        originales = FalsoSupabase.muestras
+        apodos = ["Cata", "Benja", " cata ", "Benjamín", "benjamin", None]
+        FalsoSupabase.muestras = [{**m, "autor_id": "uuid-admin", "participante": apodos[i % 6]} for i, m in enumerate(_muestras(12))]
+        try:
+            ds = sb.descargar_dataset(self.url, CLAVE, "admin@signy.cl", "clave-admin")
+        finally:
+            FalsoSupabase.muestras = originales
+        self.assertEqual([m["participante"] for m in ds["muestras"][:6]], ["p1", "p2", "p1", "p3", "p3", "p4"])
+        self.assertNotRegex(json.dumps(ds), "Cata|Benja|uuid-")
+
+    def test_sin_la_migracion_de_participante_usa_la_cuenta(self):
+        FalsoSupabase.sin_columna_participante = True
+        ds = sb.descargar_dataset(self.url, CLAVE, "admin@signy.cl", "clave-admin")
+        self.assertEqual(len(ds["muestras"]), 230)
+        self.assertEqual({m["participante"] for m in ds["muestras"]}, {"p1", "p2", "p3"})
+
+    def test_misma_regla_de_persona_que_la_app(self):
+        # Igual que clavePersona / limpiarParticipante de motor-senas/dataset.ts.
+        self.assertEqual(sb.clave_persona({"participante": "  Ñandú   Azul ", "autor_id": "x"}), "persona:nandu azul")
+        self.assertEqual(sb.clave_persona({"participante": "   ", "autor_id": "x"}), "cuenta:x")
+        self.assertEqual(sb.clave_persona({"autor_id": None}), "cuenta:sin-autor")
+        self.assertEqual(len(sb.limpiar_participante("x" * 60)), 40)
 
     def test_contrasena_incorrecta(self):
         with self.assertRaisesRegex(sb.ErrorSupabase, "incorrectos"):

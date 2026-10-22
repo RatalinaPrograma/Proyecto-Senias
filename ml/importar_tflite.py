@@ -30,6 +30,7 @@ RAIZ = Path(__file__).resolve().parent
 sys.path.insert(0, str(RAIZ))
 
 from signy_ml.caracteristicas import ConfigCaracteristicas, dimension_por_frame  # noqa: E402
+from signy_ml.consola import consola_utf8  # noqa: E402
 from signy_ml.modelo import FORMATO, VERSION, _b64, probabilidades  # noqa: E402
 from signy_ml.tflite_import import ModeloNoSoportado, inferir, leer_mlp_tflite  # noqa: E402
 
@@ -132,4 +133,5 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    consola_utf8()
     sys.exit(main())

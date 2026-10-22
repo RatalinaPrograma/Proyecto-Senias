@@ -10,12 +10,24 @@ propia app y lo deja dentro de la app, liviano y funcionando sin internet.
 
 ## 1. Preparar (una vez)
 
-1. En Supabase → SQL Editor, correr `supabase/migrations/20261004120000_dataset_muestras_sena.sql`.
-2. En el computador: `pip install -r ml/requirements.txt` (solo numpy y scikit-learn).
+1. En Supabase → SQL Editor, correr **en este orden** (se pueden correr más de una vez sin problema):
+   1. `supabase/migrations/20261004120000_dataset_muestras_sena.sql` (crea la tabla `muestras_sena`).
+   2. `supabase/migrations/20261013120000_participante_muestras_sena.sql` (agrega la columna `participante`).
+
+   Para comprobar que quedaron bien, en el SQL Editor:
+   ```sql
+   select column_name from information_schema.columns
+   where table_schema = 'public' and table_name = 'muestras_sena' order by ordinal_position;
+   ```
+   Debe listar, entre otras, `captura` y `participante`.
+2. En el computador: `pip install -r ml/requirements.txt` (para entrenar bastan numpy y scikit-learn;
+   `tflite` solo hace falta para `importar_tflite.py`).
+3. Las cuentas que graben tienen que ser admin (`profiles.es_admin = true`).
 
 ## 2. Grabar muestras
 
-En **AI Studio → Catálogo**, abrir una seña y:
+En **AI Studio → Catálogo**, abrir una seña, escribir en **"Persona que hace la seña"** el apodo
+o las iniciales de quien está frente a la cámara (ej. `Cata`, `BV`) y:
 
 - **Grabar 5 seguidas al dataset** (modo ráfaga): graba 5 muestras una tras otra, con
   una cuenta atrás entre cada una, y las guarda solas. Es la forma rápida.
@@ -28,6 +40,13 @@ Para que el modelo funcione con alumnos reales:
 - **10 a 20 muestras por seña** como mínimo; más es mejor.
 - **Varias personas** (ojalá 3 o más): el modelo aprende la seña, no a la persona.
   El reporte mide la precisión con personas que el modelo nunca vio.
+- **Cambiar el campo "Persona" cada vez que se graba a alguien distinto.** Se recuerda entre
+  señas (en ese dispositivo), y la cuenta atrás muestra a quién se está grabando. Si se deja
+  vacío, la persona es la cuenta con que se entró: sirve si cada uno graba con su propia
+  cuenta, pero si una cuenta graba a varias personas sin escribir el apodo, el modelo las
+  cuenta como una sola y la precisión del reporte sale engañosa.
+  No hace falta el nombre real: al descargar el dataset los apodos se reemplazan por `p1`, `p2`, …
+  ("Cata" y "cata" son la misma persona).
 - Variar un poco: distancia a la cámara, luz, velocidad, celular vertical y laptop.
 - Si una grabación salió mal, **Deshacer** la borra.
 - Las muestras son solo coordenadas de 21 puntos por mano: no se guardan imágenes ni video.
@@ -43,8 +62,18 @@ python ml/entrenar.py --supabase --email admin@correo.cl
 
 Descarga todas las muestras (las personas quedan anonimizadas como `p1`, `p2`, …),
 entrena, mide la precisión y deja el modelo en
-`signy/src/assets/modelos/clasificador-senas.json` y el reporte en `ml/reportes/`.
+`signy/src/assets/modelos/clasificador-senas.json` y el reporte en `ml/reportes/`
+(muestras y personas por seña, precisión por seña y confusiones más frecuentes).
 Hacer commit del modelo y compilar la app.
+
+Se puede entrenar desde el primer día para probar que todo funciona: con muy pocas
+muestras el modelo igual se genera, pero el reporte dice "sin evaluación" hasta que
+haya suficientes para separar una parte de prueba. Un modelo con pocas muestras no
+conviene dejarlo en la app: usar `--salida ml/reportes/prueba.json` para no
+reemplazar el de la app mientras se junta el dataset.
+
+En Windows conviene usar PowerShell o CMD. En Git Bash, `getpass` no puede pedir la
+contraseña: definirla antes con `export SIGNY_PASSWORD='...'` (o usar `winpty python ...`).
 
 Alternativa sin conexión desde Python: AI Studio en el navegador del computador →
 botón **Dataset (N)** → `python ml/entrenar.py --dataset signy-dataset-AAAAMMDD.json`.

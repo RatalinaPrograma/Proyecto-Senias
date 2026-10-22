@@ -220,6 +220,18 @@
     font-weight: 700;
     color: #ffffff;
     margin-top: 8px;
+    padding: 0 24px;
+    text-align: center;
+  }
+
+  .persona-tag {
+    margin-top: 4px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(0, 0, 0, 0.45);
+    border-radius: 12px;
+    padding: 4px 12px;
   }
 }
 
@@ -402,6 +414,46 @@
         color: #93a3c4;
         background: rgba(147, 163, 196, 0.12);
         margin-left: 6px;
+      }
+    }
+
+    .persona-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 8px;
+
+      label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.6);
+        white-space: nowrap;
+      }
+    }
+
+    .persona-input {
+      flex: 0 1 160px;
+      min-width: 0;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      outline: none;
+
+      &::placeholder {
+        color: rgba(255, 255, 255, 0.45);
+      }
+
+      &:focus {
+        border-color: #2ca6a4;
+      }
+
+      &:disabled {
+        opacity: 0.6;
       }
     }
 

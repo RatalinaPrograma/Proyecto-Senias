@@ -30,7 +30,9 @@ describe('AdminVocabularioPage', () => {
       'crearNivel', 'actualizarNivel', 'eliminarNivel',
       'crearSubnivel', 'actualizarSubnivel', 'eliminarSubnivel',
       'crearSena', 'actualizarSena', 'eliminarSena', 'uploadSenaMedia', 'eliminarSenaMediaSiEsPropia',
+      'contarMuestrasPorSena',
     ]);
+    supabaseSpy.contarMuestrasPorSena.and.resolveTo(new Map());
     routerSpy = jasmine.createSpyObj('Router', ['navigate']);
     // Agregado junto con el enlace a Signy AI Studio (no se llama en los
     // tests de acá, pero Angular necesita poder resolverlo para construir
@@ -370,6 +372,21 @@ describe('AdminVocabularioPage', () => {
 
       expect(supabaseSpy.eliminarSena).toHaveBeenCalledWith(100);
       expect(supabaseSpy.eliminarSenaMediaSiEsPropia).toHaveBeenCalledWith('https://cdn/hola.gif');
+    });
+
+    it('eliminarSena avisa cuántas muestras del dataset se van a borrar con la seña', async () => {
+      const confirmar = spyOn(window, 'confirm').and.returnValue(false);
+      supabaseSpy.contarMuestrasPorSena.and.resolveTo(new Map([[100, 12]]));
+      await component.eliminarSena(sena1);
+      expect(confirmar.calls.mostRecent().args[0]).toContain('12 muestra(s)');
+      expect(supabaseSpy.eliminarSena).not.toHaveBeenCalled();
+    });
+
+    it('eliminarSena sin muestras (o sin la tabla del dataset) pregunta como siempre', async () => {
+      const confirmar = spyOn(window, 'confirm').and.returnValue(false);
+      supabaseSpy.contarMuestrasPorSena.and.rejectWith({ code: '42P01' });
+      await component.eliminarSena(sena1);
+      expect(confirmar.calls.mostRecent().args[0]).not.toContain('muestra');
     });
 
     it('elegirIcono asigna el emoji al formulario', () => {

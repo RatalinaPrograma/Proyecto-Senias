@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -155,6 +157,53 @@ class TestEntrenamiento(unittest.TestCase):
             entrenar(_ds(["HOLA"], 2, 2))
 
 
+class TestPocasMuestras(unittest.TestCase):
+    """Lo normal al empezar a grabar: muchas señas con pocas muestras y una sola persona."""
+
+    OP = OpcionesEntrenamiento(config=CONFIG, capas_ocultas=(8,), aumentos_por_muestra=1)
+
+    def test_muchas_senas_con_2_muestras_cada_una(self):
+        # Antes: "The test_size = 4 should be greater or equal to the number of classes = 8".
+        ds = _ds(["HOLA", "SI", "GRACIAS", "LLAMAR", "A", "L", "SEPARAR", "JUNTAR"], participantes=1, repeticiones=2)
+        modelo, metricas = entrenar(ds, self.OP)
+        self.assertEqual(len(modelo["clases"]), 8)
+        self.assertEqual(metricas["muestrasPrueba"], 8)  # una de cada seña
+        self.assertIsNotNone(metricas["exactitud"])
+
+    def test_una_muestra_por_sena_entrena_sin_evaluar(self):
+        # Antes: "At least one label specified must be in y_true".
+        modelo, metricas = entrenar(_ds(["HOLA", "SI"], participantes=1, repeticiones=1), self.OP)
+        self.assertEqual(len(modelo["clases"]), 2)
+        self.assertIn("sin evaluación", metricas["particion"])
+        self.assertIsNone(metricas["exactitud"])
+
+    def test_senas_con_una_sola_muestra_mezcladas(self):
+        ds = _ds(["HOLA", "SI", "A"], participantes=1, repeticiones=3)
+        quitar = {m.id for m in ds.muestras if m.sena_id == 3}
+        quitar.discard(min(quitar))  # la seña "a" queda con 1 sola muestra
+        ds.muestras = [m for m in ds.muestras if m.id not in quitar]
+        modelo, metricas = entrenar(ds, self.OP)
+        self.assertEqual(len(modelo["clases"]), 3)
+        self.assertIn("no estratificada", metricas["particion"])
+
+    def test_por_persona_si_una_persona_grabo_senas_que_otras_no(self):
+        ds = _ds(["HOLA", "SI", "L"], participantes=3, repeticiones=2)
+        ds.muestras = [m for m in ds.muestras if not (m.sena_id == 3 and m.participante != "p1")]
+        modelo, metricas = entrenar(ds, self.OP)
+        self.assertEqual(len(modelo["clases"]), 3)
+        self.assertIsNotNone(metricas["exactitud"])
+
+    def test_reporte_cuenta_personas_por_sena(self):
+        ds = _ds(["HOLA", "SI"], participantes=2, repeticiones=2)
+        self.assertEqual(ds.personas_por_sena(), {1: 2, 2: 2})
+        modelo, metricas = entrenar(ds, self.OP)
+        ruta = Path(tempfile.mkdtemp()) / "reporte.md"
+        cli.escribir_reporte(ruta, ds, metricas, modelo, Path("modelo.json"), 10)
+        texto = ruta.read_text(encoding="utf-8")
+        self.assertIn("| Seña | Muestras | Personas |", texto)
+        self.assertIn("| hola | 4 ⚠️ pocas | 2 ⚠️ |", texto)
+
+
 class TestCLI(unittest.TestCase):
     def test_demo_sintetico_genera_modelo_y_reporte(self):
         salida = Path(tempfile.mkdtemp()) / "modelo.json"
@@ -163,6 +212,16 @@ class TestCLI(unittest.TestCase):
 
     def test_dataset_inexistente_falla_limpio(self):
         self.assertEqual(cli.main(["--dataset", "/no/existe.json"]), 2)
+
+    def test_terminal_sin_utf8_no_lo_hace_caer(self):
+        # Git Bash / terminales de Windows en cp1252: antes UnicodeEncodeError en el primer "⚠️".
+        salida = Path(tempfile.mkdtemp()) / "modelo.json"
+        r = subprocess.run(
+            [sys.executable, str(RAIZ / "entrenar.py"), "--demo-sintetico", "--salida", str(salida), "--aumentos", "1", "--capas", "8"],
+            capture_output=True, env={**os.environ, "PYTHONIOENCODING": "cp1252"}, timeout=300,
+        )
+        self.assertEqual(r.returncode, 0, r.stderr.decode("utf-8", "replace"))
+        self.assertIn("Modelo guardado", r.stdout.decode("utf-8"))
 
 
 if __name__ == "__main__":

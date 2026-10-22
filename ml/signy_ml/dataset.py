@@ -11,6 +11,8 @@ Formato (`signy-dataset`, versión 1):
 }
 `m` son las manos del frame en coordenadas normalizadas de imagen (tal
 cual las entrega MediaPipe) y `l` su lateralidad (opcional).
+`participante` identifica a la persona que hizo la seña (anónima: p1, p2, …),
+según el campo "Persona" del entrenador o, si quedó vacío, la cuenta que grabó.
 """
 from __future__ import annotations
 
@@ -44,6 +46,13 @@ class Dataset:
 
     def participantes(self) -> set[str]:
         return {m.participante for m in self.muestras}
+
+    def personas_por_sena(self) -> dict[int, int]:
+        """Cuántas personas distintas grabaron cada seña."""
+        personas: dict[int, set[str]] = {}
+        for m in self.muestras:
+            personas.setdefault(m.sena_id, set()).add(m.participante)
+        return {sena_id: len(p) for sena_id, p in personas.items()}
 
 
 def expandir_captura(compacta: dict) -> dict:

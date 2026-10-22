@@ -28,11 +28,13 @@ RAIZ = Path(__file__).resolve().parent
 sys.path.insert(0, str(RAIZ))
 
 from signy_ml.caracteristicas import ConfigCaracteristicas  # noqa: E402
+from signy_ml.consola import consola_utf8  # noqa: E402
 from signy_ml.dataset import DatasetInvalido, cargar_dataset  # noqa: E402
 from signy_ml.modelo import OpcionesEntrenamiento, entrenar  # noqa: E402
 
 SALIDA_APP = RAIZ.parent / "signy" / "src" / "assets" / "modelos" / "clasificador-senas.json"
 MINIMO_RECOMENDADO = 10
+PERSONAS_RECOMENDADAS = 3
 
 
 def _pct(v) -> str:
@@ -41,6 +43,7 @@ def _pct(v) -> str:
 
 def escribir_reporte(ruta: Path, ds, metricas: dict, modelo: dict, destino: Path, kb: float) -> None:
     conteo = ds.conteo_por_sena()
+    personas = ds.personas_por_sena()
     lineas = [
         f"# Reporte de entrenamiento — {datetime.now():%Y-%m-%d %H:%M}",
         "",
@@ -53,15 +56,17 @@ def escribir_reporte(ruta: Path, ds, metricas: dict, modelo: dict, destino: Path
         "",
         "## Muestras por seña",
         "",
-        "| Seña | Muestras | Precisión | Sensibilidad |",
-        "|---|---|---|---|",
+        "| Seña | Muestras | Personas | Precisión | Sensibilidad |",
+        "|---|---|---|---|---|",
     ]
     reporte = metricas.get("reporte", {})
     for sena_id, n in sorted(conteo.items(), key=lambda x: ds.senas[x[0]]):
         nombre = ds.senas[sena_id]
         r = reporte.get(nombre, {})
         aviso = " ⚠️ pocas" if n < MINIMO_RECOMENDADO else ""
-        lineas.append(f"| {nombre} | {n}{aviso} | {_pct(r.get('precision'))} | {_pct(r.get('recall'))} |")
+        aviso_personas = " ⚠️" if personas.get(sena_id, 0) < PERSONAS_RECOMENDADAS else ""
+        lineas.append(f"| {nombre} | {n}{aviso} | {personas.get(sena_id, 0)}{aviso_personas} "
+                      f"| {_pct(r.get('precision'))} | {_pct(r.get('recall'))} |")
 
     confusiones = []
     nombres, matriz = metricas.get("clasesConfusion", []), metricas.get("confusion", [])
@@ -135,6 +140,9 @@ def main(argv=None) -> int:
     pocas = [ds.senas[s] for s, n in conteo.items() if n < MINIMO_RECOMENDADO]
     if pocas:
         print(f"⚠️  Menos de {MINIMO_RECOMENDADO} muestras en: {', '.join(sorted(pocas))}. Graba más para mejorar la precisión.")
+    if len(ds.participantes()) < PERSONAS_RECOMENDADAS:
+        print(f"⚠️  Solo {len(ds.participantes())} persona(s) en el dataset: graba a {PERSONAS_RECOMENDADAS} o más "
+              "(campo \"Persona\" del entrenador) para que el modelo funcione con alumnos nuevos.")
 
     op = OpcionesEntrenamiento(
         config=ConfigCaracteristicas(frames=a.frames, usar_z=not a.sin_z),
@@ -163,4 +171,5 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    consola_utf8()
     sys.exit(main())

@@ -1,5 +1,5 @@
 import { caracteristicasClasificador, ClasificadorSenas, decodificarNumeros, dimensionPorFrame, ModeloClasificadorJson } from './clasificador';
-import { construirDatasetExportable, compactarCaptura, expandirCaptura, MuestraSena } from './dataset';
+import { clavePersona, construirDatasetExportable, compactarCaptura, expandirCaptura, limpiarParticipante, MuestraSena } from './dataset';
 import { generarCaptura } from './testing/manos-sinteticas';
 import { CASOS_PARIDAD, MODELO_PARIDAD } from './testing/fixture-clasificador';
 
@@ -122,5 +122,34 @@ describe('motor-senas / dataset', () => {
     expect(ds.senas.map((s) => s.id)).toEqual([1]);
     expect(ds.muestras.map((m) => m.participante)).toEqual(['p1', 'p2', 'p1', 'p3']);
     expect(JSON.stringify(ds)).not.toContain('uuid-');
+  });
+
+  it('con apodo, cada PERSONA es un participante aunque todas se graben con la misma cuenta', () => {
+    const muestra = (id: number, autor_id: string, participante?: string | null): MuestraSena => ({
+      id, sena_id: 1, autor_id, participante, formato: 1, tipo: 'dinamica', manos_requeridas: 1,
+      ancho: 640, alto: 480, duracion_ms: 1000, total_frames: 2, captura: { ancho: 640, alto: 480, frames: [] }, created_at: '',
+    });
+    const ds = construirDatasetExportable(
+      [{ id: 1, palabra: 'hola', subnivel_id: 1 }],
+      [
+        muestra(1, 'uuid-admin', 'Cata'),
+        muestra(2, 'uuid-admin', 'Benja'),
+        muestra(3, 'uuid-otro-admin', '  cata '), // misma persona, otra cuenta
+        muestra(4, 'uuid-admin', 'Benjamín'),
+        muestra(5, 'uuid-admin', 'benjamin'), // tildes y mayúsculas no cambian la persona
+        muestra(6, 'uuid-admin', null), // sin apodo: la cuenta
+        muestra(7, 'uuid-admin'), // columna ausente (migración sin aplicar): la cuenta
+      ]
+    );
+    expect(ds.muestras.map((m) => m.participante)).toEqual(['p1', 'p2', 'p1', 'p3', 'p3', 'p4', 'p4']);
+    expect(JSON.stringify(ds)).not.toMatch(/Cata|Benja|uuid-/);
+  });
+
+  it('limpiarParticipante deja el apodo listo para guardar', () => {
+    expect(limpiarParticipante('  Ana   María ')).toBe('Ana María');
+    expect(limpiarParticipante('   ')).toBeNull();
+    expect(limpiarParticipante(null)).toBeNull();
+    expect(Array.from(limpiarParticipante('😀'.repeat(50))!).length).toBe(40);
+    expect(clavePersona({ autor_id: 'x', participante: 'Ñandú' })).toBe('persona:nandu');
   });
 });

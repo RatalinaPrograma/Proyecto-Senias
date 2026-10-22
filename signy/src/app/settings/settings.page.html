@@ -228,7 +228,7 @@
 
         <ion-button *ngIf="!mfaActivado" expand="block" class="btn-fox" [disabled]="cargandoMfa" (click)="iniciarActivacionMfa()">
           <ion-spinner *ngIf="cargandoMfa" name="dots"></ion-spinner>
-          <span *ngIf="!cargandoMfa">Activar verificación en dos pasos</span>
+          <span *ngIf="!cargandoMfa">Activar verificación</span>
         </ion-button>
 
         <ion-button *ngIf="mfaActivado" expand="block" fill="outline" class="btn-outline-danger" [disabled]="cargandoMfa" (click)="desactivarMfa()">

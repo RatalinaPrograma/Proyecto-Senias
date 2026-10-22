@@ -5,8 +5,12 @@
   </div>
 
   <div class="onboarding-wrap">
-    <div class="slide-image-wrap" *ngIf="slides[paso].imagen">
-      <img [appCachedSrc]="slides[paso].imagen" [alt]="slides[paso].titulo" class="slide-image" />
+    <div class="slide-image-wrap" *ngIf="slides[paso].imagen as imagen">
+      <!-- alt vacío: la imagen ilustra el título que va justo debajo -->
+      <img *ngIf="esImagenLocal(imagen); else imagenRemota" [src]="imagen" alt="" class="slide-image" decoding="async" />
+      <ng-template #imagenRemota>
+        <img [appCachedSrc]="imagen" alt="" class="slide-image" />
+      </ng-template>
     </div>
 
     <div class="slide-menu-wrap" *ngIf="slides[paso].menu as menu">
@@ -39,8 +43,6 @@
         (click)="anterior()">
         Atrás
       </ion-button>
-      <div class="spacer" *ngIf="paso === 0"></div>
-
       <ion-button expand="block" class="btn-fox" (click)="siguiente()">
         {{ esUltimo ? 'Crear cuenta' : 'Siguiente' }}
       </ion-button>
