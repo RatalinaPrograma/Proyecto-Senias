@@ -563,7 +563,12 @@ export class AdminVocabularioPage implements OnInit {
   }
 
   async eliminarSena(s: Sena) {
-    if (!confirm(`¿Eliminar la seña "${s.palabra}"? Esta acción no se puede deshacer.`)) return;
+    // Borrar una seña borra también sus muestras del dataset (ON DELETE CASCADE): se avisa cuántas son.
+    const muestras = await this.muestrasDeSena(s.id);
+    const aviso = muestras > 0
+      ? `\n\n⚠️ También se borrarán sus ${muestras} muestra(s) grabadas para entrenar el modelo.`
+      : '';
+    if (!confirm(`¿Eliminar la seña "${s.palabra}"? Esta acción no se puede deshacer.${aviso}`)) return;
 
     const { error } = await this.supabaseService.eliminarSena(s.id);
     if (error) {
@@ -574,5 +579,14 @@ export class AdminVocabularioPage implements OnInit {
       this.supabaseService.eliminarSenaMediaSiEsPropia(s.video_url);
     }
     await this.cargarTodo();
+  }
+
+  /** Muestras del dataset de una seña (0 si la tabla aún no existe o no hay conexión). */
+  private async muestrasDeSena(senaId: number): Promise<number> {
+    try {
+      return (await this.supabaseService.contarMuestrasPorSena()).get(senaId) ?? 0;
+    } catch {
+      return 0;
+    }
   }
 }

@@ -72,6 +72,37 @@ describe('SenaTrainerModalComponent', () => {
     expect(c.mensajeError).toContain('sin cámara');
   });
 
+  describe('persona que hace la seña', () => {
+    beforeEach(() => localStorage.removeItem('signy.dataset.participante'));
+    afterEach(() => localStorage.removeItem('signy.dataset.participante'));
+
+    it('sin nada guardado, parte vacío (= la cuenta)', async () => {
+      await crear(senaBase());
+      expect(c.participante).toBe('');
+    });
+
+    it('se recuerda para la próxima seña', async () => {
+      await crear(senaBase());
+      c.participante = ' Benja ';
+      c.recordarParticipante();
+      expect(localStorage.getItem('signy.dataset.participante')).toBe('Benja');
+    });
+
+    it('al abrir otra seña aparece la última persona', async () => {
+      localStorage.setItem('signy.dataset.participante', 'Benja');
+      await crear(senaBase());
+      expect(c.participante).toBe('Benja');
+    });
+
+    it('borrar el campo vuelve a "tu cuenta"', async () => {
+      localStorage.setItem('signy.dataset.participante', 'Benja');
+      await crear(senaBase());
+      c.participante = '';
+      c.recordarParticipante();
+      expect(localStorage.getItem('signy.dataset.participante')).toBeNull();
+    });
+  });
+
   it('carga cuántas muestras tiene la seña en el dataset', async () => {
     await crear(senaBase());
     expect(c.muestrasEnDataset).toBe(4);
@@ -193,6 +224,34 @@ describe('SenaTrainerModalComponent', () => {
       expect(supabaseSpy.eliminarMuestraSena).toHaveBeenCalledWith(55);
       expect(c.muestrasEnDataset).toBe(4);
       expect(c.puedeAgregarAlDataset).toBeTrue();
+    });
+
+    it('sin apodo no manda la columna "participante" (funciona aunque falte la migración nueva)', async () => {
+      supabaseSpy.agregarMuestraSena.and.resolveTo({ data: { id: 55 }, error: null } as any);
+      c.participante = '   ';
+      grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });
+      await c.agregarAlDataset();
+      expect('participante' in supabaseSpy.agregarMuestraSena.calls.mostRecent().args[0]).toBeFalse();
+    });
+
+    it('con apodo guarda quién hizo la seña, limpio', async () => {
+      supabaseSpy.agregarMuestraSena.and.resolveTo({ data: { id: 55 }, error: null } as any);
+      c.participante = '  Cata  ';
+      grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });
+      await c.agregarAlDataset();
+      expect(supabaseSpy.agregarMuestraSena.calls.mostRecent().args[0].participante).toBe('Cata');
+      expect(c.mensajeDataset).toContain('Muestra de Cata guardada');
+    });
+
+    it('si falta la migración de "participante", lo explica', async () => {
+      supabaseSpy.agregarMuestraSena.and.resolveTo({
+        data: null,
+        error: { code: 'PGRST204', message: "Could not find the 'participante' column of 'muestras_sena' in the schema cache" },
+      } as any);
+      c.participante = 'Cata';
+      grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });
+      await c.agregarAlDataset();
+      expect(c.mensajeDataset).toContain('20261013120000_participante_muestras_sena.sql');
     });
 
     it('si falta la migración, lo explica en vez de mostrar un error críptico', async () => {

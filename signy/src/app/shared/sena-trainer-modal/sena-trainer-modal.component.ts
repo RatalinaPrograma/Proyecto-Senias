@@ -24,6 +24,7 @@ import {
   CapturaCruda,
   ControlFramesVideo,
   GrabadorCaptura,
+  LARGO_MAXIMO_PARTICIPANTE,
   MediaPipeManosService,
   ModeloReferenciaSena,
   ResultadoEvaluacion,
@@ -32,6 +33,7 @@ import {
   construirModeloReferencia,
   dibujarManos,
   evaluarCaptura,
+  limpiarParticipante,
   modeloDeSena,
 } from '../../motor-senas';
 
@@ -53,6 +55,8 @@ addIcons({
 const DURACION_ESTATICA_MS = 1500;
 /** Cada cuánto se recalcula la prueba en vivo (no hace falta en cada frame). */
 const INTERVALO_PRUEBA_MS = 200;
+/** Dónde se recuerda quién está grabando, para no escribirlo en cada seña. */
+const CLAVE_PARTICIPANTE = 'signy.dataset.participante';
 
 @Component({
   selector: 'app-sena-trainer-modal',
@@ -118,6 +122,14 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
   modeloDesactualizado = false;
 
   // Dataset de entrenamiento
+  /**
+   * Apodo o iniciales de quien hace la seña frente a la cámara. Vacío = la
+   * cuenta con que se entró. Sirve para que `ml/entrenar.py` mida el modelo
+   * con personas que no vio al entrenar, aunque todas se graben con la misma
+   * cuenta admin. Se recuerda entre señas y sesiones (en este dispositivo).
+   */
+  participante = '';
+  readonly largoMaximoParticipante = LARGO_MAXIMO_PARTICIPANTE;
   muestrasEnDataset: number | null = null;
   guardandoMuestra = false;
   mensajeDataset = '';
@@ -145,6 +157,7 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.atras.activar();
+    this.participante = this.leerParticipanteGuardado();
     this.verificarModeloExistente();
     this.cargarConteoDataset();
     await this.inicializarMediaPipe();
@@ -476,6 +489,25 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
   }
 
   // ---------- Dataset de entrenamiento ----------
+  private leerParticipanteGuardado(): string {
+    try {
+      return localStorage.getItem(CLAVE_PARTICIPANTE) ?? '';
+    } catch {
+      return ''; // almacenamiento bloqueado: se escribe cada vez
+    }
+  }
+
+  /** Se llama al editar el campo "Persona": lo recuerda para las próximas señas. */
+  recordarParticipante() {
+    const limpio = limpiarParticipante(this.participante);
+    try {
+      if (limpio) localStorage.setItem(CLAVE_PARTICIPANTE, limpio);
+      else localStorage.removeItem(CLAVE_PARTICIPANTE);
+    } catch {
+      // sin almacenamiento: no pasa nada, solo no se recuerda
+    }
+  }
+
   /**
    * Guarda la última grabación (cruda) como muestra para entrenar el
    * clasificador. Conviene grabar 10–20 por seña, ojalá con varias personas.
@@ -485,6 +517,7 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
     if (!captura || this.guardandoMuestra) return false;
     this.guardandoMuestra = true;
     this.mensajeDataset = '';
+    const participante = limpiarParticipante(this.participante);
     try {
       const { data, error } = await this.supabaseService.agregarMuestraSena({
         sena_id: this.sena.id,
@@ -495,18 +528,24 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
         duracion_ms: Math.round(captura.frames.length ? captura.frames[captura.frames.length - 1].t : 0),
         total_frames: captura.frames.length,
         captura: compactarCaptura(captura),
+        // Solo se manda si hay apodo: sin apodo funciona aunque falte la migración nueva.
+        ...(participante ? { participante } : {}),
       });
       if (error) throw error;
       this.idMuestraReciente = data?.id ?? null;
       this.muestraRecienGuardada = true;
       this.muestrasEnDataset = (this.muestrasEnDataset ?? 0) + 1;
-      this.mensajeDataset = `Muestra guardada (${this.muestrasEnDataset} en total). Graba otra para seguir sumando.`;
+      this.mensajeDataset = `Muestra${participante ? ` de ${participante}` : ''} guardada (${this.muestrasEnDataset} en total). Graba otra para seguir sumando.`;
       return true;
     } catch (e: any) {
-      const faltaTabla = e?.code === '42P01' || e?.code === 'PGRST205' || /muestras_sena/.test(e?.message ?? '');
-      this.mensajeDataset = faltaTabla
-        ? 'Falta aplicar en Supabase la migración 20261004120000_dataset_muestras_sena.sql.'
-        : 'No se pudo guardar la muestra: ' + (e?.message || 'error desconocido');
+      const mensaje: string = e?.message ?? '';
+      const faltaColumna = e?.code === 'PGRST204'; // columna "participante" inexistente
+      const faltaTabla = e?.code === '42P01' || e?.code === 'PGRST205' || /muestras_sena/.test(mensaje);
+      this.mensajeDataset = faltaColumna
+        ? 'Falta aplicar en Supabase la migración 20261013120000_participante_muestras_sena.sql (o deja vacío el campo "Persona").'
+        : faltaTabla
+          ? 'Falta aplicar en Supabase la migración 20261004120000_dataset_muestras_sena.sql.'
+          : 'No se pudo guardar la muestra: ' + (mensaje || 'error desconocido');
       return false;
     } finally {
       this.guardandoMuestra = false;

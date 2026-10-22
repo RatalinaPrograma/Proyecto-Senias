@@ -17,9 +17,10 @@
 
   <ng-container *ngIf="!cargando && !error">
     <div class="hud">
-      <div class="hud-brand">
+      <div class="hud-top">
         <button class="fox-badge" (click)="irAPerfil()" aria-label="Ver mi perfil">
-          <img [appCachedSrc]="avatarUrl || 'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="Tu perfil" decoding="async" />
+          <img *ngIf="avatarUrl" [appCachedSrc]="avatarUrl" alt="" decoding="async" />
+          <ion-icon *ngIf="!avatarUrl" name="paw" aria-hidden="true"></ion-icon>
         </button>
         <div class="hud-greeting">
           <h1>¡Hola de nuevo!</h1>
@@ -27,35 +28,36 @@
         </div>
 
         <!--
-          Antes había un badge más acá (Signy AI Studio) además de este. Con
-          el saludo + 2 badges en una fila sin poder achicarse, en pantallas
-          angostas el header se salía de la pantalla. El acceso a AI Studio
-          ahora vive dentro de Vocabulario (su propio botón "AI Studio"), así
-          que acá queda solo el que lleva a Vocabulario/Admin.
+          El saludo va solo en la primera fila (con el acceso de admin y el
+          botón de salir) y las 3 pills en la segunda: antes todo iba en una
+          fila y en celulares el saludo quedaba cortado ("¡Hol…").
         -->
-        <button class="fox-badge admin-badge" *ngIf="esAdmin" (click)="irAAdmin()" aria-label="Administrar vocabulario" title="Vocabulario">
-          <ion-icon name="construct"></ion-icon>
-        </button>
+        <div class="hud-actions">
+          <button class="fox-badge admin-badge" *ngIf="esAdmin" (click)="irAAdmin()" aria-label="Administrar vocabulario" title="Vocabulario">
+            <ion-icon name="construct"></ion-icon>
+          </button>
+          <button class="logout-btn" (click)="cerrarSesion()" aria-label="Cerrar sesión" title="Cerrar sesión">
+            <ion-icon name="log-out-outline"></ion-icon>
+          </button>
+        </div>
       </div>
 
-      <div class="hud-right">
-        <div class="hud-stats">
-          <div class="stat-pill stat-fire" [class.stat-fire-riesgo]="rachaEnRiesgo" [title]="rachaEnRiesgo ? 'Todavía no practicas hoy' : ''">
-            <ion-icon name="flame"></ion-icon>
-            <span>{{ racha }}</span>
-          </div>
-          <div class="stat-pill stat-star">
-            <ion-icon name="star"></ion-icon>
-            <span>{{ xp }}</span>
-          </div>
-          <div class="stat-pill stat-heart" [class.stat-heart-low]="vidas <= 1">
-            <ion-icon name="heart"></ion-icon>
-            <span>{{ vidas }}</span>
-          </div>
+      <div class="hud-stats">
+        <div class="stat-pill stat-fire" [class.stat-fire-riesgo]="rachaEnRiesgo" [title]="rachaEnRiesgo ? 'Todavía no practicas hoy' : 'Días de racha'">
+          <ion-icon name="flame" aria-hidden="true"></ion-icon>
+          <span>{{ racha }}</span>
+          <small>{{ racha === 1 ? 'día' : 'días' }}</small>
         </div>
-        <button class="logout-btn" (click)="cerrarSesion()" aria-label="Cerrar sesión">
-          <ion-icon name="log-out-outline"></ion-icon>
-        </button>
+        <div class="stat-pill stat-star" title="Puntos de experiencia">
+          <ion-icon name="star" aria-hidden="true"></ion-icon>
+          <span>{{ xp }}</span>
+          <small>XP</small>
+        </div>
+        <div class="stat-pill stat-heart" [class.stat-heart-low]="vidas <= 1" title="Vidas">
+          <ion-icon name="heart" aria-hidden="true"></ion-icon>
+          <span>{{ vidas }}</span>
+          <small>{{ vidas === 1 ? 'vida' : 'vidas' }}</small>
+        </div>
       </div>
     </div>
 
@@ -129,9 +131,9 @@
 
     <div class="footer-mascot">
       <div class="fox-badge fox-badge-lg">
-        <img [appCachedSrc]="'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="Signy" loading="lazy" decoding="async" />
+        <img [appCachedSrc]="'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png'" alt="" loading="lazy" decoding="async" />
       </div>
-      <p>Contenido de referencia — validar señas finales con la comunidad sorda chilena.</p>
+      <p>Las señas de Signy son una guía de referencia. Practícalas también con la comunidad sorda chilena.</p>
     </div>
   </ng-container>
 </ion-content>
