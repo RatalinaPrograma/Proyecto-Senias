@@ -67,7 +67,38 @@ export interface MuestraSena {
   duracion_ms: number;
   total_frames: number;
   captura: CapturaCompacta;
+  /**
+   * Apodo o iniciales de quien hace la seña (null = la cuenta que grabó).
+   * Columna de la migración 20261013120000; puede no venir si no se aplicó.
+   */
+  participante?: string | null;
   created_at: string;
+}
+
+/** Largo máximo del apodo de la persona (igual que el CHECK de la tabla). */
+export const LARGO_MAXIMO_PARTICIPANTE = 40;
+
+/** Apodo listo para guardar: sin espacios de más y dentro del largo máximo (null si queda vacío). */
+export function limpiarParticipante(texto: string | null | undefined): string | null {
+  const unaLinea = (texto ?? '').replace(/\s+/g, ' ').trim();
+  // Array.from cuenta caracteres (como char_length de Postgres), sin partir un emoji a la mitad.
+  const limpio = Array.from(unaLinea).slice(0, LARGO_MAXIMO_PARTICIPANTE).join('').trim();
+  return limpio || null;
+}
+
+/**
+ * Identifica a la PERSONA que hizo la seña, para separar entrenamiento y
+ * prueba por persona. Si se escribió un apodo, manda el apodo (sin
+ * mayúsculas, tildes ni espacios de más: "Cata" y "cata " son la misma
+ * persona, aunque la hayan grabado desde cuentas distintas). Si no, se usa
+ * la cuenta que grabó. Misma regla que `ml/signy_ml/supabase_descarga.py`.
+ */
+export function clavePersona(muestra: Pick<MuestraSena, 'autor_id' | 'participante'>): string {
+  const apodo = limpiarParticipante(muestra.participante);
+  if (apodo) {
+    return 'persona:' + apodo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+  return 'cuenta:' + (muestra.autor_id ?? 'sin-autor');
 }
 
 export interface DatasetExportable {
@@ -87,8 +118,9 @@ export interface DatasetExportable {
 }
 
 /**
- * Arma el archivo que consume `ml/entrenar.py`. Los ids de usuario NO salen
- * del sistema: se reemplazan por p1, p2, … (estables dentro del archivo).
+ * Arma el archivo que consume `ml/entrenar.py`. Ni los ids de usuario ni los
+ * apodos salen del sistema: cada persona (ver `clavePersona`) se reemplaza
+ * por p1, p2, … (estables dentro del archivo).
  */
 export function construirDatasetExportable(
   senas: { id: number; palabra: string; subnivel_id: number }[],
@@ -96,8 +128,8 @@ export function construirDatasetExportable(
   ahora = new Date()
 ): DatasetExportable {
   const participantes = new Map<string, string>();
-  const anonimo = (autor: string | null) => {
-    const clave = autor ?? 'sin-autor';
+  const anonimo = (m: MuestraSena) => {
+    const clave = clavePersona(m);
     if (!participantes.has(clave)) participantes.set(clave, `p${participantes.size + 1}`);
     return participantes.get(clave)!;
   };
@@ -110,7 +142,7 @@ export function construirDatasetExportable(
     muestras: muestras.map((m) => ({
       id: m.id,
       senaId: m.sena_id,
-      participante: anonimo(m.autor_id),
+      participante: anonimo(m),
       tipo: m.tipo,
       manosRequeridas: m.manos_requeridas,
       captura: m.captura,

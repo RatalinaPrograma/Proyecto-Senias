@@ -198,10 +198,17 @@
     font-family: 'Manrope', sans-serif;
     color: var(--signy-cream);
     font-weight: 600;
+    flex: 1 1 auto;
   }
 
+  // El interruptor va pegado a la derecha (antes quedaba a medio camino).
   ion-toggle {
     --track-background-checked: var(--signy-mint);
+    // Dentro de un ion-item, Ionic le da width: 100% y el interruptor quedaba
+    // a medio camino; así ocupa solo lo suyo y va pegado a la derecha.
+    width: auto;
+    flex: 0 0 auto;
+    margin-inline-start: auto;
   }
 
   /* El valor mostrado del selector (y su placeholder, que Ionic atenúa al 33%)

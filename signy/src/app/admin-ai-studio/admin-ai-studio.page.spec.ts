@@ -103,6 +103,23 @@ describe('AdminAiStudioPage', () => {
       expect(page.exportando).toBeFalse();
     });
 
+    it('incluye señas creadas después de abrir la página (si no, el archivo quedaba inválido para entrenar.py)', async () => {
+      supabaseSpy.listarSenas.and.resolveTo([conModelo(1, 'HOLA'), conModelo(2, 'SI'), { ...sinModelo, id: 42, palabra: 'nueva' }]);
+      supabaseSpy.listarMuestrasSena.and.resolveTo([muestra(1, 1, 'uuid-ana'), muestra(2, 42, 'uuid-ana')]);
+      let blob: Blob | null = null;
+      spyOn(URL, 'createObjectURL').and.callFake((b: Blob | MediaSource) => {
+        blob = b as Blob;
+        return 'blob:x';
+      });
+      spyOn(URL, 'revokeObjectURL');
+      spyOn(HTMLAnchorElement.prototype, 'click');
+
+      await page.exportarDataset();
+
+      const json = JSON.parse(await blob!.text());
+      expect(json.senas.map((s: any) => s.id)).toEqual([1, 42]);
+    });
+
     it('en el celular explica cómo entrenar en vez de intentar una descarga que el WebView no hace', async () => {
       spyOn(Capacitor, 'isNativePlatform').and.returnValue(true);
       const alerta = spyOn(window, 'alert');

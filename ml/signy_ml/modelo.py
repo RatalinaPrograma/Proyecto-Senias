@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import math
 import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -52,20 +53,41 @@ def _vectores(capturas: list[dict], etiquetas: list[int], op: OpcionesEntrenamie
     return np.array(X), np.array(y)
 
 
+SIN_EVALUACION = "sin evaluación (muy pocas muestras para separar una parte de prueba: graba más)"
+
+
 def _particion(ds: Dataset, op: OpcionesEntrenamiento) -> tuple[np.ndarray, np.ndarray, str]:
     """Separa entrenamiento/prueba. Si hay 3+ personas distintas, la prueba se hace
-    con personas que el modelo NUNCA vio (lo que de verdad importa en la app)."""
-    indices = np.arange(len(ds.muestras))
+    con personas que el modelo NUNCA vio (lo que de verdad importa en la app).
+
+    Con muy pocas muestras (lo normal al empezar a grabar) no siempre se puede
+    separar una parte de prueba: en ese caso la prueba queda vacía y el modelo
+    igual se entrena, pero sin métricas."""
+    n = len(ds.muestras)
+    indices = np.arange(n)
     etiquetas = np.array([m.sena_id for m in ds.muestras])
     grupos = np.array([m.participante for m in ds.muestras])
     if len(set(grupos)) >= 3:
         gss = GroupShuffleSplit(n_splits=1, test_size=op.fraccion_prueba, random_state=op.semilla)
         tr, te = next(gss.split(indices, etiquetas, grupos))
-        return tr, te, "por persona (la prueba es con personas no vistas en el entrenamiento)"
-    conteo = np.bincount(np.unique(etiquetas, return_inverse=True)[1])
-    estratificar = etiquetas if conteo.min() >= 2 else None
-    tr, te = train_test_split(indices, test_size=op.fraccion_prueba, random_state=op.semilla, stratify=estratificar)
-    return tr, te, "aleatoria (hay menos de 3 personas: la precisión real con alumnos nuevos puede ser menor)"
+        if len(set(etiquetas[tr])) >= 2:
+            return tr, te, "por persona (la prueba es con personas no vistas en el entrenamiento)"
+        # Las personas que quedaron para entrenar grabaron una sola seña: se separa al azar.
+
+    clases, conteo = np.unique(etiquetas, return_counts=True)
+    n_prueba = max(1, math.ceil(op.fraccion_prueba * n))
+    if conteo.min() >= 2:
+        # Estratificada: al menos una muestra de cada seña en prueba (y en entrenamiento).
+        n_prueba = max(n_prueba, len(clases))
+        if n - n_prueba >= len(clases):
+            tr, te = train_test_split(indices, test_size=n_prueba, random_state=op.semilla, stratify=etiquetas)
+            return tr, te, "aleatoria (hay menos de 3 personas: la precisión real con alumnos nuevos puede ser menor)"
+    if n - n_prueba >= 2:
+        tr, te = train_test_split(indices, test_size=n_prueba, random_state=op.semilla)
+        if len(set(etiquetas[tr])) >= 2:
+            return tr, te, ("aleatoria, no estratificada (hay señas con 1 sola muestra; "
+                            "la precisión real con alumnos nuevos puede ser menor)")
+    return indices, np.array([], dtype=int), SIN_EVALUACION
 
 
 def _entrenar_red(X: np.ndarray, y: np.ndarray, op: OpcionesEntrenamiento) -> tuple[StandardScaler, MLPClassifier]:
@@ -91,28 +113,40 @@ def entrenar(ds: Dataset, op: OpcionesEntrenamiento = OpcionesEntrenamiento()) -
 
     # 1) Evaluación honesta con datos separados.
     tr, te, tipo_particion = _particion(ds, op)
-    Xtr, ytr = _vectores([capturas[i] for i in tr], [etiquetas[i] for i in tr], op, rng, True)
-    Xte, yte = _vectores([capturas[i] for i in te], [etiquetas[i] for i in te], op, rng, False)
-    escalador, red = _entrenar_red(Xtr, ytr, op)
-    pred = red.predict(escalador.transform(Xte)) if len(Xte) else np.array([])
-    prob = red.predict_proba(escalador.transform(Xte)) if len(Xte) else np.zeros((0, len(clases)))
-    confianza = prob.max(axis=1) if len(prob) else np.array([])
-    acepta = confianza >= op.umbral_sugerido
-    nombres = [ds.senas[c] for c in red.classes_]
     metricas = {
         "particion": tipo_particion,
         "muestrasEntrenamiento": int(len(tr)), "muestrasPrueba": int(len(te)),
-        "vectoresEntrenamiento": int(len(Xtr)),
-        "exactitud": float(accuracy_score(yte, pred)) if len(Xte) else None,
-        "exactitudSobreUmbral": float(accuracy_score(yte[acepta], pred[acepta])) if acepta.any() else None,
-        "coberturaUmbral": float(acepta.mean()) if len(acepta) else None,
-        "reporte": classification_report(yte, pred, labels=red.classes_, target_names=nombres, zero_division=0, output_dict=True) if len(Xte) else {},
-        "confusion": confusion_matrix(yte, pred, labels=red.classes_).tolist() if len(Xte) else [],
-        "clasesConfusion": nombres,
+        "personasPrueba": len({ds.muestras[i].participante for i in te}),
+        "vectoresEntrenamiento": 0,
+        "exactitud": None, "exactitudSobreUmbral": None, "coberturaUmbral": None,
+        "reporte": {}, "confusion": [], "clasesConfusion": [],
     }
+    Xte, yte = _vectores([capturas[i] for i in te], [etiquetas[i] for i in te], op, rng, False)
+    Xtr, ytr = _vectores([capturas[i] for i in tr], [etiquetas[i] for i in tr], op, rng, True) if len(Xte) else (None, None)
+    if len(Xte) and len(set(ytr.tolist())) >= 2:
+        escalador, red = _entrenar_red(Xtr, ytr, op)
+        pred = red.predict(escalador.transform(Xte))
+        prob = red.predict_proba(escalador.transform(Xte))
+        acepta = prob.max(axis=1) >= op.umbral_sugerido
+        # Señas que solo aparecen en la prueba (las grabó solo una persona) también cuentan en el reporte.
+        etiquetas_reporte = np.union1d(red.classes_, yte)
+        nombres = [ds.nombre(int(c)) for c in etiquetas_reporte]
+        metricas.update({
+            "vectoresEntrenamiento": int(len(Xtr)),
+            "exactitud": float(accuracy_score(yte, pred)),
+            "exactitudSobreUmbral": float(accuracy_score(yte[acepta], pred[acepta])) if acepta.any() else None,
+            "coberturaUmbral": float(acepta.mean()),
+            "reporte": classification_report(yte, pred, labels=etiquetas_reporte, target_names=nombres, zero_division=0, output_dict=True),
+            "confusion": confusion_matrix(yte, pred, labels=etiquetas_reporte).tolist(),
+            "clasesConfusion": nombres,
+        })
+    elif len(te):
+        metricas["particion"] = SIN_EVALUACION
 
     # 2) Modelo final con todos los datos.
     Xall, yall = _vectores(capturas, etiquetas, op, rng, True)
+    if len(set(yall.tolist())) < 2:
+        raise ValueError("Hay manos visibles en las muestras de menos de 2 señas: revisa las grabaciones.")
     escalador, red = _entrenar_red(Xall, yall, op)
     modelo = exportar(red, escalador, ds, op, metricas)
     return modelo, metricas

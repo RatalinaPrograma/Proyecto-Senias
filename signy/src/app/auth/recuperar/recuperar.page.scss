@@ -54,6 +54,13 @@
     animation: auth-mascot-glow 2.4s ease-in-out infinite;
   }
 
+  // Ilustración del paso 1 (apaisada): más ancha y sin el brillo naranjo.
+  .auth-ilustracion {
+    width: 220px;
+    filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.35));
+    animation: none;
+  }
+
   h1 {
     font-family: 'Baloo 2', sans-serif;
     font-weight: 700;

@@ -23,6 +23,7 @@ RAIZ = Path(__file__).resolve().parent
 sys.path.insert(0, str(RAIZ))
 
 from signy_ml.caracteristicas import ConfigCaracteristicas, caracteristicas  # noqa: E402
+from signy_ml.consola import consola_utf8  # noqa: E402
 from signy_ml.dataset import expandir_captura  # noqa: E402
 from signy_ml.modelo import OpcionesEntrenamiento, entrenar, probabilidades  # noqa: E402
 from signy_ml.sintetico import compactar, dataset_sintetico, generar_captura  # noqa: E402
@@ -67,4 +68,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    consola_utf8()
     main()

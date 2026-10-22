@@ -302,7 +302,10 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
         alert('Todavía no hay muestras en el dataset. Graba algunas desde el entrenador de cada seña ("Al dataset").');
         return;
       }
-      const dataset = construirDatasetExportable(this.senas, muestras);
+      // Señas recién pedidas: si alguien creó una seña y le grabó muestras con
+      // esta página ya abierta, la lista vieja dejaba el archivo inválido.
+      const senas = await this.supabaseService.listarSenas();
+      const dataset = construirDatasetExportable(senas, muestras);
       const blob = new Blob([JSON.stringify(dataset)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

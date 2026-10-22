@@ -2,7 +2,7 @@
   <ion-toolbar class="trainer-toolbar">
     <ion-title>Entrenar Seña: <strong>{{ sena.palabra }}</strong></ion-title>
     <ion-buttons slot="end">
-      <button class="icon-btn-close" (click)="cerrar()" aria-label="Cerrar">
+      <button class="icon-btn-close" (click)="cerrar()" [disabled]="guardando || guardandoMuestra || borrandoMuestra" aria-label="Cerrar">
         <ion-icon name="close-outline"></ion-icon>
       </button>
     </ion-buttons>
@@ -69,7 +69,11 @@
       </div>
     </div>
 
-    <button class="flip-btn" (click)="alternarCamara()" aria-label="Cambiar cámara">
+    <button
+      class="flip-btn"
+      (click)="alternarCamara()"
+      [disabled]="enRafaga || estadoGrabacion === 'cuenta_atras' || estadoGrabacion === 'grabando'"
+      aria-label="Cambiar cámara">
       <ion-icon name="camera-reverse-outline"></ion-icon>
     </button>
   </div>
@@ -107,7 +111,7 @@
     </div>
 
     <!-- Indicador de detección de manos en vivo -->
-    <div class="hand-indicator" *ngIf="estadoCamara === 'activa'">
+    <div class="hand-indicator" *ngIf="estadoCamara === 'activa' && estadoGrabacion !== 'grabando'">
       <span class="badge" [class.badge-ok]="manosDetectadasCount >= manosRequeridas" [class.badge-wait]="manosDetectadasCount < manosRequeridas">
         {{ manosDetectadasCount >= manosRequeridas ? '🟢 ' + manosDetectadasCount + ' mano(s) lista(s)' : '🟡 Coloca ' + (manosRequeridas === 1 ? '1 mano' : '2 manos') }}
       </span>
@@ -117,6 +121,7 @@
     <div class="countdown-overlay" *ngIf="estadoGrabacion === 'cuenta_atras'">
       <div class="rafaga-tag" *ngIf="enRafaga">Ráfaga · muestra {{ rafagaHechas + 1 }} de {{ rafagaTotal }}</div>
       <div class="countdown-number">{{ cuentaAtras }}</div>
+      <div class="persona-tag">Persona: {{ participante.trim() || 'tú (tu cuenta)' }}</div>
       <p class="countdown-text">
         Acomoda {{ manosRequeridas === 1 ? 'tu mano' : 'tus 2 manos' }} frente a la cámara — la grabación arranca sola en cuanto las detecte.
       </p>
@@ -184,6 +189,20 @@
       <ion-icon name="alert-circle"></ion-icon>
       Referencia grabada con una versión anterior del motor — vuelve a grabarla para mejorar la precisión.
     </span>
+    <div class="persona-row">
+      <label for="participante-input">Persona que hace la seña:</label>
+      <input
+        id="participante-input"
+        class="persona-input"
+        type="text"
+        autocomplete="off"
+        placeholder="Tú (tu cuenta)"
+        title="Apodo o iniciales de quien hace la seña. Cámbialo cada vez que grabes a otra persona."
+        [maxlength]="largoMaximoParticipante"
+        [(ngModel)]="participante"
+        (ngModelChange)="recordarParticipante()"
+        [disabled]="enRafaga || estadoGrabacion === 'cuenta_atras'" />
+    </div>
     <span class="info-badge dataset" *ngIf="muestrasEnDataset !== null">
       <ion-icon name="layers-outline"></ion-icon>
       Dataset: {{ muestrasEnDataset }} muestra(s){{ muestrasEnDataset < 10 ? ' · se recomiendan 10 o más' : '' }}
@@ -197,7 +216,7 @@
     </button>
     <p class="dataset-msg" *ngIf="mensajeDataset">
       {{ mensajeDataset }}
-      <button type="button" class="link-btn" *ngIf="muestraRecienGuardada" (click)="deshacerUltimaMuestra()">
+      <button type="button" class="link-btn" *ngIf="muestraRecienGuardada" [disabled]="borrandoMuestra" (click)="deshacerUltimaMuestra()">
         <ion-icon name="arrow-undo-outline"></ion-icon> Deshacer
       </button>
     </p>

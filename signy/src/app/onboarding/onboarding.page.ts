@@ -48,19 +48,19 @@ export class OnboardingPage implements OnInit {
       texto: 'La Lengua de Señas Chilena (LSCh) es la lengua de la comunidad sorda en Chile. Muy pocas personas oyentes la aprenden — vamos a cambiar eso.',
     },
     {
-      imagen: 'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/registro.png',
+      imagen: 'assets/img/aprende-jugando.webp',
       titulo: 'Aprende como jugando',
       texto: 'Lecciones cortas, racha diaria, vidas y niveles. Aprender LSCh se siente como avanzar en un juego, no como estudiar.',
     },
     {
-      imagen: 'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/login.png',
+      imagen: 'assets/img/practica-camara.webp',
       titulo: 'Practica con tu cámara',
       texto: 'Al final de cada lección, activa tu cámara y practica el gesto. Signy te da retroalimentación al momento.',
     },
     {
       imagen: null,
       titulo: 'Fácil de moverte',
-      texto: 'Tu foto arriba a la izquierda: tu perfil. El ícono de personas: agregar amigos. El engranaje: configuración.',
+      texto: 'Toca tu foto, arriba a la izquierda, para ver tu perfil. Desde ahí buscas amigos y entras a la configuración.',
       menu: [
         { icono: 'paw', etiqueta: 'Perfil' },
         { icono: 'people', etiqueta: 'Amigos' },
@@ -68,7 +68,7 @@ export class OnboardingPage implements OnInit {
       ],
     },
     {
-      imagen: 'https://bjxcdhtigbsbibcltnup.supabase.co/storage/v1/object/public/icons/registro.png',
+      imagen: 'assets/img/estas-listo.webp',
       titulo: '¿Listo para empezar?',
       texto: 'Crea tu cuenta gratis y da tu primer paso para comunicarte con la comunidad sorda chilena.',
     },
@@ -98,6 +98,11 @@ export class OnboardingPage implements OnInit {
     const { data } = await this.supabaseService.getUser();
     const destino = data?.user ? '/home' : '/auth/login';
     this.router.navigate([destino], { replaceUrl: true });
+  }
+
+  /** Las ilustraciones que vienen dentro de la app no pasan por la caché de imágenes remotas. */
+  esImagenLocal(url: string | null): boolean {
+    return !!url && url.startsWith('assets/');
   }
 
   get esUltimo(): boolean {
