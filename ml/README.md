@@ -55,6 +55,36 @@ Para que el modelo funcione con alumnos reales:
 - Variar un poco: distancia a la cámara, luz, velocidad, celular vertical y laptop.
 - Si una grabación salió mal, **Deshacer** la borra.
 - Las muestras son solo coordenadas de 21 puntos por mano: no se guardan imágenes ni video.
+- **Toma de la cintura hacia arriba**: está bien. En las señas de una mano, la otra puede
+  quedar visible descansando abajo; el modelo la ignora (si está quieta y bastante más abajo
+  que la mano que hace la seña). Partir con las dos manos abajo y subir una está bien.
+- **Velocidad natural, no brusca**: si la mano se mueve muy rápido la imagen sale borrosa
+  y MediaPipe la pierde por un momento. Con buena luz de frente se pierde menos.
+- **Duración**: la grabación dura 2, 3 o 4 s desde que se ven las manos. Para señas largas
+  (por ejemplo de la cadera a la cabeza) usar **4 s**, así no se corta al final.
+
+## 2b. Revisar las grabaciones (solo lectura)
+
+Al grabar no se puede ver cómo quedó cada muestra. Para eso:
+
+```bash
+python ml/revisar_dataset.py --supabase --email admin@correo.cl
+```
+
+Genera `ml/reportes/revision-<fecha>.html`. Ábrela con doble clic: cada muestra aparece
+animada como esqueleto de las manos, con quién la grabó, cuándo, y avisos automáticos:
+
+- 🟢 bien · 🟡 revisar la animación (puede servir) · 🔴 conviene volver a grabarla.
+- Mano perdida por un rato (movimiento muy rápido o borroso), seña posiblemente cortada
+  al final, poco movimiento en una seña dinámica, seña de 2 manos donde se vio 1.
+- Perder la mano un momento **mientras sube desde la cintura o baja al reposo** es normal:
+  sale solo como información, no en amarillo. Lo que importa es lo que pasa durante la seña.
+- También muestra la **referencia** de cada seña ("Usar como referencia").
+
+El script **no cambia nada** en Supabase: solo lee. Si una muestra está mal, se puede borrar
+en Supabase → SQL Editor con `delete from muestras_sena where id in (…);` usando los `#` de
+la página (lo borrado no se recupera). Con `--guardar-datos archivo.json` se guarda lo
+descargado y después se puede revisar sin conexión con `--datos archivo.json`.
 
 ## 3. Entrenar
 
@@ -146,6 +176,13 @@ Estado del modelo en `ml/output/` (subido a `dev` el 04-10-2026):
   isotrópicas (corrige la relación de aspecto de la cámara), seguimiento estable
   de las dos manos, remuestreo a N frames, centrado en la muñeca media y escalado
   por el tamaño de mano mediano; mano A + mano B (o ceros) + bandera de presencia.
+  La otra mano descansando abajo no cuenta como mano B (`mano_en_reposo` = `manoEnReposo`):
+  se descarta si está quieta, queda al menos 1 tamaño de mano por debajo de donde ocurre la
+  seña (el 10 % más alto del recorrido de la otra mano, porque lo normal es partir con las dos
+  manos abajo) y la otra mano no la toca (si la toca en 3 frames o más, es la mano base de una
+  seña de dos manos). Sin esto, el mismo gesto daba vectores distintos según si el alumno la
+  mostraba o no, o si era zurdo.
+  Desde este cambio el formato del modelo es la versión 2 (la app rechaza modelos v1).
 - **Aumentación**: espejo (zurdos), giro de la mano ±17°, escala, temblor,
   deformación no lineal del tiempo y recorte de bordes.
 - **Modelo**: red neuronal MLP (scikit-learn) con ReLU y softmax; pesos en float16

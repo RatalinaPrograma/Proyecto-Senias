@@ -19,7 +19,8 @@ from .caracteristicas import ConfigCaracteristicas, caracteristicas, dimension_p
 from .dataset import Dataset
 
 FORMATO = "signy-clasificador"
-VERSION = 1
+# 2: las características ignoran la mano que descansa abajo (mano_en_reposo).
+VERSION = 2
 
 
 @dataclass

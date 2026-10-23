@@ -9,12 +9,26 @@
  * (`clasificador.spec.ts`, que usa vectores calculados por Python).
  */
 import { aIsotropico, tamanoMano } from './geometria';
-import { PRESENCIA_MINIMA, resumirPistas, seguirManos } from './seguimiento';
+import { PRESENCIA_MINIMA, PistasPorFrame, ResumenPista, resumirPistas, seguirManos } from './seguimiento';
 import { CapturaCruda, MUNECA, Mano, PUNTOS_POR_MANO } from './tipos';
 import { mediana } from './geometria';
 
 export const FORMATO_CLASIFICADOR = 'signy-clasificador';
-export const VERSION_CLASIFICADOR = 1;
+/** 2: las características ignoran la mano que descansa abajo (manoEnReposo). */
+export const VERSION_CLASIFICADOR = 2;
+
+/** Mano "en reposo" (ver manoEnReposo): distancias en tamaños de mano. */
+const REPOSO_MOVIMIENTO_MAX = 0.6; // la mano que descansa casi no se mueve
+const REPOSO_MARGEN = 1.0; // y queda al menos esto por debajo de donde ocurre la seña
+const REPOSO_CONTACTO = 0.5; // si la otra mano la toca (más cerca que esto)…
+const REPOSO_FRAMES_CONTACTO = 3; // …en al menos estos frames, es una mano BASE, no en reposo (un roce suelto no cuenta)
+const REPOSO_CUANTIL_ALTO = 0.1; // "donde ocurre la seña": el 10 % más alto del recorrido de la otra mano
+
+/** Valor en la posición floor(q·(n−1)) de la lista ordenada (sin interpolar: igual que en Python). */
+function cuantilBajo(valores: number[], q: number): number {
+  const orden = valores.slice().sort((a, b) => a - b);
+  return orden[Math.floor(q * (orden.length - 1))];
+}
 
 export interface ConfigCaracteristicas {
   /** Cantidad de frames a la que se remuestrea cada captura. */
@@ -87,6 +101,56 @@ function remuestrearFijo(frames: FrameAB[], n: number): FrameAB[] {
   return out;
 }
 
+/**
+ * Índice de la pista que es la otra mano DESCANSANDO abajo (o null).
+ *
+ * En una toma de la cintura hacia arriba, en las señas de una mano la otra
+ * queda visible y quieta a la altura de la cadera. Si se la trata como
+ * "mano B", el vector cambia por completo según si el alumno la muestra o
+ * no, y según si es zurdo (cambia qué mano queda a la izquierda).
+ *
+ * Se descarta la mano de más abajo si:
+ *  - casi no se mueve,
+ *  - queda claramente por debajo de DONDE OCURRE LA SEÑA (el 10 % más alto
+ *    del recorrido de la otra mano; no de todo el recorrido, porque lo
+ *    normal es partir con las dos manos abajo y subir una), y
+ *  - la otra mano no la toca mientras está arriba: si la toca, es la mano
+ *    BASE de una seña de dos manos y se conserva.
+ * Igual que mano_en_reposo en ml/signy_ml/caracteristicas.py.
+ */
+export function manoEnReposo(pistas: PistasPorFrame, activas: ResumenPista[]): number | null {
+  if (activas.length !== 2) return null;
+  const datos = activas.map((r) => {
+    const manos = pistas.map((p) => p[r.indice]).filter((m): m is Mano => !!m);
+    const xs = manos.map((m) => m[MUNECA].x);
+    const ys = manos.map((m) => m[MUNECA].y);
+    const cx = mediana(xs);
+    const cy = mediana(ys);
+    return {
+      indice: r.indice,
+      yMedia: r.yMedia,
+      yAlto: cuantilBajo(ys, REPOSO_CUANTIL_ALTO),
+      tam: mediana(manos.map((m) => tamanoMano(m))),
+      mov: Math.max(...xs.map((x, i) => Math.sqrt((x - cx) ** 2 + (ys[i] - cy) ** 2))),
+    };
+  });
+  const [baja, alta] = datos[1].yMedia > datos[0].yMedia ? [datos[1], datos[0]] : [datos[0], datos[1]];
+  const t = Math.max(baja.tam, alta.tam);
+  if (!(baja.mov < REPOSO_MOVIMIENTO_MAX * t && baja.yMedia > alta.yAlto + REPOSO_MARGEN * t)) return null;
+  const limite = baja.yMedia - REPOSO_MARGEN * t;
+  let contactos = 0;
+  for (const p of pistas) {
+    const mb = p[baja.indice];
+    const ma = p[alta.indice];
+    // Solo cuenta un contacto cuando la otra mano está arriba (no cuando ambas descansan juntas).
+    if (!mb || !ma || ma[MUNECA].y >= limite) continue;
+    let minimo = Infinity;
+    for (const a of ma) for (const b of mb) minimo = Math.min(minimo, Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2));
+    if (minimo < REPOSO_CONTACTO * t && ++contactos >= REPOSO_FRAMES_CONTACTO) return null;
+  }
+  return baja.indice;
+}
+
 /** Valores por frame del vector de características. */
 export function dimensionPorFrame(config: ConfigCaracteristicas): number {
   return 2 * PUNTOS_POR_MANO * (config.usarZ ? 3 : 2) + 1;
@@ -95,16 +159,19 @@ export function dimensionPorFrame(config: ConfigCaracteristicas): number {
 /**
  * Vector de características de una captura (o null si no se ve ninguna mano
  * de forma estable). Mano A = la mano activa más a la izquierda de la
- * imagen (o la única); mano B = la otra, si está activa (ceros si no).
+ * imagen (o la única); mano B = la otra, si está activa (ceros si no). La
+ * otra mano descansando abajo no cuenta (ver manoEnReposo).
  * Coordenadas isotrópicas, centradas en la muñeca media de A y escaladas
  * por su tamaño mediano; cada frame termina con 1/0 según esté la mano B.
  */
 export function caracteristicasClasificador(captura: CapturaCruda, config: ConfigCaracteristicas): number[] | null {
   const iso = aIsotropico(captura, true);
   const pistas = seguirManos(iso);
-  const activas = resumirPistas(pistas)
+  let activas = resumirPistas(pistas)
     .filter((r) => r.presencia >= PRESENCIA_MINIMA)
     .sort((x, y) => x.xMedia - y.xMedia);
+  const reposo = manoEnReposo(pistas, activas);
+  if (reposo !== null) activas = activas.filter((r) => r.indice !== reposo);
   if (!activas.length) return null;
   const ia = activas[0].indice;
   const ib = activas.length > 1 ? activas[1].indice : null;

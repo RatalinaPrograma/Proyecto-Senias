@@ -142,3 +142,32 @@ def descargar_dataset(url: str, clave: str, email: str, password: str,
             "tipo": m["tipo"], "manosRequeridas": m["manos_requeridas"], "captura": m["captura"],
         } for m in muestras],
     }
+
+
+def descargar_para_revision(url: str, clave: str, email: str, password: str,
+                            al_avanzar: Optional[Callable[[int], None]] = None) -> dict:
+    """Todo lo necesario para revisar el dataset (ml/revisar_dataset.py). SOLO LECTURA.
+
+    A diferencia de descargar_dataset, NO anonimiza: es para que el propio
+    equipo vea quién grabó cada muestra y cuándo, y así ubicar las que haya
+    que repetir. Además trae las referencias (senas.landmarks_referencia).
+    """
+    token = iniciar_sesion(url, clave, email, password)
+    columnas = "id,sena_id,autor_id,participante,tipo,manos_requeridas,captura,created_at"
+    try:
+        muestras = _leer_todo(url, clave, token, "muestras_sena", columnas, al_avanzar)
+    except ErrorSupabase as e:
+        if e.codigo != "42703":
+            raise
+        muestras = _leer_todo(url, clave, token, "muestras_sena", columnas.replace("participante,", ""), al_avanzar)
+    senas = _leer_todo(url, clave, token, "senas", "id,palabra,subnivel_id,landmarks_referencia")
+    autores = sorted({m["autor_id"] for m in muestras if m.get("autor_id")})
+    perfiles: list[dict] = []
+    try:  # solo para mostrar nombres: si no se puede leer, la revisión sigue igual
+        for i in range(0, len(autores), 50):
+            filtro = "in.(" + ",".join(autores[i:i + 50]) + ")"
+            perfiles += _pedir("GET", f"{url}/rest/v1/profiles?" + urllib.parse.urlencode({"select": "id,full_name,username", "id": filtro}),
+                               {"apikey": clave, "Authorization": f"Bearer {token}"}) or []
+    except ErrorSupabase:
+        perfiles = []
+    return {"muestras": muestras, "senas": senas, "perfiles": perfiles}

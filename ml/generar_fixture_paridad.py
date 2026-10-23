@@ -45,8 +45,12 @@ def main() -> None:
     for nombre, kw in [
         ("HOLA", {}), ("SI", dict(ancho=480, alto=640)), ("L", dict(zurda=True)),
         ("SEPARAR", dict(prob_intercambio=0.3)), ("HOLA", dict(prob_perdida=0.3, fps=15)),
+        # La otra mano descansando abajo (toma de la cintura hacia arriba), también zurdo.
+        ("HOLA", dict(mano_reposo=True)), ("SI", dict(mano_reposo=True, zurda=True, ancho=480, alto=640)),
+        # Como se graba de verdad: la mano parte abajo, sube a hacer la seña y vuelve a bajar.
+        ("GRACIAS", dict(mano_reposo=True, inicio_abajo=True, pausa_antes_ms=400.0, pausa_despues_ms=400.0)),
     ]:
-        compacta = compactar(generar_captura(nombre, rng, **corto, **kw))
+        compacta = compactar(generar_captura(nombre, rng, **{**corto, **kw}))
         captura = expandir_captura(compacta)
         vector = caracteristicas(captura, op.config)
         casos.append({

@@ -47,6 +47,7 @@ class FalsoSupabase(BaseHTTPRequestHandler):
     sin_columna_participante = False
     cortar_respuesta = False
     pedidos: list[str] = []
+    metodos: list[tuple[str, str]] = []
 
     def log_message(self, *args):  # silencio
         pass
@@ -60,6 +61,7 @@ class FalsoSupabase(BaseHTTPRequestHandler):
         self.wfile.write(datos)
 
     def do_POST(self):
+        FalsoSupabase.metodos.append(("POST", urlparse(self.path).path))
         if self.headers.get("apikey") != CLAVE:
             return self._responder(401, {"message": "No API key found in request"})
         cuerpo = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
@@ -72,6 +74,7 @@ class FalsoSupabase(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         FalsoSupabase.pedidos.append(self.path)
+        FalsoSupabase.metodos.append(("GET", u.path))
         token = (self.headers.get("Authorization") or "").replace("Bearer ", "")
         if self.headers.get("apikey") != CLAVE or token not in ("tok-admin", "tok-alumno"):
             return self._responder(401, {"message": "JWT inválido"})
@@ -95,6 +98,8 @@ class FalsoSupabase(BaseHTTPRequestHandler):
             visibles = self.muestras if token == "tok-admin" else []  # RLS: solo admins
             filas = [{k: v for k, v in m.items() if columnas == ["*"] or k in columnas} for m in visibles[offset:offset + limit]]
             return self._responder(200, filas)
+        if u.path == "/rest/v1/profiles":
+            return self._responder(200, [{"id": "uuid-0", "full_name": "Ana Pérez", "username": "ana"}])
         if u.path == "/rest/v1/senas":
             senas = [{"id": 10, "palabra": "hola", "subnivel_id": 1}, {"id": 11, "palabra": "si", "subnivel_id": 1}, {"id": 12, "palabra": "chao", "subnivel_id": 1}]
             return self._responder(200, senas[offset:offset + limit])
@@ -119,6 +124,7 @@ class TestDescargaSupabase(unittest.TestCase):
         FalsoSupabase.sin_columna_participante = False
         FalsoSupabase.cortar_respuesta = False
         FalsoSupabase.pedidos = []
+        FalsoSupabase.metodos = []
 
     def test_admin_descarga_todo_paginado_y_anonimizado(self):
         ds = sb.descargar_dataset(self.url, CLAVE, "admin@signy.cl", "clave-admin")
@@ -159,6 +165,20 @@ class TestDescargaSupabase(unittest.TestCase):
         FalsoSupabase.cortar_respuesta = True
         with self.assertRaisesRegex(sb.ErrorSupabase, "Se cortó la conexión"):
             sb.descargar_dataset(self.url, CLAVE, "admin@signy.cl", "clave-admin")
+
+    def test_revision_solo_lee_y_genera_la_pagina(self):
+        import revisar_dataset
+        salida = Path(tempfile.mkdtemp()) / "revision.html"
+        with mock.patch.object(sb, "leer_config_app", return_value=(self.url, CLAVE)), \
+             mock.patch.dict(os.environ, {"SIGNY_PASSWORD": "clave-admin"}), redirect_stdout(StringIO()):
+            codigo = revisar_dataset.main(["--supabase", "--email", "admin@signy.cl", "--salida", str(salida)])
+        self.assertEqual(codigo, 0)
+        # Lo único que no es lectura es el inicio de sesión: nada se escribe ni se borra.
+        self.assertEqual({(m, r) for m, r in FalsoSupabase.metodos if m != "GET"}, {("POST", "/auth/v1/token")})
+        texto = salida.read_text(encoding="utf-8")
+        self.assertIn("Revisión del dataset", texto)
+        self.assertIn("Ana Pérez (cuenta)", texto)
+        self.assertIn('"id":230', texto)  # están todas las muestras
 
     def test_contrasena_incorrecta(self):
         with self.assertRaisesRegex(sb.ErrorSupabase, "incorrectos"):

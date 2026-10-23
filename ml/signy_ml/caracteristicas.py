@@ -24,6 +24,18 @@ MUNECA = 0
 MCP_MEDIO = 9
 SALTO_MAXIMO = 0.3
 PRESENCIA_MINIMA = 0.3
+# Mano "en reposo" (ver mano_en_reposo): distancias en tamaños de mano.
+REPOSO_MOVIMIENTO_MAX = 0.6   # la mano que descansa casi no se mueve
+REPOSO_MARGEN = 1.0           # y queda al menos esto por debajo de donde ocurre la seña
+REPOSO_CONTACTO = 0.5         # si la otra mano la toca (más cerca que esto)…
+REPOSO_FRAMES_CONTACTO = 3    # …en al menos estos frames, es una mano BASE, no en reposo (un roce suelto no cuenta)
+REPOSO_CUANTIL_ALTO = 0.1     # "donde ocurre la seña": el 10 % más alto del recorrido de la otra mano
+
+
+def _cuantil_bajo(valores: list[float], q: float) -> float:
+    """Valor en la posición floor(q·(n−1)) de la lista ordenada (sin interpolar: igual que en clasificador.ts)."""
+    orden = sorted(valores)
+    return orden[int(q * (len(orden) - 1))]
 
 
 @dataclass(frozen=True)
@@ -118,6 +130,55 @@ def resumir_pistas(pistas: list[list[Optional[np.ndarray]]]) -> list[dict]:
     return resumen
 
 
+def mano_en_reposo(pistas: list[list[Optional[np.ndarray]]], activas: list[dict]) -> Optional[int]:
+    """Índice de la pista que es la otra mano DESCANSANDO abajo (o None).
+
+    En una toma de la cintura hacia arriba, en las señas de una mano la otra
+    queda visible y quieta a la altura de la cadera. Si se la trata como
+    "mano B", el vector cambia por completo según si el alumno la muestra o
+    no, y según si es zurdo (cambia qué mano queda a la izquierda).
+
+    Se descarta la mano de más abajo si:
+      - casi no se mueve,
+      - queda claramente por debajo de DONDE OCURRE LA SEÑA (el 10 % más alto
+        del recorrido de la otra mano; no de todo el recorrido, porque lo
+        normal es partir con las dos manos abajo y subir una), y
+      - la otra mano no la toca mientras está arriba: si la toca, es la mano
+        BASE de una seña de dos manos y se conserva.
+    Igual que manoEnReposo en clasificador.ts.
+    """
+    if len(activas) != 2:
+        return None
+    datos = []
+    for r in activas:
+        manos = [p[r["indice"]] for p in pistas if p[r["indice"]] is not None]
+        munecas = np.array([m[MUNECA, :2] for m in manos])
+        centro = np.median(munecas, axis=0)
+        datos.append({
+            "indice": r["indice"],
+            "y_media": r["y_media"],
+            "y_alto": _cuantil_bajo([float(y) for y in munecas[:, 1]], REPOSO_CUANTIL_ALTO),
+            "tam": float(np.median([tamano_mano(m) for m in manos])),
+            "mov": float(np.sqrt(((munecas - centro) ** 2).sum(axis=1)).max()),
+        })
+    baja, alta = (datos[1], datos[0]) if datos[1]["y_media"] > datos[0]["y_media"] else (datos[0], datos[1])
+    t = max(baja["tam"], alta["tam"])
+    if not (baja["mov"] < REPOSO_MOVIMIENTO_MAX * t and baja["y_media"] > alta["y_alto"] + REPOSO_MARGEN * t):
+        return None
+    limite = baja["y_media"] - REPOSO_MARGEN * t
+    contactos = 0
+    for p in pistas:
+        mb, ma = p[baja["indice"]], p[alta["indice"]]
+        if mb is None or ma is None or ma[MUNECA, 1] >= limite:
+            continue  # solo cuenta un contacto cuando la otra mano está arriba (no cuando ambas descansan juntas)
+        dif = ma[:, None, :2] - mb[None, :, :2]
+        if float(np.sqrt((dif ** 2).sum(axis=2)).min()) < REPOSO_CONTACTO * t:
+            contactos += 1
+            if contactos >= REPOSO_FRAMES_CONTACTO:
+                return None
+    return baja["indice"]
+
+
 def _remuestrear_fijo(frames: list[tuple], n: int) -> list[tuple]:
     """frames: lista de (t, mano_a, mano_b|None). Igual que remuestrearFijo en TS."""
     if len(frames) == 1:
@@ -147,6 +208,9 @@ def caracteristicas(captura: dict, config: ConfigCaracteristicas) -> Optional[np
         (r for r in resumir_pistas(pistas) if r["presencia"] >= PRESENCIA_MINIMA),
         key=lambda r: r["x_media"],
     )
+    reposo = mano_en_reposo(pistas, activas)
+    if reposo is not None:
+        activas = [r for r in activas if r["indice"] != reposo]
     if not activas:
         return None
     ia = activas[0]["indice"]

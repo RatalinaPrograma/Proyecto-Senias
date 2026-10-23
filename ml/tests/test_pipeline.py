@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -73,6 +74,137 @@ class TestCaracteristicas(unittest.TestCase):
         dos = caracteristicas(generar_captura("SEPARAR", self.rng), CONFIG)
         self.assertTrue(np.all(una[d - 1::d] == 0))
         self.assertTrue(np.all(dos[d - 1::d] == 1))
+
+
+class TestManoEnReposo(unittest.TestCase):
+    """La otra mano descansando abajo (toma de la cintura hacia arriba) no debe cambiar el vector."""
+
+    def test_mano_de_una_sena_igual_con_o_sin_la_otra_mano_abajo(self):
+        for nombre in ["HOLA", "GRACIAS", "L"]:
+            sin = caracteristicas(generar_captura(nombre, np.random.default_rng(3), ruido=0), CONFIG)
+            con = caracteristicas(generar_captura(nombre, np.random.default_rng(3), ruido=0, mano_reposo=True), CONFIG)
+            np.testing.assert_allclose(con, sin, atol=1e-9, err_msg=nombre)
+
+    def test_zurdo_con_la_otra_mano_abajo_igual_que_zurdo_sin_ella(self):
+        sin = caracteristicas(generar_captura("HOLA", np.random.default_rng(3), ruido=0, zurda=True), CONFIG)
+        con = caracteristicas(generar_captura("HOLA", np.random.default_rng(3), ruido=0, zurda=True, mano_reposo=True), CONFIG)
+        np.testing.assert_allclose(con, sin, atol=1e-9)
+
+    def test_como_se_graba_de_verdad_parte_abajo_sube_y_vuelve(self):
+        # Las dos manos parten abajo; una sube a hacer la seña y vuelve: la que se queda abajo no cuenta.
+        for nombre in ["HOLA", "GRACIAS", "L"]:
+            kw = dict(ruido=0, pausa_antes_ms=400.0, pausa_despues_ms=400.0, inicio_abajo=True)
+            sin = caracteristicas(generar_captura(nombre, np.random.default_rng(4), **kw), CONFIG)
+            con = caracteristicas(generar_captura(nombre, np.random.default_rng(4), mano_reposo=True, **kw), CONFIG)
+            np.testing.assert_allclose(con, sin, atol=1e-9, err_msg=nombre)
+
+    def test_mano_base_tocada_varias_veces_se_conserva(self):
+        # El índice baja a tocar la palma de la otra mano (quieta): es una seña de dos manos.
+        from signy_ml.sintetico import POSES, mano_local
+        rng = np.random.default_rng(2)
+        indice, palma = mano_local(POSES["indice"]), mano_local(POSES["palma"])
+        indice[:, 1] = -indice[:, 1]  # dedo apuntando hacia abajo
+        frames = []
+        for i in range(60):
+            y = 0.30 + 0.17 * abs(math.sin(i / 59 * math.pi * 2))
+            frames.append({"t": i * 33.0, "manos": [indice * 0.15 + np.array([0.50, y, 0.0]),
+                                                     palma * 0.15 + np.array([0.50, 0.62, 0.0]) + rng.normal(0, 0.002, (21, 3))]})
+        vec = caracteristicas({"ancho": 1, "alto": 1, "frames": frames}, CONFIG)
+        d = dimension_por_frame(CONFIG)
+        self.assertTrue(np.all(vec[d - 1::d] == 1))
+
+    def test_mano_base_quieta_de_una_sena_de_dos_manos_no_se_descarta(self):
+        # Una mano quieta (base) y la otra baja a tocarla: la base está cerca, no "lejos abajo".
+        from signy_ml.sintetico import POSES, mano_local
+        rng = np.random.default_rng(1)
+        base, activa = mano_local(POSES["palma"]), mano_local(POSES["indice"])
+        frames = []
+        for i in range(40):
+            y = 0.40 + 0.16 * math.sin(i / 39 * math.pi)
+            m1 = activa * 0.18 + np.array([0.52, y, 0.0])
+            m2 = base * 0.18 + np.array([0.53, 0.62, 0.0]) + rng.normal(0, 0.001, (21, 3))
+            frames.append({"t": i * 33.0, "manos": [m1, m2]})
+        vec = caracteristicas({"ancho": 1, "alto": 1, "frames": frames}, CONFIG)
+        d = dimension_por_frame(CONFIG)
+        self.assertTrue(np.all(vec[d - 1::d] == 1))
+
+    def test_sena_de_dos_manos_que_se_mueven_no_cambia(self):
+        d = dimension_por_frame(CONFIG)
+        vec = caracteristicas(generar_captura("SEPARAR", np.random.default_rng(2)), CONFIG)
+        self.assertTrue(np.all(vec[d - 1::d] == 1))
+
+
+class TestCalidad(unittest.TestCase):
+    """Revisión de cada grabación (ml/revisar_dataset.py)."""
+
+    def _avisos(self, r):
+        return " ".join(t for nivel, t in r["avisos"] if nivel != "info")
+
+    def test_grabacion_buena_sale_verde_e_informa_la_mano_de_abajo(self):
+        from signy_ml.calidad import evaluar_muestra
+        r = evaluar_muestra(generar_captura("GRACIAS", np.random.default_rng(1), pausa_despues_ms=600, mano_reposo=True), "dinamica", 1)
+        self.assertEqual(r["nivel"], "verde", r["avisos"])
+        self.assertTrue(r["otraManoAbajo"])
+
+    def test_detecta_sena_cortada_al_final(self):
+        from signy_ml.calidad import evaluar_muestra
+        cap = generar_captura("GRACIAS", np.random.default_rng(2), duracion_ms=1500, pausa_antes_ms=100, pausa_despues_ms=0)
+        cap["frames"] = [f for f in cap["frames"] if f["t"] <= 900]
+        self.assertIn("cortada", self._avisos(evaluar_muestra(cap, "dinamica", 1)))
+
+    def test_detecta_mano_perdida_por_movimiento_rapido(self):
+        from signy_ml.calidad import evaluar_muestra
+        cap = generar_captura("GRACIAS", np.random.default_rng(3), pausa_despues_ms=600)
+        for f in cap["frames"]:
+            if 400 <= f["t"] <= 1200:
+                f["manos"] = []
+        r = evaluar_muestra(cap, "dinamica", 1)
+        self.assertEqual(r["nivel"], "rojo")
+        self.assertIn("Se perdió la mano", self._avisos(r))
+
+    def test_subir_y_bajar_desde_la_cintura_no_es_un_problema(self):
+        # Como en las grabaciones reales: la mano parte en la cintura, sube, hace la seña y vuelve a bajar.
+        from signy_ml.calidad import evaluar_muestra
+        cap = generar_captura("HOLA", np.random.default_rng(7), pausa_antes_ms=500, pausa_despues_ms=600,
+                              inicio_abajo=True, mano_reposo=True)
+        self.assertEqual(evaluar_muestra(cap, "dinamica", 1)["nivel"], "verde")
+        # Perderla un momento mientras sube (borrosa) solo se informa.
+        for f in cap["frames"]:
+            if 100 <= f["t"] <= 500 and f["manos"]:
+                f["manos"] = f["manos"][1:]
+        r = evaluar_muestra(cap, "dinamica", 1)
+        self.assertEqual(r["nivel"], "verde", r["avisos"])
+        self.assertIn("al subirla o bajarla", " ".join(t for _, t in r["avisos"]))
+
+    def test_saltos_solo_entre_frames_seguidos(self):
+        # Reaparecer en otro lugar después de perderse no es un "salto brusco".
+        from signy_ml.calidad import evaluar_muestra
+        cap = generar_captura("HOLA", np.random.default_rng(8), pausa_antes_ms=500, pausa_despues_ms=600, inicio_abajo=True)
+        for f in cap["frames"]:
+            if 150 <= f["t"] <= 400:  # se pierde mientras sube: reaparece bastante más arriba
+                f["manos"] = []
+        self.assertEqual(evaluar_muestra(cap, "dinamica", 1)["saltos"], 0)
+
+    def test_sena_de_dos_manos_con_una_sola_visible(self):
+        from signy_ml.calidad import evaluar_muestra
+        r = evaluar_muestra(generar_captura("HOLA", np.random.default_rng(4)), "dinamica", 2)
+        self.assertEqual(r["nivel"], "rojo")
+
+    def test_poco_movimiento_en_sena_dinamica(self):
+        from signy_ml.calidad import evaluar_muestra
+        self.assertIn("Casi no hay movimiento", self._avisos(evaluar_muestra(generar_captura("L", np.random.default_rng(5)), "dinamica", 1)))
+
+    def test_cambio_de_forma_de_la_mano_cuenta_como_movimiento(self):
+        from signy_ml.calidad import evaluar_muestra
+        r = evaluar_muestra(generar_captura("LLAMAR", np.random.default_rng(6), pausa_despues_ms=600), "dinamica", 1)
+        self.assertEqual(r["nivel"], "verde", r["avisos"])
+
+    def test_referencia(self):
+        from signy_ml.calidad import evaluar_referencia
+        self.assertEqual(evaluar_referencia(None)["nivel"], "gris")
+        self.assertEqual(evaluar_referencia({"version": 3, "tipo": "dinamica", "frames": [[0.0] * 63] * 20})["nivel"], "verde")
+        self.assertEqual(evaluar_referencia({"version": 3, "tipo": "dinamica", "frames": [[0.0] * 63] * 4})["nivel"], "amarillo")
+        self.assertEqual(evaluar_referencia({"version": 2, "tipo": "estatica", "frames": [[0.0] * 63]})["nivel"], "amarillo")
 
 
 class TestAumentacion(unittest.TestCase):
