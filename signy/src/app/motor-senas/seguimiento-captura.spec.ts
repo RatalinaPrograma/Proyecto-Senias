@@ -1,6 +1,7 @@
 import { ControlFramesVideo, GrabadorCaptura, manosDesdeResultado } from './captura';
 import { FrameManos } from './geometria';
-import { secuenciasCandidatas, seguirManos, resumirPistas } from './seguimiento';
+import { cambioDeManos, secuenciasCandidatas, seguirManos, resumirPistas } from './seguimiento';
+import { CapturaCruda } from './tipos';
 import { manoLocal, POSES, ubicarMano } from './testing/manos-sinteticas';
 import { Mano } from './tipos';
 
@@ -56,6 +57,30 @@ describe('motor-senas / seguimiento de manos', () => {
   it('ignora una pista que aparece en muy pocos frames', () => {
     const frames = Array.from({ length: 10 }, (_, i) => (i === 0 ? frame(i, mano(0.5), mano(0.1)) : frame(i, mano(0.5))));
     expect(secuenciasCandidatas(frames, 1).length).toBe(1);
+  });
+
+  describe('cambioDeManos', () => {
+    const captura = (manosPorFrame: number[]): CapturaCruda => ({
+      ancho: 640,
+      alto: 480,
+      frames: manosPorFrame.map((n, t) => ({ t, manos: n === 2 ? [mano(0.3), mano(0.7)] : n === 1 ? [mano(0.5)] : [] })),
+    });
+
+    it('detecta una seña que empieza con 1 mano y pasa a 2', () => {
+      expect(cambioDeManos(captura([...Array(15).fill(1), ...Array(15).fill(2)]))).toBe(2);
+    });
+
+    it('detecta el cambio contrario (2 manos y después 1)', () => {
+      expect(cambioDeManos(captura([...Array(15).fill(2), ...Array(15).fill(1)]))).toBe(1);
+    });
+
+    it('no avisa si la cantidad de manos se mantiene (con algún frame suelto sin detección)', () => {
+      expect(cambioDeManos(captura([...Array(20).fill(1), 0, 0, ...Array(10).fill(1)]))).toBeNull();
+    });
+
+    it('no avisa con muy pocos frames (ruido, no una seña real)', () => {
+      expect(cambioDeManos(captura([1, 1, 2, 2]))).toBeNull();
+    });
   });
 });
 

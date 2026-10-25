@@ -1,5 +1,5 @@
 import { FrameManos, distancia } from './geometria';
-import { MUNECA, Mano } from './tipos';
+import { CapturaCruda, MUNECA, Mano } from './tipos';
 
 /**
  * MediaPipe no garantiza el ORDEN de las manos entre un frame y el
@@ -122,4 +122,28 @@ export function secuenciasCandidatas(frames: FrameManos[], manosRequeridas: 1 | 
       });
       return secuencia;
     });
+}
+
+/**
+ * Si la cantidad de manos cambia de forma estable a mitad de una grabación
+ * (p. ej. empieza con 1 mano y pasa a 2), devuelve la cantidad del segundo
+ * tramo; si se mantiene igual, `null`.
+ *
+ * Ni la referencia DTW ({@link secuenciasCandidatas} exige una cantidad fija
+ * durante TODA la grabación) ni la grabación de muestras para el dataset
+ * (no empieza hasta ver `manosRequeridas`) representan bien una seña así:
+ * sirve para avisarle al admin, no para corregirlo solo.
+ */
+export function cambioDeManos(captura: CapturaCruda): 1 | 2 | null {
+  const conteos = captura.frames.map((f) => Math.min(f.manos.length, 2)).filter((n) => n > 0);
+  if (conteos.length < 10) return null;
+  const moda = (xs: number[]): number => {
+    const cuenta = new Map<number, number>();
+    for (const x of xs) cuenta.set(x, (cuenta.get(x) ?? 0) + 1);
+    return [...cuenta.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  };
+  const mitad = Math.floor(conteos.length / 2);
+  const inicial = moda(conteos.slice(0, mitad));
+  const final = moda(conteos.slice(mitad));
+  return inicial !== final ? (final as 1 | 2) : null;
 }

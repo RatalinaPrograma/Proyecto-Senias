@@ -3,7 +3,7 @@ import { ModalController } from '@ionic/angular';
 import { SenaTrainerModalComponent } from './sena-trainer-modal.component';
 import { SupabaseService } from '../../services/supabase';
 import { BotonAtrasService } from '../../services/boton-atras';
-import { MediaPipeManosService, VERSION_MOTOR, construirModeloReferencia } from '../../motor-senas';
+import { CapturaCruda, MediaPipeManosService, VERSION_MOTOR, construirModeloReferencia } from '../../motor-senas';
 import { generarCaptura } from '../../motor-senas/testing/manos-sinteticas';
 import { grabarReferenciaAnterior } from '../../motor-senas/testing/motor-anterior';
 import { Sena } from '../../data/db-types';
@@ -53,7 +53,10 @@ describe('SenaTrainerModalComponent', () => {
    * grabado en ms.
    */
   function grabar(nombre: string, opciones = {}): number {
-    const captura = generarCaptura(nombre, { pausaAntesMs: 200, pausaDespuesMs: 200, ...opciones });
+    return grabarCaptura(generarCaptura(nombre, { pausaAntesMs: 200, pausaDespuesMs: 200, ...opciones }));
+  }
+
+  function grabarCaptura(captura: CapturaCruda): number {
     c.estadoGrabacion = 'grabando';
     (c as any).inicioGrabacion = null;
     (c as any).grabador.reiniciar();
@@ -64,6 +67,12 @@ describe('SenaTrainerModalComponent', () => {
       (c as any).procesarFrame({ landmarks: f.manos }, 10000 + f.t, captura.ancho, captura.alto);
     }
     return (c as any).grabador.duracionMs;
+  }
+
+  /** Concatena dos capturas (p. ej. una de 1 mano y otra de 2) para simular una seña compuesta. */
+  function concatenar(a: CapturaCruda, b: CapturaCruda): CapturaCruda {
+    const fin = a.frames[a.frames.length - 1].t;
+    return { ancho: a.ancho, alto: a.alto, frames: [...a.frames, ...b.frames.map((f) => ({ ...f, t: f.t + fin }))] };
   }
 
   it('si MediaPipe no carga muestra el error en vez de quedarse cargando', async () => {
@@ -182,6 +191,54 @@ describe('SenaTrainerModalComponent', () => {
       expect(c.estadoGrabacion).toBe('inactivo');
       expect(window.alert).toHaveBeenCalled();
     }));
+  });
+
+  describe('seña compuesta (cambia de cantidad de manos)', () => {
+    beforeEach(async () => await crear(senaBase()));
+
+    it('avisa si la grabación empieza con 1 mano y pasa a 2', () => {
+      const compuesta = concatenar(
+        generarCaptura('HOLA', { pausaAntesMs: 200, duracionMs: 1000, pausaDespuesMs: 0 }),
+        generarCaptura('SEPARAR', { pausaAntesMs: 0, duracionMs: 1000, pausaDespuesMs: 200 })
+      );
+      grabarCaptura(compuesta);
+      expect(c.estadoGrabacion).toBe('grabado');
+      expect(c.avisoSenaCompuesta).toBe(2);
+    });
+
+    it('no avisa si la cantidad de manos se mantiene durante toda la grabación', () => {
+      grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });
+      expect(c.avisoSenaCompuesta).toBeNull();
+    });
+
+    it('se limpia al empezar una grabación nueva', () => {
+      const compuesta = concatenar(
+        generarCaptura('HOLA', { pausaAntesMs: 200, duracionMs: 1000, pausaDespuesMs: 0 }),
+        generarCaptura('SEPARAR', { pausaAntesMs: 0, duracionMs: 1000, pausaDespuesMs: 200 })
+      );
+      grabarCaptura(compuesta);
+      expect(c.avisoSenaCompuesta).not.toBeNull();
+      grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });
+      expect(c.avisoSenaCompuesta).toBeNull();
+    });
+
+    it('mientras espera para grabar, avisa si lleva un rato viendo otra cantidad de manos', () => {
+      c.manosRequeridas = 2;
+      c.estadoGrabacion = 'grabando';
+      (c as any).inicioGrabacion = null;
+
+      c.manosDetectadasCount = 1;
+      (c as any).procesarFrame({ landmarks: [] }, 20000, 640, 480);
+      expect(c.avisoManosDistintas).toBeFalse(); // recién empieza a esperar
+
+      (c as any).procesarFrame({ landmarks: [] }, 20000 + 700, 640, 480);
+      expect(c.avisoManosDistintas).toBeTrue();
+      expect(c.estadoGrabacion).toBe('grabando'); // sigue esperando: solo es un aviso, no cancela nada
+
+      c.manosDetectadasCount = 2; // aparece la segunda mano: arranca a grabar y se limpia el aviso
+      (c as any).procesarFrame({ landmarks: [] }, 20000 + 800, 640, 480);
+      expect(c.avisoManosDistintas).toBeFalse();
+    });
   });
 
   describe('guardar', () => {

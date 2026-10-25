@@ -33,7 +33,7 @@
     </div>
 
     <div class="config-group">
-      <label>Manos:</label>
+      <label title="Si la seña cambia de cantidad de manos a mitad de camino (p. ej. empieza con 1 y pasa a 2), elige la del INICIO: así no se pierde ese tramo.">Manos:</label>
       <div class="pill-selector">
         <button
           type="button"
@@ -135,6 +135,10 @@
           ESPERANDO {{ manosRequeridas === 1 ? 'TU MANO' : 'TUS 2 MANOS' }}
         </div>
         <p class="rec-hint">En cuanto la cámara detecte {{ manosRequeridas === 1 ? 'tu mano' : 'tus 2 manos' }} empieza la grabación de "{{ sena.palabra }}".</p>
+        <p class="rec-hint rec-hint-warning" *ngIf="avisoManosDistintas">
+          Se ve{{ manosDetectadasCount === 1 ? '' : 'n' }} {{ manosDetectadasCount }} mano(s), no {{ manosRequeridas === 1 ? '1' : '2' }}.
+          Si esta seña empieza con menos manos y usa más después, cancela y elige "{{ manosDetectadasCount === 1 ? '1 Mano' : '2 Manos' }}" arriba para no perder el inicio.
+        </p>
       </ng-container>
       <ng-template #grabandoActivo>
         <div class="rafaga-tag" *ngIf="enRafaga">Ráfaga · muestra {{ rafagaHechas + 1 }} de {{ rafagaTotal }}</div>
@@ -188,6 +192,12 @@
     <span class="info-badge warning" *ngIf="!modeloNuevo && modeloDesactualizado">
       <ion-icon name="alert-circle"></ion-icon>
       Referencia grabada con una versión anterior del motor — vuelve a grabarla para mejorar la precisión.
+    </span>
+    <span class="info-badge warning" *ngIf="avisoSenaCompuesta">
+      <ion-icon name="alert-circle"></ion-icon>
+      Esta grabación empieza con {{ manosRequeridas === 1 ? '1 mano' : '2 manos' }} y pasa a {{ avisoSenaCompuesta === 1 ? '1 mano' : '2 manos' }}:
+      la comparación rápida (sin entrenar) no reconoce bien ese cambio. Sigue grabando varias muestras "Al dataset" con esta misma opción
+      ({{ manosRequeridas === 1 ? '1 Mano' : '2 Manos' }}) para que el modelo entrenado (<code>ml/entrenar.py</code>) la aprenda.
     </span>
     <div class="persona-row">
       <label for="participante-input">Persona que hace la seña:</label>

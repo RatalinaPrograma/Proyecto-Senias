@@ -13,6 +13,7 @@ export * from './comparacion';
 export * from './clasificador';
 export * from './dataset';
 export * from './dibujo';
+export * from './seguimiento';
 export { MediaPipeManosService, URL_WASM_MEDIAPIPE, URL_MODELO_MANOS, VERSION_TASKS_VISION } from './mediapipe-manos.service';
 export { ReconocedorSenasService, modeloDeSena, RUTA_MODELO_CLASIFICADOR } from './reconocedor.service';
 export type { EvaluacionSena, FuenteEvaluacion } from './reconocedor.service';

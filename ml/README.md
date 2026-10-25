@@ -62,6 +62,15 @@ Para que el modelo funcione con alumnos reales:
 - Variar distancia a la cámara, luz, velocidad, celular vertical y laptop.
 - Solo se guardan coordenadas de 21 puntos por mano: no imágenes ni video.
 
+**Señas compuestas** (que cambian de cantidad de manos a mitad de camino, p. ej. empiezan con 1 y
+pasan a 2): en el selector "Manos" del entrenador, elegir siempre la cantidad del **inicio** de la
+seña, nunca la mayor — la grabación no empieza hasta detectar esa cantidad, así que con "2 manos"
+se pierde el tramo inicial de 1 mano. El entrenador avisa si detecta esto (en vivo, mientras espera
+para grabar, y después de grabar si la toma cambió de cantidad de manos). La comparación rápida sin
+entrenar (DTW) no reconoce bien ese cambio; el clasificador de este pipeline sí, porque calcula sus
+características cuadro a cuadro (cada cuadro lleva su propia mano B o ceros, con una bandera de
+presencia) — por eso conviene juntar varias muestras "Al dataset" de este tipo de señas y entrenar.
+
 ---
 
 ## 🏋️‍♂️ Entrenar

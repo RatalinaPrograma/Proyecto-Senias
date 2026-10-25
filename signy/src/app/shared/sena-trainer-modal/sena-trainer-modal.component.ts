@@ -29,6 +29,7 @@ import {
   ModeloReferenciaSena,
   ResultadoEvaluacion,
   VERSION_MOTOR,
+  cambioDeManos,
   compactarCaptura,
   construirModeloReferencia,
   dibujarManos,
@@ -112,9 +113,20 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
   private capturaReciente: CapturaCruda | null = null;
   /** Modelo construido con la última grabación, todavía sin guardar. */
   modeloNuevo: ModeloReferenciaSena | null = null;
+  /**
+   * La última grabación cambió de cantidad de manos a mitad de camino (p. ej.
+   * empieza con 1 y pasa a 2): ni la referencia rápida ni el tramo grabado
+   * "Al dataset" la representan del todo bien. Ver {@link cambioDeManos}.
+   */
+  avisoSenaCompuesta: 1 | 2 | null = null;
 
   // Detección en vivo
   manosDetectadasCount = 0;
+  /** Llevamos un rato viendo una cantidad de manos distinta a `manosRequeridas` mientras se espera para grabar. */
+  avisoManosDistintas = false;
+  private esperaManosDesde: number | null = null;
+  /** Cuánto esperar viendo manos "de más/de menos" antes de avisar (evita avisos por un parpadeo de 1 frame). */
+  private readonly ESPERA_AVISO_MANOS_MS = 600;
 
   // Prueba / validación en vivo
   modoPruebaActivo = false;
@@ -371,7 +383,20 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
     if (this.estadoGrabacion === 'grabando') {
       // La grabación arranca de verdad cuando se ven las manos requeridas.
       if (this.inicioGrabacion === null) {
-        if (this.manosDetectadasCount < this.manosRequeridas) return;
+        if (this.manosDetectadasCount < this.manosRequeridas) {
+          // Se ve una cantidad de manos distinta (no 0) y no es lo configurado: puede ser
+          // que esta seña empiece con menos manos de las que se eligió arriba.
+          if (this.manosDetectadasCount > 0) {
+            if (this.esperaManosDesde === null) this.esperaManosDesde = marca;
+            this.avisoManosDistintas = marca - this.esperaManosDesde > this.ESPERA_AVISO_MANOS_MS;
+          } else {
+            this.esperaManosDesde = null;
+            this.avisoManosDistintas = false;
+          }
+          return;
+        }
+        this.esperaManosDesde = null;
+        this.avisoManosDistintas = false;
         this.inicioGrabacion = marca;
         this.esperandoManos = false;
         // La muestra es de quien está frente a la cámara AHORA, aunque después
@@ -431,6 +456,9 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
     this.grabador.reiniciar();
     this.inicioGrabacion = null;
     this.esperandoManos = true;
+    this.esperaManosDesde = null;
+    this.avisoManosDistintas = false;
+    this.avisoSenaCompuesta = null;
     this.estadoGrabacion = 'grabando';
     this.timeoutSeguridadGrabacion = setTimeout(() => {
       if (this.estadoGrabacion === 'grabando' && this.inicioGrabacion === null) {
@@ -455,6 +483,7 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
     }
     this.capturaReciente = captura;
     this.modeloNuevo = modelo;
+    this.avisoSenaCompuesta = cambioDeManos(captura);
     this.muestraRecienGuardada = false;
     this.estadoGrabacion = 'grabado';
     this.activarModoPrueba();

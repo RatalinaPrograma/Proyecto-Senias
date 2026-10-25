@@ -203,6 +203,50 @@ class TestEntrenamiento(unittest.TestCase):
             entrenar(_ds(["HOLA"], 2, 2))
 
 
+def _captura_compuesta(rng, **kw) -> dict:
+    """HOLA (1 mano) seguida de SEPARAR (2 manos): como una seña que cambia de cantidad de
+    manos a mitad de camino. La referencia DTW de la app no reconoce bien este cambio (ver
+    `cambioDeManos` en motor-senas/seguimiento.ts), pero el clasificador sí debería, porque
+    calcula sus características cuadro a cuadro."""
+    a = generar_captura("HOLA", rng, duracion_ms=700, pausa_antes_ms=100, pausa_despues_ms=0, **kw)
+    b = generar_captura("SEPARAR", rng, duracion_ms=700, pausa_antes_ms=0, pausa_despues_ms=100, **kw)
+    fin = a["frames"][-1]["t"]
+    return {"ancho": a["ancho"], "alto": a["alto"], "frames": a["frames"] + [{"t": f["t"] + fin, "manos": f["manos"]} for f in b["frames"]]}
+
+
+def _ds_compuesta(participantes=4, repeticiones=3, semilla=0) -> Dataset:
+    """Dataset con una seña COMPUESTA y sus dos mitades por separado (HOLA, SEPARAR) como
+    distractoras: si el clasificador solo aprendiera "alguna mano se mueve", confundiría la
+    compuesta con una de sus mitades."""
+    rng = np.random.default_rng(semilla)
+    ds = Dataset(senas={1: "compuesta", 2: "hola", 3: "separar"})
+    for p in range(participantes):
+        persona = dict(tamano=float(rng.uniform(0.15, 0.22)), proporcion=float(rng.uniform(0.95, 1.05)))
+        for _ in range(repeticiones):
+            ds.muestras.append(Muestra(len(ds.muestras) + 1, 1, f"p{p + 1}", _captura_compuesta(rng, **persona)))
+            ds.muestras.append(Muestra(len(ds.muestras) + 1, 2, f"p{p + 1}",
+                                       generar_captura("HOLA", rng, duracion_ms=1200, pausa_antes_ms=200, pausa_despues_ms=200, **persona)))
+            ds.muestras.append(Muestra(len(ds.muestras) + 1, 3, f"p{p + 1}",
+                                       generar_captura("SEPARAR", rng, duracion_ms=1200, pausa_antes_ms=200, pausa_despues_ms=200, **persona)))
+    return ds
+
+
+class TestSenaCompuesta(unittest.TestCase):
+    """Una seña que cambia de cantidad de manos (p. ej. 1 mano y después 2): fase 3 del plan
+    de señas compuestas. Prueba que el clasificador SÍ la distingue, a diferencia de la
+    referencia DTW de la app (que no puede representar el cambio: ver sena-trainer-modal)."""
+
+    def test_distingue_la_compuesta_de_sus_dos_mitades(self):
+        ds = _ds_compuesta()
+        r = entrenar(ds, OpcionesEntrenamiento(config=CONFIG, aumentos_por_muestra=4))
+        self.assertGreaterEqual(r.metricas["exactitud"], 0.9)
+
+        ids = {c["palabra"]: c["senaId"] for c in r.modelo["clases"]}
+        vector = caracteristicas(_captura_compuesta(np.random.default_rng(999)), CONFIG)
+        p = probabilidades(r.modelo, vector)
+        self.assertEqual(r.modelo["clases"][int(np.argmax(p))]["senaId"], ids["compuesta"])
+
+
 class TestPocasMuestras(unittest.TestCase):
     """Lo normal al empezar a grabar: muchas señas con pocas muestras y una sola persona."""
 

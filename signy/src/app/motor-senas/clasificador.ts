@@ -109,10 +109,16 @@ export function caracteristicasClasificador(captura: CapturaCruda, config: Confi
   const ia = activas[0].indice;
   const ib = activas.length > 1 ? activas[1].indice : null;
 
+  // Un cuadro se guarda si se ve CUALQUIERA de las dos manos, no solo "ia": si la seña
+  // cambia de cantidad de manos a mitad de camino (p. ej. 1 mano y después 2), "ia" puede
+  // ser la pista que aparece más tarde, y antes eso descartaba enteros los cuadros del
+  // tramo inicial (ver seguimiento.ts `cambioDeManos`, que avisa de este caso en la app).
   const frames: FrameAB[] = [];
   pistas.forEach((p, i) => {
-    const a = p[ia];
-    if (a) frames.push({ t: iso[i].t, a, b: ib === null ? null : p[ib] });
+    let a = p[ia];
+    let b = ib === null ? null : p[ib];
+    if (!a && b) [a, b] = [b, null]; // la única mano del cuadro siempre va en la posición A
+    if (a) frames.push({ t: iso[i].t, a, b });
   });
   if (!frames.length) return null;
 

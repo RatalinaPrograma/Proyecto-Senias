@@ -152,11 +152,17 @@ def caracteristicas(captura: dict, config: ConfigCaracteristicas) -> Optional[np
     ia = activas[0]["indice"]
     ib = activas[1]["indice"] if len(activas) > 1 else None
 
-    frames = [
-        (iso[i]["t"], p[ia], None if ib is None else p[ib])
-        for i, p in enumerate(pistas)
-        if p[ia] is not None
-    ]
+    # Un cuadro se guarda si se ve CUALQUIERA de las dos manos, no solo "ia": si la seña
+    # cambia de cantidad de manos a mitad de camino (p. ej. 1 mano y después 2), "ia" puede
+    # ser la pista que aparece más tarde, y antes eso descartaba enteros los cuadros del
+    # tramo inicial (ver seguimiento.ts `cambioDeManos`, que avisa de este caso en la app).
+    frames = []
+    for i, p in enumerate(pistas):
+        a, b = p[ia], (p[ib] if ib is not None else None)
+        if a is None and b is not None:
+            a, b = b, None  # la única mano del cuadro siempre va en la posición A
+        if a is not None:
+            frames.append((iso[i]["t"], a, b))
     if not frames:
         return None
 
