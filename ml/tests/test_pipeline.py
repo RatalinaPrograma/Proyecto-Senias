@@ -207,9 +207,8 @@ class TestEntrenamiento(unittest.TestCase):
 
 def _captura_compuesta(rng, **kw) -> dict:
     """HOLA (1 mano) seguida de SEPARAR (2 manos): como una seña que cambia de cantidad de
-    manos a mitad de camino. La referencia DTW de la app no reconoce bien este cambio (ver
-    `cambioDeManos` en motor-senas/seguimiento.ts), pero el clasificador sí debería, porque
-    calcula sus características cuadro a cuadro."""
+    manos a mitad de camino (ver `cambioDeManos` en motor-senas/seguimiento.ts). El clasificador
+    debería reconocerla bien, porque calcula sus características cuadro a cuadro."""
     a = generar_captura("HOLA", rng, duracion_ms=700, pausa_antes_ms=100, pausa_despues_ms=0, **kw)
     b = generar_captura("SEPARAR", rng, duracion_ms=700, pausa_antes_ms=0, pausa_despues_ms=100, **kw)
     fin = a["frames"][-1]["t"]
@@ -234,9 +233,8 @@ def _ds_compuesta(participantes=4, repeticiones=3, semilla=0) -> Dataset:
 
 
 class TestSenaCompuesta(unittest.TestCase):
-    """Una seña que cambia de cantidad de manos (p. ej. 1 mano y después 2): fase 3 del plan
-    de señas compuestas. Prueba que el clasificador SÍ la distingue, a diferencia de la
-    referencia DTW de la app (que no puede representar el cambio: ver sena-trainer-modal)."""
+    """Una seña que cambia de cantidad de manos (p. ej. 1 mano y después 2). Prueba que el
+    clasificador la distingue de sus dos mitades por separado."""
 
     def test_distingue_la_compuesta_de_sus_dos_mitades(self):
         ds = _ds_compuesta()

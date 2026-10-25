@@ -131,9 +131,6 @@
           </div>
 
           <div class="sign-right">
-            <button class="btn-icon" *ngIf="estaCalibrada(s)" (click)="abrirAnimacion(s)" title="Ver la seña animada">
-              <ion-icon name="eye-outline"></ion-icon>
-            </button>
             <button
               class="btn-row-calibrate"
               [class.calibrated]="estaCalibrada(s)"
@@ -197,9 +194,6 @@
         <div class="top-match-card" [class.matched]="mejorPrediccion && mejorPrediccion.esCoincidente">
           <div class="match-meta">
             <span class="match-subtitle">Predicción en tiempo real</span>
-            <span class="match-type-pill" *ngIf="mejorPrediccion">
-              {{ mejorPrediccion.tipo === 'estatica' ? 'Estática · forma de la mano' : 'Dinámica · DTW' }}
-            </span>
           </div>
 
           <div class="match-body">
@@ -222,21 +216,6 @@
           <div class="match-status-tag" *ngIf="mejorPrediccion">
             <ion-icon [name]="mejorPrediccion.esCoincidente ? 'checkmark-circle' : 'flash-outline'"></ion-icon>
             <span>{{ mejorPrediccion.esCoincidente ? '¡Seña coincidente detectada!' : 'Analizando patrón…' }}</span>
-          </div>
-        </div>
-
-        <!-- Ranking de alternativas (referencia DTW) -->
-        <div class="ranking-panel" *ngIf="prediccionesEnVivo.length > 1">
-          <h4 class="ranking-title">Otras coincidencias (referencia)</h4>
-          <div class="ranking-list">
-            <div class="ranking-item" *ngFor="let pred of prediccionesEnVivo; let i = index">
-              <span class="rank-pos">#{{ i + 1 }}</span>
-              <span class="rank-word">{{ pred.palabra }}</span>
-              <div class="rank-bar-wrap">
-                <div class="rank-bar-fill" [style.width.%]="pred.similitud"></div>
-              </div>
-              <span class="rank-score">{{ pred.similitud }}%</span>
-            </div>
           </div>
         </div>
 
@@ -275,27 +254,6 @@
     <ion-icon name="add-outline"></ion-icon>
     <span>Nueva Seña</span>
   </button>
-
-  <!-- Modal: ver la seña animada (los vectores grabados, en vivo) -->
-  <div class="modal-backdrop" *ngIf="senaAnimando" (click)="cerrarAnimacion()">
-    <div class="modal anim-modal" (click)="$event.stopPropagation()">
-      <div class="modal-header">
-        <h3>{{ senaAnimando.palabra }}</h3>
-        <button class="btn-close-modal" (click)="cerrarAnimacion()">
-          <ion-icon name="close-outline"></ion-icon>
-        </button>
-      </div>
-      <div class="anim-canvas-wrap">
-        <canvas #animCanvas width="320" height="320"></canvas>
-      </div>
-      <div class="modal-footer anim-footer">
-        <button class="btn-cancel" (click)="alternarPausaAnimacion()">
-          <ion-icon [name]="animPausada ? 'play-outline' : 'pause-outline'"></ion-icon>
-          <span>{{ animPausada ? 'Reanudar' : 'Pausar' }}</span>
-        </button>
-      </div>
-    </div>
-  </div>
 
   <!-- Modal: crear seña y calibrarla -->
   <div class="modal-backdrop" *ngIf="modalCrearAbierto">

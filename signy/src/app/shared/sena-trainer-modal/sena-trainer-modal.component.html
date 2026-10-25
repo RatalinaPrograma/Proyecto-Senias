@@ -2,7 +2,7 @@
   <ion-toolbar class="trainer-toolbar">
     <ion-title>Entrenar Seña: <strong>{{ sena.palabra }}</strong></ion-title>
     <ion-buttons slot="end">
-      <button class="icon-btn-close" (click)="cerrar()" [disabled]="guardando || guardandoMuestra || borrandoMuestra" aria-label="Cerrar">
+      <button class="icon-btn-close" (click)="cerrar()" [disabled]="guardandoMuestra || borrandoMuestra" aria-label="Cerrar">
         <ion-icon name="close-outline"></ion-icon>
       </button>
     </ion-buttons>
@@ -153,50 +153,19 @@
       </ng-template>
     </div>
 
-    <!-- Panel de Validación / Prueba en Vivo -->
-    <div class="test-panel" *ngIf="modoPruebaActivo && resultadoEnVivo">
-      <div class="test-header">
-        <span class="test-title">Prueba en vivo{{ resultadoEnVivo.espejo ? ' · espejo' : '' }}</span>
-        <span class="test-score" [class.pass]="resultadoEnVivo.esCoincidente" [class.fail]="!resultadoEnVivo.esCoincidente">
-          {{ resultadoEnVivo.similitudPct }}% Coincidencia
-        </span>
-      </div>
-      <div class="test-progress-bar">
-        <div
-          class="test-fill"
-          [style.width.%]="resultadoEnVivo.similitudPct"
-          [class.pass]="resultadoEnVivo.esCoincidente"
-          [class.fail]="!resultadoEnVivo.esCoincidente">
-        </div>
-      </div>
-      <p class="test-feedback" *ngIf="resultadoEnVivo.esCoincidente">
-        ✅ ¡Excelente! La seña coincide con el vector de referencia.
-      </p>
-      <p class="test-feedback fail" *ngIf="!resultadoEnVivo.esCoincidente">
-        Haz la seña frente a la cámara para probar la coincidencia en tiempo real.
-      </p>
-    </div>
   </div>
 </ion-content>
 
 <ion-footer class="trainer-footer">
   <div class="footer-info" *ngIf="estadoGrabacion !== 'grabando'">
-    <span class="info-badge" *ngIf="modeloNuevo">
+    <span class="info-badge" *ngIf="estadoGrabacion === 'grabado'">
       <ion-icon name="sparkles-outline"></ion-icon>
-      Grabación lista ({{ modeloNuevo.totalFrames }} frames · {{ modeloNuevo.tipo === 'estatica' ? 'estática' : 'dinámica' }}) — pruébala y guárdala como referencia
-    </span>
-    <span class="info-badge" *ngIf="!modeloNuevo && modeloExistente && !modeloDesactualizado">
-      <ion-icon name="checkmark-circle"></ion-icon>
-      Referencia guardada ({{ modeloExistente.totalFrames }} frames · {{ modeloExistente.tipo === 'estatica' ? 'estática' : 'dinámica' }})
-    </span>
-    <span class="info-badge warning" *ngIf="!modeloNuevo && modeloDesactualizado">
-      <ion-icon name="alert-circle"></ion-icon>
-      Referencia grabada con una versión anterior del motor — vuelve a grabarla para mejorar la precisión.
+      Grabación lista — agrégala al dataset.
     </span>
     <span class="info-badge warning" *ngIf="avisoSenaCompuesta">
       <ion-icon name="alert-circle"></ion-icon>
-      Esta grabación empieza con {{ manosRequeridas === 1 ? '1 mano' : '2 manos' }} y pasa a {{ avisoSenaCompuesta === 1 ? '1 mano' : '2 manos' }}:
-      la comparación rápida (sin entrenar) no reconoce bien ese cambio. Sigue grabando varias muestras "Al dataset" con esta misma opción
+      Esta grabación empieza con {{ manosRequeridas === 1 ? '1 mano' : '2 manos' }} y pasa a {{ avisoSenaCompuesta === 1 ? '1 mano' : '2 manos' }}.
+      Sigue grabando varias muestras "Al dataset" con esta misma opción
       ({{ manosRequeridas === 1 ? '1 Mano' : '2 Manos' }}) para que el modelo entrenado (<code>ml/entrenar.py</code>) la aprenda.
     </span>
     <div class="persona-row">
@@ -257,15 +226,6 @@
       (click)="agregarAlDataset()">
       <ion-icon [name]="guardandoMuestra ? 'refresh-outline' : 'layers-outline'" [class.spin]="guardandoMuestra"></ion-icon>
       <span>{{ guardandoMuestra ? 'Guardando…' : 'Al dataset' }}</span>
-    </button>
-
-    <button
-      class="btn-action btn-save"
-      *ngIf="modeloNuevo && estadoGrabacion === 'grabado'"
-      [disabled]="guardando"
-      (click)="guardarModelo()">
-      <ion-icon [name]="guardando ? 'refresh-outline' : 'save-outline'" [class.spin]="guardando"></ion-icon>
-      <span>{{ guardando ? 'Guardando…' : 'Usar como referencia' }}</span>
     </button>
   </div>
 </ion-footer>

@@ -207,7 +207,6 @@
           <span class="cam-emoji">{{ camPassed ? '✅' : '🤔' }}</span>
           <h3>{{ camMsg }}</h3>
           <p class="cam-sub" [ngSwitch]="camFuente">
-            <ng-container *ngSwitchCase="'referencia'">Parecido con la seña de referencia:</ng-container>
             <ng-container *ngSwitchCase="'clasificador'">Seguridad del reconocimiento:</ng-container>
             <ng-container *ngSwitchDefault>Manos detectadas:</ng-container>
             {{ ' ' }}<strong>{{ camScore }}%</strong>

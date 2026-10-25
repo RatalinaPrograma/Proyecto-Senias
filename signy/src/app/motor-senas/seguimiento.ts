@@ -129,10 +129,9 @@ export function secuenciasCandidatas(frames: FrameManos[], manosRequeridas: 1 | 
  * (p. ej. empieza con 1 mano y pasa a 2), devuelve la cantidad del segundo
  * tramo; si se mantiene igual, `null`.
  *
- * Ni la referencia DTW ({@link secuenciasCandidatas} exige una cantidad fija
- * durante TODA la grabación) ni la grabación de muestras para el dataset
- * (no empieza hasta ver `manosRequeridas`) representan bien una seña así:
- * sirve para avisarle al admin, no para corregirlo solo.
+ * La grabación de muestras para el dataset no empieza hasta ver
+ * `manosRequeridas`, así que no representa bien el tramo inicial de una seña
+ * así: sirve para avisarle al admin, no para corregirlo solo.
  */
 export function cambioDeManos(captura: CapturaCruda): 1 | 2 | null {
   const conteos = captura.frames.map((f) => Math.min(f.manos.length, 2)).filter((n) => n > 0);

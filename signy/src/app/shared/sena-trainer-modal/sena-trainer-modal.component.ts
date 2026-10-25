@@ -1,4 +1,4 @@
-import { Component, ElementRef, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output, ViewChild, inject } from '@angular/core';
+import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IonicModule, ModalController } from '@ionic/angular';
@@ -8,11 +8,8 @@ import {
   cameraReverseOutline,
   radioButtonOnOutline,
   refreshOutline,
-  saveOutline,
-  checkmarkCircle,
   alertCircle,
   sparklesOutline,
-  playOutline,
   layersOutline,
   arrowUndoOutline,
 } from 'ionicons/icons';
@@ -26,16 +23,10 @@ import {
   GrabadorCaptura,
   LARGO_MAXIMO_PARTICIPANTE,
   MediaPipeManosService,
-  ModeloReferenciaSena,
-  ResultadoEvaluacion,
-  VERSION_MOTOR,
   cambioDeManos,
   compactarCaptura,
-  construirModeloReferencia,
   dibujarManos,
-  evaluarCaptura,
   limpiarParticipante,
-  modeloDeSena,
 } from '../../motor-senas';
 
 addIcons({
@@ -43,19 +34,14 @@ addIcons({
   'camera-reverse-outline': cameraReverseOutline,
   'radio-button-on-outline': radioButtonOnOutline,
   'refresh-outline': refreshOutline,
-  'save-outline': saveOutline,
-  'checkmark-circle': checkmarkCircle,
   'alert-circle': alertCircle,
   'sparkles-outline': sparklesOutline,
-  'play-outline': playOutline,
   'layers-outline': layersOutline,
   'arrow-undo-outline': arrowUndoOutline,
 });
 
 /** Duración de la grabación de una seña estática: alcanza para sostener la pose. */
 const DURACION_ESTATICA_MS = 1500;
-/** Cada cuánto se recalcula la prueba en vivo (no hace falta en cada frame). */
-const INTERVALO_PRUEBA_MS = 200;
 /** Dónde se recuerda quién está grabando, para no escribirlo en cada seña. */
 const CLAVE_PARTICIPANTE = 'signy.dataset.participante';
 /**
@@ -65,6 +51,8 @@ const CLAVE_PARTICIPANTE = 'signy.dataset.participante';
  * celular lento procesa ~3-5 frames por segundo, muy por debajo de este límite.
  */
 const HUECO_MAXIMO_MS = 1000;
+/** Frames mínimos con las manos requeridas para que una grabación sirva (si no, la cámara las perdió). */
+const FRAMES_MINIMOS_GRABACION = 5;
 
 @Component({
   selector: 'app-sena-trainer-modal',
@@ -75,7 +63,6 @@ const HUECO_MAXIMO_MS = 1000;
 })
 export class SenaTrainerModalComponent implements OnInit, OnDestroy {
   @Input() sena!: Sena;
-  @Output() senaActualizada = new EventEmitter<Sena>();
 
   @ViewChild('video', { static: false }) videoRef?: ElementRef<HTMLVideoElement>;
   @ViewChild('canvas', { static: false }) canvasRef?: ElementRef<HTMLCanvasElement>;
@@ -111,8 +98,6 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
   private inicioGrabacion: number | null = null;
   /** Captura cruda de la última grabación (lo que se guarda en el dataset). */
   private capturaReciente: CapturaCruda | null = null;
-  /** Modelo construido con la última grabación, todavía sin guardar. */
-  modeloNuevo: ModeloReferenciaSena | null = null;
   /**
    * La última grabación cambió de cantidad de manos a mitad de camino (p. ej.
    * empieza con 1 y pasa a 2): ni la referencia rápida ni el tramo grabado
@@ -127,18 +112,6 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
   private esperaManosDesde: number | null = null;
   /** Cuánto esperar viendo manos "de más/de menos" antes de avisar (evita avisos por un parpadeo de 1 frame). */
   private readonly ESPERA_AVISO_MANOS_MS = 600;
-
-  // Prueba / validación en vivo
-  modoPruebaActivo = false;
-  resultadoEnVivo: ResultadoEvaluacion | null = null;
-  private readonly bufferPrueba = new GrabadorCaptura(3000);
-  private ultimaPrueba = 0;
-
-  // Guardado
-  guardando = false;
-  modeloExistente: ModeloReferenciaSena | null = null;
-  /** true si el modelo guardado en Supabase es de una versión anterior del formato. */
-  modeloDesactualizado = false;
 
   // Dataset de entrenamiento
   /**
@@ -183,7 +156,6 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
   async ngOnInit() {
     this.atras.activar();
     this.participante = this.leerParticipanteGuardado();
-    this.verificarModeloExistente();
     this.cargarConteoDataset();
     await this.inicializarMediaPipe();
   }
@@ -237,27 +209,8 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
     return this.rafagaTotal > 0;
   }
 
-  get modeloVigente(): ModeloReferenciaSena | null {
-    return this.modeloNuevo ?? this.modeloExistente;
-  }
-
   get puedeAgregarAlDataset(): boolean {
     return this.estadoGrabacion === 'grabado' && !!this.capturaReciente && !this.muestraRecienGuardada;
-  }
-
-  private verificarModeloExistente() {
-    const crudo = this.sena?.landmarks_referencia as { version?: number } | null;
-    const mod = modeloDeSena(this.sena);
-    if (mod) {
-      this.modeloExistente = mod;
-      this.tipoSena = mod.tipo || 'dinamica';
-      this.manosRequeridas = mod.manosRequeridas || 1;
-      this.estadoGrabacion = 'grabado';
-      this.modeloDesactualizado = (mod.version ?? 1) < VERSION_MOTOR;
-    } else if (crudo) {
-      // v1 u otro formato que ya no se puede comparar.
-      this.modeloDesactualizado = true;
-    }
   }
 
   private async cargarConteoDataset() {
@@ -413,16 +366,6 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
       const transcurrido = marca - this.inicioGrabacion;
       this.progresoGrabacion = Math.min(100, Math.round((transcurrido / duracion) * 100));
       if (transcurrido >= duracion) this.finalizarGrabacion();
-      return;
-    }
-
-    if (this.modoPruebaActivo && this.modeloVigente) {
-      this.bufferPrueba.agregar(results, marca, ancho, alto);
-      if (marca - this.ultimaPrueba >= INTERVALO_PRUEBA_MS) {
-        this.ultimaPrueba = marca;
-        const r = evaluarCaptura(this.modeloVigente, this.bufferPrueba.captura());
-        this.resultadoEnVivo = r.motivo ? null : r;
-      }
     }
   }
 
@@ -436,8 +379,6 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
   iniciarCuentaAtras() {
     if (this.estadoGrabacion === 'cuenta_atras' || this.estadoGrabacion === 'grabando') return;
 
-    this.modoPruebaActivo = false;
-    this.resultadoEnVivo = null;
     this.progresoGrabacion = 0;
     this.cuentaAtras = 3;
     this.mensajeDataset = '';
@@ -472,21 +413,14 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
   private finalizarGrabacion() {
     this.limpiarTemporizadores();
     const captura = this.grabador.captura();
-    const modelo = construirModeloReferencia(captura, {
-      palabra: this.sena.palabra,
-      tipo: this.tipoSena,
-      manosRequeridas: this.manosRequeridas,
-    });
-    if (!modelo) {
+    if (this.grabador.framesConManos(this.manosRequeridas) < FRAMES_MINIMOS_GRABACION) {
       this.cancelarGrabacion('La cámara perdió tus manos durante la grabación. Vuelve a intentarlo con mejor luz.');
       return;
     }
     this.capturaReciente = captura;
-    this.modeloNuevo = modelo;
     this.avisoSenaCompuesta = cambioDeManos(captura);
     this.muestraRecienGuardada = false;
     this.estadoGrabacion = 'grabado';
-    this.activarModoPrueba();
     if (this.enRafaga) this.continuarRafaga();
   }
 
@@ -527,14 +461,14 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
     this.rafagaHechas = 0;
   }
 
-  /** Cancela una cuenta atrás o grabación en curso sin perder el modelo que ya había. */
+  /** Cancela una cuenta atrás o grabación en curso sin perder la grabación anterior (si había una). */
   cancelarGrabacion(mensaje?: string) {
     this.limpiarTemporizadores();
     this.terminarRafaga();
     this.progresoGrabacion = 0;
     this.esperandoManos = false;
     this.inicioGrabacion = null;
-    this.estadoGrabacion = this.modeloVigente ? 'grabado' : 'inactivo';
+    this.estadoGrabacion = this.capturaReciente ? 'grabado' : 'inactivo';
     if (mensaje) alert(mensaje);
   }
 
@@ -546,36 +480,6 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
     if (this.timeoutSeguridadGrabacion) {
       clearTimeout(this.timeoutSeguridadGrabacion);
       this.timeoutSeguridadGrabacion = null;
-    }
-  }
-
-  activarModoPrueba() {
-    this.modoPruebaActivo = true;
-    this.bufferPrueba.reiniciar();
-    this.resultadoEnVivo = null;
-    this.ultimaPrueba = 0;
-  }
-
-  // ---------- Guardar referencia ----------
-  async guardarModelo() {
-    const modelo = this.modeloNuevo;
-    if (!modelo) return;
-    this.guardando = true;
-    try {
-      const { error } = await this.supabaseService.actualizarSena(this.sena.id, { landmarks_referencia: modelo });
-      if (error) throw error;
-
-      this.sena.landmarks_referencia = modelo;
-      this.modeloExistente = modelo;
-      this.modeloNuevo = null;
-      this.modeloDesactualizado = false;
-      this.senaActualizada.emit(this.sena);
-      await this.cerrarModal();
-    } catch (e: any) {
-      console.error('Error al guardar modelo de seña:', e);
-      alert('Error al guardar en Supabase: ' + (e?.message || 'Error desconocido'));
-    } finally {
-      this.guardando = false;
     }
   }
 
@@ -675,7 +579,7 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
 
   /** La X: no cierra mientras se guarda o borra (el conteo del catálogo quedaba desactualizado). */
   async cerrar() {
-    if (this.guardando || this.guardandoMuestra || this.borrandoMuestra) return;
+    if (this.guardandoMuestra || this.borrandoMuestra) return;
     await this.cerrarModal();
   }
 
@@ -689,7 +593,7 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
    * hay nada en curso, cierra el modal (como la X). Mientras se guarda, espera.
    */
   alPresionarAtras(): boolean {
-    if (this.guardando || this.guardandoMuestra || this.borrandoMuestra) return true;
+    if (this.guardandoMuestra || this.borrandoMuestra) return true;
     if (this.enRafaga || this.estadoGrabacion === 'cuenta_atras' || this.estadoGrabacion === 'grabando') {
       this.cancelarGrabacion();
       return true;

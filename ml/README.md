@@ -64,10 +64,10 @@ Para que el modelo funcione con alumnos reales:
 pasan a 2): en el selector "Manos" del entrenador, elegir siempre la cantidad del **inicio** de la
 seña, nunca la mayor — la grabación no empieza hasta detectar esa cantidad, así que con "2 manos"
 se pierde el tramo inicial de 1 mano. El entrenador avisa si detecta esto (en vivo, mientras espera
-para grabar, y después de grabar si la toma cambió de cantidad de manos). La comparación rápida sin
-entrenar (DTW) no reconoce bien ese cambio; el clasificador de este pipeline sí, porque calcula sus
-características cuadro a cuadro (cada cuadro lleva su propia mano B o ceros, con una bandera de
-presencia) — por eso conviene juntar varias muestras "Al dataset" de este tipo de señas y entrenar.
+para grabar, y después de grabar si la toma cambió de cantidad de manos). El clasificador de este
+pipeline reconoce bien este tipo de señas porque calcula sus características cuadro a cuadro (cada
+cuadro lleva su propia mano B o ceros, con una bandera de presencia) — conviene juntar varias
+muestras "Al dataset" de este tipo de señas y entrenar.
 
 ---
 
@@ -145,15 +145,11 @@ confusiones más frecuentes) queda en `ml/reportes/`.
 
 ## 📱 Cómo lo usa la app
 
-`ReconocedorSenasService` combina dos motores:
-
-| Motor | Necesita | Cuándo decide |
-|---|---|---|
-| Referencia (DTW) | 1 grabación de la seña ("Usar como referencia") | siempre que exista |
-| Clasificador entrenado | el modelo de este pipeline | si el archivo existe y conoce la seña |
-
-La seña se aprueba si **cualquiera** de los dos la reconoce (el clasificador, solo si la seña es su
-primera opción y supera el umbral).
+`ReconocedorSenasService` usa el clasificador entrenado (el modelo de este pipeline) si el archivo
+existe y conoce la seña: la aprueba solo si la seña es su primera opción y supera el umbral. Si
+todavía no la conoce (sin entrenar o sin suficientes muestras), cae a solo verificar que se vieron
+las manos, sin evaluar si la seña está bien hecha — por eso conviene entrenar antes de publicar una
+seña nueva a los alumnos.
 
 ---
 

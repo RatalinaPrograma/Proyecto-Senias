@@ -22,7 +22,6 @@ import {
   MediaPipeManosService,
   ReconocedorSenasService,
   dibujarManos,
-  modeloDeSena,
 } from '../motor-senas';
 
 addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, 'close-circle': closeCircle, camera, videocam, 'volume-high': volumeHigh, 'snow-outline': snowOutline, trophy, 'sparkles-outline': sparklesOutline });
@@ -185,7 +184,7 @@ export class LessonPage implements OnInit, OnDestroy {
   camPassed = false;
   camMsg = '';
   /** Qué motor decidió el resultado (para el texto bajo el puntaje). */
-  camFuente: 'referencia' | 'clasificador' | 'deteccion' = 'deteccion';
+  camFuente: 'clasificador' | 'deteccion' = 'deteccion';
   private stream: MediaStream | null = null;
   private rafId = 0;
   private intervaloCuenta: ReturnType<typeof setInterval> | null = null;
@@ -562,6 +561,7 @@ export class LessonPage implements OnInit, OnDestroy {
       }
 
       this.fase = 'record';
+      this.actualizarCamConModelo();
       return;
     }
 
@@ -575,9 +575,12 @@ export class LessonPage implements OnInit, OnDestroy {
     return this.senas[this.senas.length - 1];
   }
 
-  /** La seña tiene modelo de referencia utilizable (para la etiqueta "Evaluada con IA"). */
-  get camConModelo(): boolean {
-    return !!modeloDeSena(this.senaCamara);
+  /** El clasificador entrenado ya conoce esta seña (para la etiqueta "Evaluada con IA"). */
+  camConModelo = false;
+
+  private async actualizarCamConModelo() {
+    const clf = await this.reconocedor.clasificador();
+    this.camConModelo = !!clf?.conoce(this.senaCamara.id);
   }
 
   private async inicializarMediaPipe() {
@@ -711,13 +714,9 @@ export class LessonPage implements OnInit, OnDestroy {
     } else if (resultado.fuente === 'deteccion') {
       this.camMsg = '¡Buena práctica de manos! (Seña en proceso de calibración)';
     } else if (this.camPassed) {
-      this.camMsg = resultado.referencia && modeloDeSena(this.senaCamara)?.tipo === 'estatica'
-        ? '¡Excelente postura! Coincide con el modelo experto.'
-        : '¡Excelente! Seña reconocida.';
+      this.camMsg = '¡Excelente! Seña reconocida.';
     } else {
-      this.camMsg = modeloDeSena(this.senaCamara)?.tipo === 'estatica'
-        ? 'Casi, la postura de tus dedos varió un poco. ¡Inténtalo de nuevo!'
-        : 'El movimiento no coincidió del todo. Mira el video de nuevo y vuelve a intentarlo.';
+      this.camMsg = 'El intento no coincidió del todo. Mira el video de nuevo y vuelve a intentarlo.';
     }
 
     this.camStage = 'result';

@@ -5,29 +5,26 @@ import { Capacitor } from '@capacitor/core';
 import { AdminAiStudioPage } from './admin-ai-studio.page';
 import { SupabaseService } from '../services/supabase';
 import { BotonAtrasService } from '../services/boton-atras';
-import { ReconocedorSenasService, construirModeloReferencia, MuestraSena, compactarCaptura } from '../motor-senas';
-import { generarCaptura, SENAS } from '../motor-senas/testing/manos-sinteticas';
+import { ReconocedorSenasService, MuestraSena, compactarCaptura } from '../motor-senas';
+import { generarCaptura } from '../motor-senas/testing/manos-sinteticas';
+import { MODELO_PARIDAD } from '../motor-senas/testing/fixture-clasificador';
 import { Sena } from '../data/db-types';
 
 describe('AdminAiStudioPage', () => {
   let page: AdminAiStudioPage;
   let supabaseSpy: jasmine.SpyObj<SupabaseService>;
 
-  const conModelo = (id: number, nombre: string): Sena => ({
-    id, subnivel_id: 1, palabra: nombre.toLowerCase(), descripcion: null, video_url: null, icono: null, created_at: null,
-    landmarks_referencia: construirModeloReferencia(generarCaptura(nombre, { semilla: 100, pausaAntesMs: 300, pausaDespuesMs: 300, ruido: 0.03 }), {
-      palabra: nombre, tipo: SENAS[nombre].tipo, manosRequeridas: SENAS[nombre].manos,
-    }),
-  });
-  const sinModelo: Sena = { id: 9, subnivel_id: 1, palabra: 'pendiente', descripcion: null, video_url: null, icono: null, created_at: null, landmarks_referencia: null };
+  // El fixture de paridad (MODELO_PARIDAD) conoce los ids 1, 2, 3 y 4.
+  const sena = (id: number, palabra: string): Sena => ({ id, subnivel_id: 1, palabra, descripcion: null, video_url: null, icono: null, created_at: null });
+  const sinModelo: Sena = sena(9, 'pendiente');
 
   beforeEach(async () => {
     supabaseSpy = jasmine.createSpyObj('SupabaseService', ['listarNiveles', 'listarSubniveles', 'listarSenas', 'contarMuestrasPorSena', 'listarMuestrasSena']);
     supabaseSpy.listarNiveles.and.resolveTo([]);
     supabaseSpy.listarSubniveles.and.resolveTo([]);
-    supabaseSpy.listarSenas.and.resolveTo([conModelo(1, 'HOLA'), conModelo(2, 'SI'), conModelo(3, 'GRACIAS'), sinModelo]);
+    supabaseSpy.listarSenas.and.resolveTo([sena(1, 'hola'), sena(2, 'si'), sena(3, 'gracias'), sinModelo]);
     supabaseSpy.contarMuestrasPorSena.and.resolveTo(new Map([[1, 12], [2, 3]]));
-    spyOn(window, 'fetch').and.resolveTo(new Response('', { status: 404 })); // sin clasificador entrenado
+    spyOn(window, 'fetch').and.resolveTo(new Response(JSON.stringify(MODELO_PARIDAD)));
     spyOn(console, 'warn');
 
     TestBed.configureTestingModule({
@@ -40,11 +37,11 @@ describe('AdminAiStudioPage', () => {
     TestBed.overrideProvider(ModalController, { useValue: jasmine.createSpyObj('ModalController', ['create']) });
     await TestBed.compileComponents();
     page = TestBed.createComponent(AdminAiStudioPage).componentInstance;
-    await page.cargarDatos();
+    await page.ngOnInit();
     await new Promise((r) => setTimeout(r));
   });
 
-  it('cuenta como calibradas solo las señas con un modelo utilizable', () => {
+  it('cuenta como calibradas solo las señas que el clasificador ya conoce', () => {
     expect(page.calibradasCount).toBe(3);
     expect(page.pendientesCount).toBe(1);
     expect(page.estaCalibrada(sinModelo)).toBeFalse();
@@ -64,16 +61,14 @@ describe('AdminAiStudioPage', () => {
     expect(page.muestrasPorSena).toBeNull();
   });
 
-  it('el laboratorio en vivo pone primero la seña que se está haciendo', async () => {
-    const captura = generarCaptura('SI', { pausaAntesMs: 300, pausaDespuesMs: 300, ruido: 0.03, semilla: 4 });
+  it('el laboratorio en vivo usa el clasificador entrenado', async () => {
+    const captura = generarCaptura('SI', { pausaAntesMs: 300, pausaDespuesMs: 300, ruido: 0.03, semilla: 9 });
     const buffer = (page as any).labBuffer;
     captura.frames.forEach((f) => buffer.agregar({ landmarks: f.manos }, f.t, captura.ancho, captura.alto));
-    await (page as any).evaluarBufferContraModelo();
+    await (page as any).evaluarBufferEnVivo();
     expect(page.mejorPrediccion!.palabra).toBe('si');
     expect(page.mejorPrediccion!.esCoincidente).toBeTrue();
-    expect(page.prediccionesEnVivo.length).toBe(3); // la seña sin modelo no participa
-    expect(page.prediccionesEnVivo[1].similitud).toBeLessThan(page.prediccionesEnVivo[0].similitud);
-    expect(page.prediccionesClasificador).toEqual([]);
+    expect(page.prediccionesClasificador.length).toBeGreaterThan(0);
   });
 
   describe('exportar dataset', () => {
@@ -104,7 +99,7 @@ describe('AdminAiStudioPage', () => {
     });
 
     it('incluye señas creadas después de abrir la página (si no, el archivo quedaba inválido para entrenar.py)', async () => {
-      supabaseSpy.listarSenas.and.resolveTo([conModelo(1, 'HOLA'), conModelo(2, 'SI'), { ...sinModelo, id: 42, palabra: 'nueva' }]);
+      supabaseSpy.listarSenas.and.resolveTo([sena(1, 'hola'), sena(2, 'si'), { ...sinModelo, id: 42, palabra: 'nueva' }]);
       supabaseSpy.listarMuestrasSena.and.resolveTo([muestra(1, 1, 'uuid-ana'), muestra(2, 42, 'uuid-ana')]);
       let blob: Blob | null = null;
       spyOn(URL, 'createObjectURL').and.callFake((b: Blob | MediaSource) => {
@@ -146,26 +141,6 @@ describe('AdminAiStudioPage', () => {
     });
   });
 
-  describe('animación de la seña (vectores de referencia)', () => {
-    it('no abre nada si la seña todavía no está calibrada', () => {
-      page.abrirAnimacion(sinModelo);
-      expect(page.senaAnimando).toBeNull();
-    });
-
-    it('abre la animación de una seña calibrada y la cierra', () => {
-      const sena = conModelo(1, 'HOLA');
-      page.abrirAnimacion(sena);
-      expect(page.senaAnimando).toBe(sena);
-      expect(page.animPausada).toBeFalse();
-
-      page.alternarPausaAnimacion();
-      expect(page.animPausada).toBeTrue();
-
-      page.cerrarAnimacion();
-      expect(page.senaAnimando).toBeNull();
-    });
-  });
-
   it('no cierra el HandLandmarker compartido al salir', () => {
     const cerrar = jasmine.createSpy('close');
     (page as any).labHandLandmarker = { close: cerrar };
@@ -186,12 +161,6 @@ describe('AdminAiStudioPage', () => {
       page.guardandoNueva = true;
       expect(page.alPresionarAtras()).toBeTrue();
       expect(page.modalCrearAbierto).toBeTrue();
-    });
-
-    it('después cierra la animación de la seña, si está abierta', () => {
-      page.senaAnimando = conModelo(1, 'HOLA');
-      expect(page.alPresionarAtras()).toBeTrue();
-      expect(page.senaAnimando).toBeNull();
     });
 
     it('sin nada abierto, deja volver a la pantalla anterior', () => {

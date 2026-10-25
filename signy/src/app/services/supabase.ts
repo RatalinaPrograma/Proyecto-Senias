@@ -350,7 +350,7 @@ export class SupabaseService {
     return data ?? [];
   }
 
-  async crearSena(sena: Omit<Sena, 'id' | 'created_at' | 'landmarks_referencia'>) {
+  async crearSena(sena: Omit<Sena, 'id' | 'created_at'>) {
     return this.supabase.from('senas').insert(sena).select().single();
   }
 

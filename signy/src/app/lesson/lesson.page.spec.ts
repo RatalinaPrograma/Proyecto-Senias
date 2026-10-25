@@ -509,7 +509,7 @@ describe('LessonPage', () => {
     });
 
     const resultado = (r: Partial<EvaluacionSena>): EvaluacionSena => ({
-      similitudPct: 0, aprobado: false, fuente: 'referencia', espejo: false, sinManos: false, ...r,
+      similitudPct: 0, aprobado: false, fuente: 'deteccion', espejo: false, sinManos: false, ...r,
     });
 
     it('registra el intento con el puntaje real del reconocedor', async () => {
@@ -518,7 +518,7 @@ describe('LessonPage', () => {
       expect(component.camStage).toBe('result');
       expect(component.camPassed).toBeTrue();
       expect(component.camScore).toBe(88);
-      expect(component.camFuente).toBe('referencia');
+      expect(component.camFuente).toBe('deteccion');
       expect(contenidoSpy.registrarIntento).toHaveBeenCalledWith('user-1', component.senaCamara.id, true, 88);
     });
 

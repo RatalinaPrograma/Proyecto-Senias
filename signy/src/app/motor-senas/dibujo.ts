@@ -1,8 +1,3 @@
-import { desaplanar } from './geometria';
-import { Mano, ModeloReferenciaSena } from './tipos';
-
-export { desaplanar };
-
 /** Conexiones entre los 21 landmarks de MediaPipe Hands. */
 export const CONEXIONES_MANO: [number, number][] = [
   [0, 1], [1, 2], [2, 3], [3, 4],
@@ -66,38 +61,4 @@ export function dibujarManos(
   estilo: EstiloEsqueleto = ESTILO_SIGNY
 ): void {
   dibujarEsqueletoPx(ctx, manos.map((mano) => mano.map((p) => ({ x: p.x * ancho, y: p.y * alto }))), estilo);
-}
-
-/** Dónde y a qué escala cabe un modelo de referencia (coordenadas canónicas, centro ≈ 0) en un canvas. */
-export interface EncuadreModelo {
-  centroX: number;
-  centroY: number;
-  escala: number;
-}
-
-export function ajustarEncuadre(modelo: ModeloReferenciaSena, anchoPx: number, altoPx: number, margen = 0.75): EncuadreModelo {
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const frame of modelo.frames) {
-    for (const mano of desaplanar(frame)) {
-      for (const p of mano) {
-        if (p.x < minX) minX = p.x;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.y > maxY) maxY = p.y;
-      }
-    }
-  }
-  const anchoModelo = Math.max(maxX - minX, 0.3);
-  const altoModelo = Math.max(maxY - minY, 0.3);
-  const escala = Math.min(anchoPx / anchoModelo, altoPx / altoModelo) * margen;
-  return { centroX: anchoPx / 2 - ((minX + maxX) / 2) * escala, centroY: altoPx / 2 - ((minY + maxY) / 2) * escala, escala };
-}
-
-/** Dibuja un frame (ya desaplanado) de un modelo de referencia, encuadrado con {@link ajustarEncuadre}. */
-export function dibujarFrameModelo(ctx: CanvasRenderingContext2D, manos: Mano[], encuadre: EncuadreModelo, estilo: EstiloEsqueleto = ESTILO_SIGNY): void {
-  dibujarEsqueletoPx(
-    ctx,
-    manos.map((mano) => mano.map((p) => ({ x: p.x * encuadre.escala + encuadre.centroX, y: p.y * encuadre.escala + encuadre.centroY }))),
-    estilo
-  );
 }

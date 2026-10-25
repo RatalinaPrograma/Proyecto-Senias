@@ -25,9 +25,6 @@ import {
   layersOutline,
   closeOutline,
   cameraReverseOutline,
-  eyeOutline,
-  pauseOutline,
-  playOutline,
   downloadOutline,
 } from 'ionicons/icons';
 import type { HandLandmarker } from '@mediapipe/tasks-vision';
@@ -42,13 +39,8 @@ import {
   MediaPipeManosService,
   Prediccion,
   ReconocedorSenasService,
-  ajustarEncuadre,
   construirDatasetExportable,
-  desaplanar,
-  dibujarFrameModelo,
   dibujarManos,
-  evaluarCaptura,
-  modeloDeSena,
 } from '../motor-senas';
 
 addIcons({
@@ -65,9 +57,6 @@ addIcons({
   'layers-outline': layersOutline,
   'close-outline': closeOutline,
   'camera-reverse-outline': cameraReverseOutline,
-  'eye-outline': eyeOutline,
-  'pause-outline': pauseOutline,
-  'play-outline': playOutline,
   'download-outline': downloadOutline,
 });
 
@@ -81,8 +70,6 @@ export interface PrediccionEnVivo {
   palabra: string;
   similitud: number;
   esCoincidente: boolean;
-  tipo: string;
-  senaRef: Sena;
 }
 
 @Component({
@@ -95,7 +82,6 @@ export interface PrediccionEnVivo {
 export class AdminAiStudioPage implements OnInit, OnDestroy {
   @ViewChild('labVideo', { static: false }) labVideoRef?: ElementRef<HTMLVideoElement>;
   @ViewChild('labCanvas', { static: false }) labCanvasRef?: ElementRef<HTMLCanvasElement>;
-  @ViewChild('animCanvas', { static: false }) animCanvasRef?: ElementRef<HTMLCanvasElement>;
 
   cargando = true;
   error: string | null = null;
@@ -124,12 +110,8 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   nuevoSubnivelId: number | null = null;
   guardandoNueva = false;
 
-  // ================= Animación de la seña (vectores de referencia) =================
-  senaAnimando: Sena | null = null;
-  animPausada = false;
-  private animRaf = 0;
-  private animIndiceFrame = 0;
-  private animUltimoTick = 0;
+  /** Ids de seña que el clasificador entrenado ya conoce (define "calibrada"). */
+  private clasificadorConocidos = new Set<number>();
 
   // ================= Laboratorio de Reconocimiento Real =================
   labEstado: 'apagado' | 'cargando' | 'activo' | 'error' = 'apagado';
@@ -144,7 +126,6 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   private labUltimaEvaluacion = 0;
   private labUltimaMano = 0;
 
-  prediccionesEnVivo: PrediccionEnVivo[] = [];
   mejorPrediccion: PrediccionEnVivo | null = null;
   /** Top 3 del clasificador entrenado (vacío si todavía no hay modelo entrenado). */
   prediccionesClasificador: Prediccion[] = [];
@@ -166,13 +147,18 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   ) {}
 
   async ngOnInit() {
+    await this.cargarClasificadorConocidos();
     await this.cargarDatos();
   }
 
   ngOnDestroy() {
     // El HandLandmarker es compartido (MediaPipeManosService): no se cierra acá.
-    this.detenerAnimacion();
     this.detenerLaboratorioReconocimiento();
+  }
+
+  private async cargarClasificadorConocidos() {
+    const clf = await this.reconocedor.clasificador();
+    this.clasificadorConocidos = new Set(clf?.clases.map((c) => c.senaId) ?? []);
   }
 
   cambiarVista(modo: 'lista' | 'lab') {
@@ -270,7 +256,7 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
 
   recalcularMetricas() {
     this.totalSenas = this.senas.length;
-    this.calibradasCount = this.senas.filter((s) => !!modeloDeSena(s)).length;
+    this.calibradasCount = this.senas.filter((s) => this.estaCalibrada(s)).length;
     this.pendientesCount = this.totalSenas - this.calibradasCount;
     this.porcentajeCalibrado = this.totalSenas
       ? Math.round((this.calibradasCount / this.totalSenas) * 100)
@@ -283,7 +269,7 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
         !this.busqueda ||
         s.palabra.toLowerCase().includes(this.busqueda.toLowerCase().trim());
 
-      const esCalibrada = !!modeloDeSena(s);
+      const esCalibrada = this.estaCalibrada(s);
       const coincideEstado =
         this.filtroEstado === 'todas' ||
         (this.filtroEstado === 'calibradas' && esCalibrada) ||
@@ -296,8 +282,9 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     });
   }
 
+  /** "Calibrada" = el clasificador entrenado (ml/entrenar.py) ya conoce esta seña. */
   estaCalibrada(sena: Sena): boolean {
-    return !!modeloDeSena(sena);
+    return this.clasificadorConocidos.has(sena.id);
   }
 
   nombreSubnivelDe(subnivelId: number): string {
@@ -305,60 +292,11 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     return s ? s.nombre : 'General';
   }
 
-  // ================= Animación de la seña (los vectores grabados, en vivo) =================
-  abrirAnimacion(sena: Sena) {
-    if (!this.estaCalibrada(sena)) return;
-    this.senaAnimando = sena;
-    this.animPausada = false;
-    this.animIndiceFrame = 0;
-    setTimeout(() => this.iniciarAnimacion(), 30); // deja que el canvas del modal se monte
-  }
-
-  cerrarAnimacion() {
-    this.detenerAnimacion();
-    this.senaAnimando = null;
-  }
-
-  alternarPausaAnimacion() {
-    this.animPausada = !this.animPausada;
-  }
-
-  private iniciarAnimacion() {
-    this.detenerAnimacion();
-    const modelo = this.senaAnimando && modeloDeSena(this.senaAnimando);
-    const canvas = this.animCanvasRef?.nativeElement;
-    const ctx = canvas?.getContext('2d');
-    if (!modelo || !canvas || !ctx) return;
-
-    const encuadre = ajustarEncuadre(modelo, canvas.width, canvas.height);
-    const msPorFrame = 1000 / (modelo.fpsObjetivo || 10);
-    this.animUltimoTick = performance.now();
-
-    const paso = (ahora: number) => {
-      if (!this.animPausada && ahora - this.animUltimoTick >= msPorFrame) {
-        this.animUltimoTick = ahora;
-        this.animIndiceFrame = (this.animIndiceFrame + 1) % modelo.frames.length;
-      }
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      dibujarFrameModelo(ctx, desaplanar(modelo.frames[this.animIndiceFrame]), encuadre);
-      this.animRaf = requestAnimationFrame(paso);
-    };
-    this.animRaf = requestAnimationFrame(paso);
-  }
-
-  private detenerAnimacion() {
-    if (this.animRaf) {
-      cancelAnimationFrame(this.animRaf);
-      this.animRaf = 0;
-    }
-  }
-
   // ================= Laboratorio de Reconocimiento Real =================
   async iniciarLaboratorioReconocimiento() {
     this.labEstado = 'cargando';
     this.labMensajeError = '';
     this.labBuffer.reiniciar();
-    this.prediccionesEnVivo = [];
     this.prediccionesClasificador = [];
     this.mejorPrediccion = null;
 
@@ -441,7 +379,6 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
           } else if (marca - this.labUltimaMano > PAUSA_REINICIO_LAB_MS && this.labBuffer.totalFrames) {
             // Las manos salieron de cuadro: termina la "toma" actual.
             this.labBuffer.reiniciar();
-            this.prediccionesEnVivo = [];
             this.prediccionesClasificador = [];
             this.mejorPrediccion = null;
           }
@@ -451,7 +388,7 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
           }
           if (marca - this.labUltimaEvaluacion >= INTERVALO_EVALUACION_LAB_MS && this.labBuffer.framesConManos(1) >= 8) {
             this.labUltimaEvaluacion = marca;
-            this.evaluarBufferContraModelo();
+            this.evaluarBufferEnVivo();
           }
         } catch (e) {
           console.warn('MediaPipe no pudo procesar el frame:', e);
@@ -466,28 +403,15 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     this.labRafId = requestAnimationFrame(loop);
   }
 
-  /**
-   * Compara los últimos 3 s de cámara contra TODAS las señas con modelo de
-   * referencia (y, si existe, con el clasificador entrenado).
-   */
-  private async evaluarBufferContraModelo() {
+  /** Compara los últimos 3 s de cámara contra el clasificador entrenado. */
+  private async evaluarBufferEnVivo() {
     const captura = this.labBuffer.captura();
-    const ranking: PrediccionEnVivo[] = [];
-
-    for (const sena of this.senas) {
-      const modelo = modeloDeSena(sena);
-      if (!modelo) continue;
-      const r = evaluarCaptura(modelo, captura);
-      if (r.motivo) continue;
-      ranking.push({ palabra: sena.palabra, similitud: r.similitudPct, esCoincidente: r.esCoincidente, tipo: modelo.tipo, senaRef: sena });
-    }
-
-    ranking.sort((a, b) => b.similitud - a.similitud);
-    this.prediccionesEnVivo = ranking.slice(0, 4);
-    this.mejorPrediccion = this.prediccionesEnVivo[0] ?? null;
-
     const clf = await this.reconocedor.clasificador();
     this.prediccionesClasificador = clf ? clf.predecir(captura).slice(0, 3) : [];
+    const top = this.prediccionesClasificador[0];
+    this.mejorPrediccion = top
+      ? { palabra: top.palabra, similitud: Math.round(top.probabilidad * 100), esCoincidente: top.probabilidad >= (clf?.umbralSugerido ?? 0.6) }
+      : null;
   }
 
   // ================= Calibrar / Entrenar Seña =================
@@ -501,19 +425,8 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     });
 
     await modal.present();
-
-    const { data: senaActualizada } = await modal.onWillDismiss();
-    if (senaActualizada) {
-      const idx = this.senas.findIndex((s) => s.id === senaActualizada.id);
-      if (idx !== -1) {
-        this.senas[idx] = {
-          ...this.senas[idx],
-          landmarks_referencia: senaActualizada.landmarks_referencia,
-        };
-        this.recalcularMetricas();
-        this.cargarConteoMuestras();
-      }
-    }
+    await modal.onWillDismiss();
+    this.cargarConteoMuestras();
   }
 
   // ================= Crear Nueva Seña y Conectar =================
@@ -565,14 +478,10 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     this.atras.desactivar();
   }
 
-  /** Atrás cierra primero el modal de nueva seña o la animación abierta. */
+  /** Atrás cierra primero el modal de nueva seña, si está abierto. */
   alPresionarAtras(): boolean {
     if (this.modalCrearAbierto) {
       if (!this.guardandoNueva) this.cerrarModalCrear();
-      return true;
-    }
-    if (this.senaAnimando) {
-      this.cerrarAnimacion();
       return true;
     }
     return false;
