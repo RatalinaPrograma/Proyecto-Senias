@@ -146,6 +146,26 @@ describe('AdminAiStudioPage', () => {
     });
   });
 
+  describe('animación de la seña (vectores de referencia)', () => {
+    it('no abre nada si la seña todavía no está calibrada', () => {
+      page.abrirAnimacion(sinModelo);
+      expect(page.senaAnimando).toBeNull();
+    });
+
+    it('abre la animación de una seña calibrada y la cierra', () => {
+      const sena = conModelo(1, 'HOLA');
+      page.abrirAnimacion(sena);
+      expect(page.senaAnimando).toBe(sena);
+      expect(page.animPausada).toBeFalse();
+
+      page.alternarPausaAnimacion();
+      expect(page.animPausada).toBeTrue();
+
+      page.cerrarAnimacion();
+      expect(page.senaAnimando).toBeNull();
+    });
+  });
+
   it('no cierra el HandLandmarker compartido al salir', () => {
     const cerrar = jasmine.createSpy('close');
     (page as any).labHandLandmarker = { close: cerrar };
@@ -168,10 +188,10 @@ describe('AdminAiStudioPage', () => {
       expect(page.modalCrearAbierto).toBeTrue();
     });
 
-    it('después cierra la ficha de la seña elegida en el grafo', () => {
-      page.senaSeleccionada = conModelo(1, 'HOLA');
+    it('después cierra la animación de la seña, si está abierta', () => {
+      page.senaAnimando = conModelo(1, 'HOLA');
       expect(page.alPresionarAtras()).toBeTrue();
-      expect(page.senaSeleccionada).toBeNull();
+      expect(page.senaAnimando).toBeNull();
     });
 
     it('sin nada abierto, deja volver a la pantalla anterior', () => {
