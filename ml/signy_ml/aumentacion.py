@@ -72,8 +72,22 @@ def _perder_manos(frames: list[dict], rng: np.random.Generator, perdida_max: flo
     return salida
 
 
-def aumentar(captura: dict, rng: np.random.Generator, *, giro_max=0.3, escala=(0.85, 1.15), deformacion_tiempo=(0.75, 1.3),
-             ruido=0.02, recorte=0.12, traslacion=0.08, giro_camara_max=0.35, proporcion=0.1, perdida_max=0.15) -> dict:
+def _congelar_frames(frames: list[dict], rng: np.random.Generator, probabilidad: float) -> list[dict]:
+    """A veces la cámara entrega 2-3 frames repetidos (frame dropeado): el mismo cuadro se
+    mantiene en vez de perderse. Distinto de `_perder_manos`, que vacía la mano entera."""
+    if len(frames) <= 6 or rng.random() >= probabilidad:
+        return frames
+    salida = [dict(f) for f in frames]
+    ini = int(rng.integers(1, len(salida) - 4))
+    congelado = salida[ini - 1]["manos"]
+    for f in salida[ini:ini + int(rng.integers(2, 4))]:
+        f["manos"] = congelado
+    return salida
+
+
+def aumentar(captura: dict, rng: np.random.Generator, *, giro_max=0.4, escala=(0.65, 1.4), deformacion_tiempo=(0.5, 1.8),
+             ruido=0.02, recorte=0.12, traslacion=0.15, giro_camara_max=0.5, proporcion=0.1, perdida_max=0.15,
+             congelar_prob=0.25) -> dict:
     k, frames = _a_iso(captura)
     angulo = rng.uniform(-giro_max, giro_max)
     c, s = math.cos(angulo), math.sin(angulo)
@@ -112,4 +126,5 @@ def aumentar(captura: dict, rng: np.random.Generator, *, giro_max=0.3, escala=(0
         ini = int(rng.uniform(0, recorte) * n)
         fin = n - int(rng.uniform(0, recorte) * n)
         nuevos = nuevos[ini:fin]
+    nuevos = _congelar_frames(nuevos, rng, congelar_prob)
     return _desde_iso(k, _perder_manos(nuevos, rng, perdida_max), captura)

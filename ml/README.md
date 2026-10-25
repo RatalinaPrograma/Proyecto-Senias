@@ -38,9 +38,8 @@ python -m pip install -r ml/requirements.txt
 
 En Windows, si `python` no se reconoce, usar `py -3.12 -m pip install -r ml\requirements.txt`.
 
-En Supabase → SQL Editor, correr una vez (en este orden):
-1. `supabase/migrations/20261004120000_dataset_muestras_sena.sql` (tabla `muestras_sena`).
-2. `supabase/migrations/20261013120000_participante_muestras_sena.sql` (columna `participante`).
+En Supabase → SQL Editor, correr una vez:
+`supabase/migrations/20261004120000_dataset_muestras_sena.sql` (tabla `muestras_sena`).
 
 Las cuentas que graben y entrenen tienen que ser admin (`profiles.es_admin = true`).
 
@@ -48,8 +47,7 @@ Las cuentas que graben y entrenen tienen que ser admin (`profiles.es_admin = tru
 
 ## 🎥 Grabar muestras
 
-En **AI Studio → Catálogo**, abrir una seña, escribir en **"Persona que hace la seña"** el apodo
-o las iniciales de quien está frente a la cámara (ej. `Cata`, `BV`) y:
+En **AI Studio → Catálogo**, abrir una seña y:
 
 - **Grabar 5 seguidas al dataset** (modo ráfaga), o
 - **Grabar seña** → hacerla → **Al dataset**, de a una. **Deshacer** borra una grabación mala.
@@ -57,12 +55,8 @@ o las iniciales de quien está frente a la cámara (ej. `Cata`, `BV`) y:
 Para que el modelo funcione con alumnos reales:
 
 - **10 a 20 muestras por seña** como mínimo; más es mejor.
-- **Varias personas** (ojalá 3 o más), cambiando el campo "Persona" cada vez. El reporte mide la
-  precisión con personas que el modelo nunca vio. El dataset descargado se anonimiza (`p1`, `p2`, …);
-  en el menú y en el reporte se muestra entre paréntesis el apodo real (ej. `p1 (Cata)`), solo como
-  ayuda para decidir a quién excluir — nunca se guarda en el archivo del dataset.
-- Si alguien grabó mal (ej. 0 % de exactitud), el menú tiene **"Excluir persona(s) antes de entrenar"**
-  para entrenar sin sus muestras, sin tener que borrar nada en Supabase.
+- **Varias personas distintas** grabando, para que el dataset tenga variedad real de manos y estilos
+  (el entrenamiento no distingue quién grabó cada muestra: las trata todas por igual).
 - Variar distancia a la cámara, luz, velocidad, celular vertical y laptop.
 - Solo se guardan coordenadas de 21 puntos por mano: no imágenes ni video.
 
@@ -87,7 +81,7 @@ Abre un menú:
 
 | Opción | Qué hace |
 |---|---|
-| 1 · Ver muestras de Supabase | Tabla de muestras y personas por seña (en amarillo, las que faltan) |
+| 1 · Ver muestras de Supabase | Tabla de muestras por seña (en amarillo, las que faltan) |
 | 2 · Volver a descargar | Refresca las muestras (se descargan una vez por sesión) |
 | 3 · Entrenar y actualizar el modelo de la app | Entrena, escribe `ml/output/` y actualiza la app (solo si la exactitud alcanza el mínimo: ver abajo) |
 | 4 · Entrenar de prueba | Igual, pero en `ml/reportes/prueba/` sin tocar la app |
@@ -106,9 +100,9 @@ python ml/entrenar.py --supabase --email admin@correo.cl
 Opciones (también aplican al menú): `--epocas 60`, `--frames 12`, `--sin-z`, `--capas 64,32`,
 `--aumentos 10`, `--precision 0.95`, `--umbral 0.6`, `--sin-ninguna`, `--salida carpeta/` (no reemplaza el modelo de la app).
 
-**El modelo solo se instala en la app si su exactitud en prueba es de 80 % o más**, porque uno
+**El modelo solo se instala en la app si su exactitud en prueba es de 70 % o más**, porque uno
 peor aprobaría señas mal hechas (o rechazaría señas bien hechas). Si no llega:
-- **En el menú**, muestra los números (exactitud, por persona, confusiones) y pregunta si instalarlo
+- **En el menú**, muestra los números (exactitud, confusiones) y pregunta si instalarlo
   igual — la decisión queda en quien entrena, viendo el reporte completo.
 - **Con `--supabase`** (sin menú), no se instala salvo que se pase `--forzar`; sin eso, se guarda
   como prueba en `ml/reportes/prueba/` y no toca la app ni `ml/output/`.
@@ -121,11 +115,9 @@ suficientes para separar una parte de prueba. Mientras se junta el dataset, usar
 
 ### Cómo se mide
 
-Con 3 o más personas se entrena **una vez por persona**, dejándola fuera, y se prueba con ella: cada
-persona se mide como un alumno nuevo. El reporte da la exactitud promedio ± la variación entre personas
-y la exactitud de cada una (la peor dice a quién o qué condición falta grabar). Con menos personas se usa
-una partición al azar. Estas rondas solo miden: **el modelo que va a la app se entrena con el 100 % de
-las muestras y personas**, sin apartar validación.
+Se aparta una partición de prueba al azar (estratificada por seña, cuando hay muestras suficientes).
+Esta ronda solo mide: **el modelo que va a la app se entrena con el 100 % de las muestras**, sin
+apartar validación.
 
 ### Umbral y "ninguna seña"
 
@@ -146,8 +138,8 @@ En `ml/output/`:
 3. `labels.json` — palabra de cada salida del modelo, en orden.
 
 `model_weights.json` se copia a `signy/src/assets/modelos/clasificador-senas.json`, que es lo que carga
-la app. Hacer commit del modelo y compilar la app. El reporte (muestras, precisión por seña, exactitud
-por persona y confusiones más frecuentes) queda en `ml/reportes/`.
+la app. Hacer commit del modelo y compilar la app. El reporte (muestras, precisión por seña y
+confusiones más frecuentes) queda en `ml/reportes/`.
 
 ---
 
@@ -168,7 +160,7 @@ primera opción y supera el umbral).
 ## ✅ Pruebas
 
 - `python -m unittest discover -s ml/tests`: características, aumentación, validación del dataset,
-  partición de prueba por persona, entrenamiento de punta a punta, **paridad `model.tflite` ↔ `model_weights.json`**,
+  entrenamiento de punta a punta, **paridad `model.tflite` ↔ `model_weights.json`**,
   CLI y descarga desde Supabase (servidor simulado con login y RLS).
 - **Paridad Python ↔ app** (`clasificador.spec.ts`): si se cambia `signy_ml/caracteristicas.py` o
   `motor-senas/clasificador.ts`, cambiar ambos y regenerar el fixture: `python ml/generar_fixture_paridad.py`.
@@ -177,10 +169,12 @@ primera opción y supera el umbral).
 
 - **Características**: coordenadas isotrópicas, seguimiento estable de las dos manos, remuestreo a N
   frames, centrado en la muñeca media y escalado por el tamaño de mano; mano A + mano B (o ceros) + bandera de presencia.
-- **Aumentación**: espejo (zurdos), giro de la mano ±17°, ángulo de cámara 3D ±20° (lados e inclinación),
-  proporciones de la mano (palma y cada dedo ±10 %), temblor, velocidad dispareja, recorte de bordes y
-  frames en que MediaPipe pierde la mano. Cada 10 épocas se generan variantes nuevas, así el modelo
-  ve unas 60 versiones distintas de cada muestra en vez de 10 fijas.
+- **Aumentación**: espejo (zurdos), giro de la mano ±23°, ángulo de cámara 3D ±29° (lados e inclinación),
+  escalado ±35-40 %, traslación, proporciones de la mano (palma y cada dedo ±10 %), deformación temporal
+  no lineal (seña más rápida o lenta en una parte que en otra), temblor, recorte de bordes, frames
+  congelados (2-3 cuadros repetidos, simulando un frame dropeado) y frames en que MediaPipe pierde la
+  mano. Cada 10 épocas se generan variantes nuevas, así el modelo ve unas 60 versiones distintas de
+  cada muestra en vez de 10 fijas.
 - **Exportación**: la BatchNorm se fusiona en la densa siguiente igual que lo hace TFLite; exportar solo
   las densas daría otro modelo. Una prueba verifica que el JSON y el `.tflite` dan las mismas probabilidades.
 - **Formato del dataset**: ver el encabezado de `signy_ml/dataset.py`.

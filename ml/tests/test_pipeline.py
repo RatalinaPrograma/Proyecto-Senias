@@ -14,7 +14,7 @@ import numpy as np
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
 
-from signy_ml.aumentacion import PADRE, _perder_manos, _proporciones, _rotacion_camara, aumentar, espejar  # noqa: E402
+from signy_ml.aumentacion import PADRE, _congelar_frames, _perder_manos, _proporciones, _rotacion_camara, aumentar, espejar  # noqa: E402
 from signy_ml.caracteristicas import ConfigCaracteristicas, caracteristicas, dimension_por_frame, seguir_manos, a_isotropico  # noqa: E402
 from signy_ml.dataset import Dataset, DatasetInvalido, Muestra, expandir_captura, leer_dataset  # noqa: E402
 from signy_ml.modelo import NINGUNA, OpcionesEntrenamiento, calcular_umbral, empalmes, entrenar, probabilidades  # noqa: E402
@@ -27,7 +27,7 @@ CONFIG = ConfigCaracteristicas(frames=10, usar_z=True)
 def _ds(nombres, participantes=3, repeticiones=3, semilla=0) -> Dataset:
     crudo = dataset_sintetico(nombres, participantes, repeticiones, semilla)
     ds = Dataset(senas={int(s["id"]): s["palabra"] for s in crudo["senas"]})
-    ds.muestras = [Muestra(m["id"], m["senaId"], m["participante"], expandir_captura(m["captura"])) for m in crudo["muestras"]]
+    ds.muestras = [Muestra(m["id"], m["senaId"], expandir_captura(m["captura"])) for m in crudo["muestras"]]
     return ds
 
 
@@ -116,12 +116,20 @@ class TestAumentacion(unittest.TestCase):
         self.assertEqual(len(perdidos), len(frames))
         self.assertLess(sum(len(f["manos"]) for f in perdidos), sum(len(f["manos"]) for f in frames))
 
+    def test_congela_frames_repite_el_cuadro_anterior(self):
+        frames = generar_captura("HOLA", np.random.default_rng(1))["frames"]
+        congelados = _congelar_frames(frames, np.random.default_rng(7), probabilidad=1.0)
+        self.assertEqual(len(congelados), len(frames))
+        cambiados = [i for i in range(1, len(congelados)) if congelados[i]["manos"] is not frames[i]["manos"]]
+        self.assertTrue(cambiados)
+        for i in cambiados:
+            np.testing.assert_allclose(congelados[i]["manos"][0], congelados[i - 1]["manos"][0])
+
 
 class TestDataset(unittest.TestCase):
     def test_carga_dataset_valido(self):
         ds = leer_dataset(dataset_sintetico(["HOLA", "SI"], 2, 2))
         self.assertEqual(len(ds.muestras), 8)
-        self.assertEqual(ds.participantes(), {"p1", "p2"})
 
     def test_rechaza_formato_desconocido(self):
         with self.assertRaises(DatasetInvalido):
@@ -137,36 +145,13 @@ class TestDataset(unittest.TestCase):
         cap = expandir_captura({"ancho": 1, "alto": 1, "frames": [{"t": 0, "m": [[1, 2, 3], [float("nan")] * 63, [0.5] * 63]}]})
         self.assertEqual(len(cap["frames"][0]["manos"]), 1)
 
-    def test_sin_participantes_descarta_sus_muestras(self):
-        ds = leer_dataset(dataset_sintetico(["HOLA", "SI"], 3, 2))
-        filtrado = ds.sin_participantes({"p1"})
-        self.assertEqual(filtrado.participantes(), {"p2", "p3"})
-        self.assertEqual(ds.participantes(), {"p1", "p2", "p3"})  # el original no cambia
-
-    def test_sin_participantes_vacio_devuelve_el_mismo_dataset(self):
-        ds = leer_dataset(dataset_sintetico(["HOLA"], 2, 1))
-        self.assertIs(ds.sin_participantes(set()), ds)
-
-    def test_nombre_persona_muestra_el_apodo_si_se_conoce(self):
-        ds = leer_dataset(dataset_sintetico(["HOLA"], 2, 1))
-        ds.apodos = {"p1": "Cata"}
-        self.assertEqual(ds.nombre_persona("p1"), "p1 (Cata)")
-        self.assertEqual(ds.nombre_persona("p2"), "p2")  # sin apodo conocido
-        self.assertEqual(ds.sin_participantes({"p2"}).apodos, ds.apodos)  # se conserva al filtrar
-
 
 class TestEntrenamiento(unittest.TestCase):
-    def test_reconoce_senas_de_personas_no_vistas(self):
+    def test_reconoce_senas_con_variacion_nueva(self):
         ds = _ds(["HOLA", "SI", "GRACIAS", "LLAMAR", "L", "SEPARAR"], participantes=4, repeticiones=3)
         r = entrenar(ds, OpcionesEntrenamiento(config=CONFIG, aumentos_por_muestra=4))
         modelo, metricas = r.modelo, r.metricas
-        self.assertIn("por persona", metricas["particion"])
         self.assertGreaterEqual(metricas["exactitud"], 0.9)
-        # Una ronda por persona: las 4 se prueban y el modelo final las usa a todas.
-        self.assertEqual((metricas["rondas"], metricas["personasPrueba"]), (4, 4))
-        self.assertEqual(set(metricas["exactitudPorPersona"]), {"p1", "p2", "p3", "p4"})
-        self.assertEqual(metricas["muestrasPrueba"], len(ds.muestras))
-        self.assertIsNotNone(metricas["desviacionPersonas"])
         self.assertGreaterEqual(metricas["rechazoNinguna"], 0.5)
         rng = np.random.default_rng(123)
         ids = {c["palabra"]: c["senaId"] for c in modelo["clases"]}
@@ -240,10 +225,10 @@ def _ds_compuesta(participantes=4, repeticiones=3, semilla=0) -> Dataset:
     for p in range(participantes):
         persona = dict(tamano=float(rng.uniform(0.15, 0.22)), proporcion=float(rng.uniform(0.95, 1.05)))
         for _ in range(repeticiones):
-            ds.muestras.append(Muestra(len(ds.muestras) + 1, 1, f"p{p + 1}", _captura_compuesta(rng, **persona)))
-            ds.muestras.append(Muestra(len(ds.muestras) + 1, 2, f"p{p + 1}",
+            ds.muestras.append(Muestra(len(ds.muestras) + 1, 1, _captura_compuesta(rng, **persona)))
+            ds.muestras.append(Muestra(len(ds.muestras) + 1, 2,
                                        generar_captura("HOLA", rng, duracion_ms=1200, pausa_antes_ms=200, pausa_despues_ms=200, **persona)))
-            ds.muestras.append(Muestra(len(ds.muestras) + 1, 3, f"p{p + 1}",
+            ds.muestras.append(Muestra(len(ds.muestras) + 1, 3,
                                        generar_captura("SEPARAR", rng, duracion_ms=1200, pausa_antes_ms=200, pausa_despues_ms=200, **persona)))
     return ds
 
@@ -265,7 +250,7 @@ class TestSenaCompuesta(unittest.TestCase):
 
 
 class TestPocasMuestras(unittest.TestCase):
-    """Lo normal al empezar a grabar: muchas señas con pocas muestras y una sola persona."""
+    """Lo normal al empezar a grabar: muchas señas con pocas muestras."""
 
     OP = OpcionesEntrenamiento(config=CONFIG, capas_ocultas=(8,), aumentos_por_muestra=1)
 
@@ -296,38 +281,21 @@ class TestPocasMuestras(unittest.TestCase):
         self.assertEqual(len(modelo["clases"]), 3 + 1)
         self.assertIn("no estratificada", metricas["particion"])
 
-    def test_por_persona_si_una_persona_grabo_senas_que_otras_no(self):
-        ds = _ds(["HOLA", "SI", "L"], participantes=3, repeticiones=2)
-        ds.muestras = [m for m in ds.muestras if not (m.sena_id == 3 and m.participante != "p1")]
-        r = entrenar(ds, self.OP)
-        modelo, metricas = r.modelo, r.metricas
-        self.assertEqual(len(modelo["clases"]), 3 + 1)
-        self.assertIsNotNone(metricas["exactitud"])
-
-    def test_reporte_cuenta_personas_por_sena(self):
-        ds = _ds(["HOLA", "SI"], participantes=2, repeticiones=2)
-        self.assertEqual(ds.personas_por_sena(), {1: 2, 2: 2})
-        r = entrenar(ds, self.OP)
-        ruta = Path(tempfile.mkdtemp()) / "reporte.md"
-        cli.escribir_reporte(ruta, ds, r.metricas, r.modelo, Path("modelo.json"), 10)
-        texto = ruta.read_text(encoding="utf-8")
-        self.assertIn("| Seña | Muestras | Personas |", texto)
-        self.assertIn("| hola | 4 ⚠️ pocas | 2 ⚠️ |", texto)
 
 
 class TestReporte(unittest.TestCase):
     def test_sena_sin_muestras_de_prueba_no_aparece_como_0_por_ciento(self):
         ds = _ds(["HOLA", "SI"], participantes=1, repeticiones=2)
-        metricas = {"particion": "por persona", "muestrasPrueba": 2, "personasPrueba": 1, "exactitud": 1.0,
-                    "exactitudSobreUmbral": 1.0, "coberturaUmbral": 1.0, "exactitudPorPersona": {}, "desviacionPersonas": None,
+        metricas = {"particion": "aleatoria", "muestrasPrueba": 2, "exactitud": 1.0,
+                    "exactitudSobreUmbral": 1.0, "coberturaUmbral": 1.0,
                     "rechazoNinguna": None, "umbralCalculado": False,
                     "reporte": {"hola": {"precision": 1.0, "recall": 1.0, "support": 2}}, "confusion": [], "clasesConfusion": []}
         ruta = Path(tempfile.mkdtemp()) / "reporte.md"
         cli.escribir_reporte(ruta, ds, metricas, {"umbralSugerido": 0.6}, Path("m.json"), 1)
         texto = ruta.read_text(encoding="utf-8")
-        self.assertIn("Muestras de prueba: 2 de 4 (1 persona(s))", texto)
-        self.assertIn("| si | 2 ⚠️ pocas | 1 ⚠️ | — (sin prueba) | — (sin prueba) |", texto)
-        self.assertIn("| hola | 2 ⚠️ pocas | 1 ⚠️ | 100.0 % | 100.0 % |", texto)
+        self.assertIn("Muestras de prueba: 2 de 4", texto)
+        self.assertIn("| si | 2 ⚠️ pocas | — (sin prueba) | — (sin prueba) |", texto)
+        self.assertIn("| hola | 2 ⚠️ pocas | 100.0 % | 100.0 % |", texto)
 
     def test_palabra_repetida_en_dos_senas_avisa_y_se_distingue_en_el_reporte(self):
         crudo = dataset_sintetico(["HOLA", "SI", "L"], 2, 2)

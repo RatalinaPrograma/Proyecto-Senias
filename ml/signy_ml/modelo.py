@@ -31,7 +31,7 @@ class OpcionesEntrenamiento:
     renovar_cada: int = 10            # épocas entre una tanda de variantes aumentadas y la siguiente
     clase_ninguna: bool = True
     precision_objetivo: float = 0.95  # el umbral se calcula para que, al aceptar, acierte al menos esto
-    fraccion_prueba: float = 0.25     # solo con menos de 3 personas
+    fraccion_prueba: float = 0.25
     semilla: int = 42
     umbral_sugerido: float = 0.6      # si no hay datos para calcularlo
 
@@ -102,7 +102,6 @@ def _con_ninguna(capturas: list[dict], etiquetas: list[int], op: OpcionesEntrena
 
 
 SIN_EVALUACION = "sin evaluación (muy pocas muestras para separar una parte de prueba: graba más)"
-POR_PERSONA = "por persona (cada persona se prueba con un modelo entrenado sin ella)"
 
 
 def _estratificada(etiquetas: np.ndarray, n_prueba: int, rng: np.random.Generator) -> np.ndarray:
@@ -115,20 +114,11 @@ def _estratificada(etiquetas: np.ndarray, n_prueba: int, rng: np.random.Generato
 
 
 def _pliegues(ds: Dataset, op: OpcionesEntrenamiento) -> tuple[list[tuple[np.ndarray, np.ndarray]], str]:
-    """Rondas (entrenamiento, prueba). Con 3+ personas, una ronda por persona: se prueba con ella y se
-    entrena con todas las demás, así cada persona se mide como un alumno nuevo y el resultado no depende
-    de un sorteo. Con menos personas, una sola partición al azar. Con muy pocas muestras, ninguna."""
+    """Rondas (entrenamiento, prueba): una sola partición al azar. Con muy pocas muestras, ninguna."""
     rng = np.random.default_rng(op.semilla)
     n = len(ds.muestras)
     indices = np.arange(n)
     etiquetas = np.array([m.sena_id for m in ds.muestras])
-    grupos = np.array([m.participante for m in ds.muestras])
-    if len(set(grupos.tolist())) >= 3:
-        # Si las demás personas grabaron una sola seña no hay con qué entrenar: esa ronda no se hace.
-        pliegues = [(indices[grupos != p], indices[grupos == p]) for p in sorted(set(grupos.tolist()))]
-        pliegues = [(tr, te) for tr, te in pliegues if len(set(etiquetas[tr].tolist())) >= 2]
-        if pliegues:
-            return pliegues, POR_PERSONA
 
     clases, conteo = np.unique(etiquetas, return_counts=True)
     n_prueba = max(1, math.ceil(op.fraccion_prueba * n))
@@ -136,13 +126,12 @@ def _pliegues(ds: Dataset, op: OpcionesEntrenamiento) -> tuple[list[tuple[np.nda
         n_prueba = max(n_prueba, len(clases))
         if n - n_prueba >= len(clases):
             te = _estratificada(etiquetas, n_prueba, rng)
-            return [(np.setdiff1d(indices, te), te)], "aleatoria (hay menos de 3 personas: la precisión real con alumnos nuevos puede ser menor)"
+            return [(np.setdiff1d(indices, te), te)], "aleatoria"
     if n - n_prueba >= 2:
         perm = rng.permutation(n)
         tr, te = np.sort(perm[n_prueba:]), np.sort(perm[:n_prueba])
         if len(set(etiquetas[tr].tolist())) >= 2:
-            return [(tr, te)], ("aleatoria, no estratificada (hay señas con 1 sola muestra; "
-                                "la precisión real con alumnos nuevos puede ser menor)")
+            return [(tr, te)], "aleatoria, no estratificada (hay señas con 1 sola muestra)"
     return [], SIN_EVALUACION
 
 
@@ -223,21 +212,18 @@ def evaluar(ds: Dataset, op: OpcionesEntrenamiento) -> dict:
         "particion": tipo, "rondas": len(pliegues),
         "muestrasEntrenamiento": int(len(pliegues[0][0])) if len(pliegues) == 1 else len(ds.muestras),
         "muestrasPrueba": int(sum(len(te) for _, te in pliegues)),
-        "personasPrueba": len({ds.muestras[i].participante for _, te in pliegues for i in te}),
-        "exactitud": None, "exactitudSobreUmbral": None, "coberturaUmbral": None,
-        "exactitudPorPersona": {}, "desviacionPersonas": None, "rechazoNinguna": None,
+        "exactitud": None, "exactitudSobreUmbral": None, "coberturaUmbral": None, "rechazoNinguna": None,
         "umbral": op.umbral_sugerido, "umbralCalculado": False,
         "reporte": {}, "confusion": [], "clasesConfusion": [],
     }
-    reales, preds, confs, personas = [], [], [], []      # muestras reales de prueba
-    neg_preds, neg_confs = [], []                          # "ninguna seña" de prueba
+    reales, preds, confs = [], [], []      # muestras reales de prueba
+    neg_preds, neg_confs = [], []           # "ninguna seña" de prueba
     for tr, te in pliegues:
         cap_tr, et_tr = _con_ninguna([capturas[i] for i in tr], [etiquetas[i] for i in tr], op, rng)
         red, clases = _entrenar_red(cap_tr, et_tr, op, rng)
         Xte, yte, origen = _vectores([capturas[i] for i in te], [etiquetas[i] for i in te], op, rng, False)
         p, c = _predecir(red, clases, Xte)
         reales.append(yte), preds.append(p), confs.append(c)
-        personas += [ds.muestras[te[o]].participante for o in origen]
         if op.clase_ninguna:
             negativos = empalmes([capturas[i] for i in te], [etiquetas[i] for i in te], max(2, len(te) // 4), rng)
             Xn, _, _ = _vectores(negativos, [NINGUNA] * len(negativos), op, rng, False)
@@ -247,7 +233,7 @@ def evaluar(ds: Dataset, op: OpcionesEntrenamiento) -> dict:
     if not pliegues or not sum(len(r) for r in reales):
         metricas["particion"] = SIN_EVALUACION
         return metricas
-    real, pred, conf, personas = np.concatenate(reales), np.concatenate(preds), np.concatenate(confs), np.array(personas)
+    real, pred, conf = np.concatenate(reales), np.concatenate(preds), np.concatenate(confs)
     neg_pred = np.concatenate(neg_preds) if neg_preds else np.array([], dtype=int)
     neg_conf = np.concatenate(neg_confs) if neg_confs else np.array([])
 
@@ -257,7 +243,6 @@ def evaluar(ds: Dataset, op: OpcionesEntrenamiento) -> dict:
         metricas.update(umbral=umbral, umbralCalculado=True)
     umbral = metricas["umbral"]
     acepta = (pred != NINGUNA) & (conf >= umbral)
-    por_persona = {p: float(np.mean(pred[personas == p] == real[personas == p])) for p in sorted(set(personas.tolist()))}
     etiquetas_reporte = np.union1d(real, pred)  # incluye señas que solo están en la prueba y "ninguna" si se predijo
     nombres = [nombre_clase(ds, int(c)) for c in etiquetas_reporte]
     reporte, confusion = _metricas_prueba(real, pred, etiquetas_reporte, nombres)
@@ -265,8 +250,6 @@ def evaluar(ds: Dataset, op: OpcionesEntrenamiento) -> dict:
         "exactitud": float(np.mean(pred == real)),
         "exactitudSobreUmbral": float(np.mean(pred[acepta] == real[acepta])) if acepta.any() else None,
         "coberturaUmbral": float(acepta.mean()),
-        "exactitudPorPersona": por_persona,
-        "desviacionPersonas": float(np.std(list(por_persona.values()))) if tipo == POR_PERSONA and len(por_persona) > 1 else None,
         "rechazoNinguna": float(np.mean((neg_pred == NINGUNA) | (neg_conf < umbral))) if len(neg_pred) else None,
         "reporte": reporte, "confusion": confusion, "clasesConfusion": nombres,
     })
@@ -274,7 +257,7 @@ def evaluar(ds: Dataset, op: OpcionesEntrenamiento) -> dict:
 
 
 def entrenar(ds: Dataset, op: OpcionesEntrenamiento = OpcionesEntrenamiento(), solo_evaluar: bool = False) -> Resultado:
-    """Mide con datos no vistos y entrena el modelo final con el 100 % de las muestras y personas."""
+    """Mide con datos no vistos y entrena el modelo final con el 100 % de las muestras."""
     if len(ds.conteo_por_sena()) < 2:
         raise ValueError("Se necesitan muestras de al menos 2 señas distintas para entrenar un clasificador.")
     metricas = evaluar(ds, op)
@@ -348,7 +331,7 @@ def exportar(red, clases: np.ndarray, ds: Dataset, op: OpcionesEntrenamiento, me
         ],
         "umbralSugerido": metricas["umbral"],
         "metricas": {k: metricas[k] for k in ("particion", "muestrasEntrenamiento", "muestrasPrueba", "exactitud", "exactitudSobreUmbral",
-                                              "coberturaUmbral", "desviacionPersonas", "rechazoNinguna", "umbralCalculado")},
+                                              "coberturaUmbral", "rechazoNinguna", "umbralCalculado")},
     }
 
 

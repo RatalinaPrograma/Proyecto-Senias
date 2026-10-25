@@ -44,7 +44,6 @@ def _muestras(n: int) -> list[dict]:
 class FalsoSupabase(BaseHTTPRequestHandler):
     muestras: list[dict] = []
     sin_tabla = False
-    sin_columna_participante = False
     cortar_respuesta = False
     pedidos: list[str] = []
 
@@ -80,8 +79,6 @@ class FalsoSupabase(BaseHTTPRequestHandler):
             if self.sin_tabla:
                 return self._responder(404, {"code": "PGRST205", "message": "Could not find the table 'public.muestras_sena' in the schema cache"})
             columnas = q.get("select", "*").split(",")
-            if "participante" in columnas and self.sin_columna_participante:
-                return self._responder(400, {"code": "42703", "message": "column muestras_sena.participante does not exist"})
             if self.cortar_respuesta:  # se corta el wifi a mitad de la página
                 datos = json.dumps(self.muestras[:50]).encode()
                 self.send_response(200)
@@ -116,54 +113,16 @@ class TestDescargaSupabase(unittest.TestCase):
 
     def setUp(self):
         FalsoSupabase.sin_tabla = False
-        FalsoSupabase.sin_columna_participante = False
         FalsoSupabase.cortar_respuesta = False
         FalsoSupabase.pedidos = []
 
-    def test_admin_descarga_todo_paginado_y_anonimizado(self):
+    def test_admin_descarga_todo_paginado(self):
         ds = sb.descargar_dataset(self.url, CLAVE, "admin@signy.cl", "clave-admin")
         self.assertEqual(len(ds["muestras"]), 230)
         self.assertEqual(sum("muestras_sena" in p for p in FalsoSupabase.pedidos), 3)  # 100 + 100 + 30
-        self.assertEqual({m["participante"] for m in ds["muestras"]}, {"p1", "p2", "p3"})
         self.assertNotIn("uuid-", json.dumps(ds))
         self.assertEqual([s["palabra"] for s in ds["senas"]], ["hola", "si"])  # "chao" no tiene muestras
         self.assertEqual(len(leer_dataset(ds).muestras), 230)
-
-    def test_cada_persona_cuenta_aunque_las_grabe_la_misma_cuenta(self):
-        originales = FalsoSupabase.muestras
-        apodos = ["Cata", "Benja", " cata ", "Benjamín", "benjamin", None]
-        FalsoSupabase.muestras = [{**m, "autor_id": "uuid-admin", "participante": apodos[i % 6]} for i, m in enumerate(_muestras(12))]
-        try:
-            ds = sb.descargar_dataset(self.url, CLAVE, "admin@signy.cl", "clave-admin")
-        finally:
-            FalsoSupabase.muestras = originales
-        self.assertEqual([m["participante"] for m in ds["muestras"][:6]], ["p1", "p2", "p1", "p3", "p3", "p4"])
-        self.assertNotRegex(json.dumps(ds), "Cata|Benja|uuid-")
-
-    def test_apodos_salida_tiene_el_nombre_real_pero_el_dataset_sigue_anonimizado(self):
-        originales = FalsoSupabase.muestras
-        apodos_tipeados = ["Cata", "Benja", " cata ", "Benjamín", "benjamin", None]
-        FalsoSupabase.muestras = [{**m, "autor_id": "uuid-admin", "participante": apodos_tipeados[i % 6]} for i, m in enumerate(_muestras(12))]
-        try:
-            apodos = {}
-            ds = sb.descargar_dataset(self.url, CLAVE, "admin@signy.cl", "clave-admin", apodos_salida=apodos)
-        finally:
-            FalsoSupabase.muestras = originales
-        self.assertEqual(apodos, {"p1": "Cata", "p2": "Benja", "p3": "Benjamín", "p4": "sin apodo (entró con su cuenta)"})
-        self.assertNotRegex(json.dumps(ds), "Cata|Benja|uuid-")  # el dataset descargado sigue sin nombres
-
-    def test_sin_la_migracion_de_participante_usa_la_cuenta(self):
-        FalsoSupabase.sin_columna_participante = True
-        ds = sb.descargar_dataset(self.url, CLAVE, "admin@signy.cl", "clave-admin")
-        self.assertEqual(len(ds["muestras"]), 230)
-        self.assertEqual({m["participante"] for m in ds["muestras"]}, {"p1", "p2", "p3"})
-
-    def test_misma_regla_de_persona_que_la_app(self):
-        # Igual que clavePersona / limpiarParticipante de motor-senas/dataset.ts.
-        self.assertEqual(sb.clave_persona({"participante": "  Ñandú   Azul ", "autor_id": "x"}), "persona:nandu azul")
-        self.assertEqual(sb.clave_persona({"participante": "   ", "autor_id": "x"}), "cuenta:x")
-        self.assertEqual(sb.clave_persona({"autor_id": None}), "cuenta:sin-autor")
-        self.assertEqual(len(sb.limpiar_participante("x" * 60)), 40)
 
     def test_corte_de_red_a_mitad_de_la_descarga_da_un_mensaje_claro(self):
         FalsoSupabase.cortar_respuesta = True

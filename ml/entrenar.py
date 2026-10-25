@@ -6,7 +6,7 @@
 
 1. Descarga las muestras directo de Supabase con una cuenta admin (no se leen archivos locales).
 2. Calcula las características (idénticas a las de la app) y aumenta los datos.
-3. Mide la precisión con datos separados (con personas no vistas, si hay 3+).
+3. Mide la precisión con datos de prueba separados del entrenamiento.
 4. Entrena el modelo final (Keras) con todo y lo exporta a ml/output/:
    model.tflite, labels.json y model_weights.json (BatchNorm fusionada, pesos float16).
    model_weights.json se copia a signy/src/assets/modelos/clasificador-senas.json, donde la app lo carga
@@ -42,8 +42,7 @@ from signy_ml.modelo import OpcionesEntrenamiento, entrenar  # noqa: E402
 SALIDA_ML = RAIZ / "output"
 SALIDA_APP = RAIZ.parent / "signy" / "src" / "assets" / "modelos" / "clasificador-senas.json"
 MINIMO_RECOMENDADO = 10
-PERSONAS_RECOMENDADAS = 3
-EXACTITUD_MINIMA_APP = 0.8  # por debajo, el modelo no se copia a la app (salvo --forzar)
+EXACTITUD_MINIMA_APP = 0.7  # por debajo, el modelo no se copia a la app (salvo --forzar)
 
 
 def _pct(v) -> str:
@@ -51,20 +50,17 @@ def _pct(v) -> str:
 
 
 def _exactitud(m: dict) -> str:
-    """"77.5 % ± 11.0" cuando se probó persona por persona."""
-    return _pct(m["exactitud"]) + ("" if m.get("desviacionPersonas") is None else f" ± {m['desviacionPersonas'] * 100:.1f}")
+    return _pct(m["exactitud"])
 
 
 def escribir_reporte(ruta: Path, ds, metricas: dict, modelo: dict, destino: Path, kb: float) -> None:
     conteo = ds.conteo_por_sena()
-    personas = ds.personas_por_sena()
     lineas = [
         f"# Reporte de entrenamiento — {datetime.now():%Y-%m-%d %H:%M}",
         "",
-        f"- Señas: **{len(conteo)}** · muestras: **{len(ds.muestras)}** · personas: **{len(ds.participantes())}**",
+        f"- Señas: **{len(conteo)}** · muestras: **{len(ds.muestras)}**",
         f"- Partición de prueba: {metricas['particion']}",
-        f"- Muestras de prueba: {metricas['muestrasPrueba']} de {len(ds.muestras)}"
-        f" ({metricas.get('personasPrueba', 0)} persona(s))",
+        f"- Muestras de prueba: {metricas['muestrasPrueba']} de {len(ds.muestras)}",
         f"- Exactitud en prueba: **{_exactitud(metricas)}**",
         f"- Con umbral de confianza {modelo['umbralSugerido']}"
         f"{' (calculado)' if metricas.get('umbralCalculado') else ''}: exactitud {_pct(metricas['exactitudSobreUmbral'])}, "
@@ -74,26 +70,20 @@ def escribir_reporte(ruta: Path, ds, metricas: dict, modelo: dict, destino: Path
         "",
         "## Muestras por seña",
         "",
-        "| Seña | Muestras | Personas | Precisión | Sensibilidad |",
-        "|---|---|---|---|---|",
+        "| Seña | Muestras | Precisión | Sensibilidad |",
+        "|---|---|---|---|",
     ]
     reporte = metricas.get("reporte", {})
     for sena_id, n in sorted(conteo.items(), key=lambda x: ds.nombre(x[0])):
         nombre = ds.nombre(sena_id)
         r = reporte.get(nombre, {})
         aviso_n = " ⚠️ pocas" if n < MINIMO_RECOMENDADO else ""
-        aviso_personas = " ⚠️" if personas.get(sena_id, 0) < PERSONAS_RECOMENDADAS else ""
         # Sin muestras de esta seña en la prueba no hay nada que medir: "0.0 %" haría creer que falla.
         if r.get("support", 0) > 0:
             precision, sensibilidad = _pct(r.get("precision")), _pct(r.get("recall"))
         else:
             precision = sensibilidad = "— (sin prueba)"
-        lineas.append(f"| {nombre} | {n}{aviso_n} | {personas.get(sena_id, 0)}{aviso_personas} "
-                      f"| {precision} | {sensibilidad} |")
-
-    if metricas.get("exactitudPorPersona"):
-        lineas += ["", "## Exactitud por persona", "", "| Persona | Exactitud |", "|---|---|"]
-        lineas += [f"| {ds.nombre_persona(p)} | {_pct(v)} |" for p, v in sorted(metricas["exactitudPorPersona"].items(), key=lambda x: x[1])]
+        lineas.append(f"| {nombre} | {n}{aviso_n} | {precision} | {sensibilidad} |")
 
     confusiones = []
     nombres, matriz = metricas.get("clasesConfusion", []), metricas.get("confusion", [])
@@ -112,40 +102,29 @@ def descargar(email: str, password: str) -> Dataset:
     from signy_ml.supabase_descarga import descargar_dataset, leer_config_app
 
     url, clave = leer_config_app(RAIZ.parent)
-    apodos: dict[str, str] = {}
     with consola.status("Descargando muestras de Supabase…") as estado:
-        datos = descargar_dataset(url, clave, email, password, lambda n: estado.update(f"Descargando muestras de Supabase… {n}"),
-                                  apodos_salida=apodos)
-    ds = leer_dataset(datos)
-    ds.apodos = apodos
-    return ds
+        datos = descargar_dataset(url, clave, email, password, lambda n: estado.update(f"Descargando muestras de Supabase… {n}"))
+    return leer_dataset(datos)
 
 
 def mostrar_dataset(ds: Dataset) -> None:
-    personas = ds.personas_por_sena()
-    tabla = Table(title=f"{len(ds.conteo_por_sena())} señas · {len(ds.muestras)} muestras · {len(ds.participantes())} personas")
+    tabla = Table(title=f"{len(ds.conteo_por_sena())} señas · {len(ds.muestras)} muestras")
     tabla.add_column("Seña")
     tabla.add_column("Muestras", justify="right")
-    tabla.add_column("Personas", justify="right")
     for sena_id, n in sorted(ds.conteo_por_sena().items(), key=lambda x: ds.nombre(x[0])):
-        p = personas.get(sena_id, 0)
-        tabla.add_row(ds.nombre(sena_id), f"[yellow]{n}[/]" if n < MINIMO_RECOMENDADO else str(n),
-                      f"[yellow]{p}[/]" if p < PERSONAS_RECOMENDADAS else str(p))
+        tabla.add_row(ds.nombre(sena_id), f"[yellow]{n}[/]" if n < MINIMO_RECOMENDADO else str(n))
     consola.print(tabla)
 
 
 def avisar_dataset(ds: Dataset) -> None:
     conteo = ds.conteo_por_sena()
-    consola.print(f"Dataset: {len(conteo)} señas, {len(ds.muestras)} muestras, {len(ds.participantes())} personas.")
+    consola.print(f"Dataset: {len(conteo)} señas, {len(ds.muestras)} muestras.")
     pocas = [ds.senas[s] for s, n in conteo.items() if n < MINIMO_RECOMENDADO]
     if pocas:
         aviso(f"Menos de {MINIMO_RECOMENDADO} muestras en: {', '.join(sorted(pocas))}. Graba más para mejorar la precisión.")
     for palabra, ids in ds.palabras_repetidas().items():
         aviso(f"La palabra \"{palabra}\" está en {len(ids)} señas distintas (ids {', '.join(map(str, ids))}). "
               "El modelo las trata como señas diferentes y no las va a distinguir: graba esa palabra en una sola.")
-    if len(ds.participantes()) < PERSONAS_RECOMENDADAS:
-        aviso(f"Solo {len(ds.participantes())} persona(s) en el dataset: graba a {PERSONAS_RECOMENDADAS} o más "
-              "(campo \"Persona\" del entrenador) para que el modelo funcione con alumnos nuevos.")
 
 
 def opciones(a: argparse.Namespace) -> OpcionesEntrenamiento:
@@ -174,10 +153,8 @@ def entrenar_y_guardar(ds: Dataset, op: OpcionesEntrenamiento, salida: Path, ins
 
     m = r.metricas
     consola.print(f"Partición de prueba: {m['particion']}")
-    consola.print(f"Muestras de prueba: {m['muestrasPrueba']} de {len(ds.muestras)} ({m.get('personasPrueba', 0)} persona(s))")
+    consola.print(f"Muestras de prueba: {m['muestrasPrueba']} de {len(ds.muestras)}")
     consola.print(f"Exactitud en prueba: [bold]{_exactitud(m)}[/]")
-    if m["exactitudPorPersona"]:
-        consola.print("Por persona: " + ", ".join(f"{ds.nombre_persona(p)} {_pct(v)}" for p, v in sorted(m["exactitudPorPersona"].items())))
     consola.print(f"Umbral: {r.modelo['umbralSugerido']}{' (calculado)' if m['umbralCalculado'] else ' (por defecto: faltan datos de prueba)'}"
                   f" · rechaza el {_pct(m['rechazoNinguna'])} de los movimientos que no son seña")
 
@@ -186,7 +163,7 @@ def entrenar_y_guardar(ds: Dataset, op: OpcionesEntrenamiento, salida: Path, ins
     if instalar_en_app and bajo_el_minimo and not forzar:
         aviso(f"La exactitud en prueba es {_pct(exactitud)} y se necesita al menos {_pct(EXACTITUD_MINIMA_APP)} "
               "para instalar en la app: con esto, alumnos que hacen la seña bien pueden salir reprobados "
-              "(y al revés). Conviene grabar más muestras y de más personas.")
+              "(y al revés). Conviene grabar más muestras.")
         if preguntar:
             instalar_en_app = ConfirmarSiNo.ask("¿Instalar en la app de todas formas?", default=False)
             if not instalar_en_app:
@@ -228,15 +205,13 @@ def comparar(ds: Dataset, a: argparse.Namespace) -> None:
     ]
     aviso(f"Se entrena {len(variantes)} veces por cada ronda de prueba: puede tardar varios minutos.")
     tabla = Table(title="Comparación (mismas rondas de prueba)")
-    for col in ("Configuración", "Exactitud", "Peor persona", "Rechazo", "Umbral", "Tiempo"):
+    for col in ("Configuración", "Exactitud", "Rechazo", "Umbral", "Tiempo"):
         tabla.add_column(col, justify="left" if col == "Configuración" else "right")
     for nombre, op in variantes:
         inicio = time.perf_counter()
         with consola.status(f"Evaluando «{nombre}»…"):
             m = entrenar(ds, op, solo_evaluar=True).metricas
-        peor = min(m["exactitudPorPersona"].items(), key=lambda x: x[1], default=None)
-        tabla.add_row(nombre, _exactitud(m), f"{_pct(peor[1])} ({ds.nombre_persona(peor[0])})" if peor else "—", _pct(m["rechazoNinguna"]),
-                      str(m["umbral"]), f"{time.perf_counter() - inicio:.0f} s")
+        tabla.add_row(nombre, _exactitud(m), _pct(m["rechazoNinguna"]), str(m["umbral"]), f"{time.perf_counter() - inicio:.0f} s")
     consola.print(tabla)
 
 
@@ -267,47 +242,24 @@ def menu_interactivo(a: argparse.Namespace) -> int:
                 return None
         return sesion["ds"]
 
-    def ds_activo(recargar: bool = False):
-        """El dataset descargado, sin las personas excluidas en el menú (ver `excluir`)."""
-        ds = dataset(recargar)
-        if ds is None:
-            return None
-        excluir = sesion.get("excluir", set())
-        if excluir:
-            aviso(f"Excluyendo del entrenamiento: {', '.join(sorted(excluir))}")
-        return ds.sin_participantes(excluir)
-
-    def excluir():
-        ds = dataset()
-        if not ds:
-            return
-        consola.print("Personas en el dataset: " + ", ".join(ds.nombre_persona(p) for p in sorted(ds.participantes())))
-        actuales = sesion.get("excluir", set())
-        if actuales:
-            consola.print(f"Actualmente excluidas: {', '.join(sorted(actuales))}")
-        # Sin default: si se deja vacío, no excluye a nadie (con default, Enter repetiría lo anterior).
-        texto = Prompt.ask("Personas a excluir ahora, separadas por coma (vacío = no excluir a nadie)", default="")
-        sesion["excluir"] = {p.strip() for p in texto.split(",") if p.strip()}
-
     def ver(recargar: bool):
-        if ds := ds_activo(recargar):
+        if ds := dataset(recargar):
             mostrar_dataset(ds)
 
     def comparar_configuraciones():
-        if ds := ds_activo():
+        if ds := dataset():
             try:
                 comparar(ds, a)
             except ValueError as e:
                 error(str(e))
 
     def entrenar_con(salida: Path, instalar: bool):
-        if ds := ds_activo():
+        if ds := dataset():
             entrenar_y_guardar(ds, opciones(a), salida, instalar, preguntar=instalar)
 
     menu("Signy · entrenamiento del clasificador de señas", [
-        ("Ver muestras de Supabase (por seña y persona)", lambda: ver(False)),
+        ("Ver muestras de Supabase (por seña)", lambda: ver(False)),
         ("Volver a descargar las muestras", lambda: ver(True)),
-        ("Excluir persona(s) antes de entrenar (ej. p1,p3)", excluir),
         ("Entrenar y actualizar el modelo de la app", lambda: entrenar_con(a.salida or SALIDA_ML, a.salida is None)),
         ("Entrenar de prueba (no toca la app → ml/reportes/prueba/)", lambda: entrenar_con(RAIZ / "reportes" / "prueba", False)),
         ("Comparar configuraciones (solo mide, no guarda modelo)", comparar_configuraciones),

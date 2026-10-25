@@ -134,7 +134,7 @@ def dataset_sintetico(senas: list[str], participantes: int, repeticiones: int, s
                     prob_perdida=0.05, prob_intercambio=0.1, **persona,
                 )
                 muestras.append({
-                    "id": len(muestras) + 1, "senaId": ids[nombre], "participante": f"p{p + 1}",
+                    "id": len(muestras) + 1, "senaId": ids[nombre],
                     "tipo": SENAS[nombre][0], "manosRequeridas": 2 if nombre in ("SEPARAR", "JUNTAR") else 1,
                     "captura": compactar(captura),
                 })

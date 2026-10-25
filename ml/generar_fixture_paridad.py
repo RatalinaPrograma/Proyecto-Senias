@@ -35,7 +35,7 @@ DESTINO = RAIZ.parent / "signy" / "src" / "app" / "motor-senas" / "testing" / "f
 def main() -> None:
     crudo = dataset_sintetico(["HOLA", "SI", "L", "SEPARAR"], participantes=3, repeticiones=3, semilla=7)
     ds = Dataset(senas={int(s["id"]): s["palabra"] for s in crudo["senas"]})
-    ds.muestras = [Muestra(m["id"], m["senaId"], m["participante"], expandir_captura(m["captura"])) for m in crudo["muestras"]]
+    ds.muestras = [Muestra(m["id"], m["senaId"], expandir_captura(m["captura"])) for m in crudo["muestras"]]
     op = OpcionesEntrenamiento(config=ConfigCaracteristicas(frames=8, usar_z=True), capas_ocultas=(16,), aumentos_por_muestra=2)
     modelo = entrenar(ds, op).modelo
 

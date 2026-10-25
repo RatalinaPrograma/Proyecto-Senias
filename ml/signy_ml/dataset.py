@@ -4,15 +4,13 @@ Formato (`signy-dataset`, versión 1):
 {
   "formato": "signy-dataset", "version": 1, "exportado": "<fecha ISO>",
   "senas":    [{"id": 12, "palabra": "hola", ...}],
-  "muestras": [{"id": 1, "senaId": 12, "participante": "p1",
+  "muestras": [{"id": 1, "senaId": 12,
                 "tipo": "dinamica", "manosRequeridas": 1,
                 "captura": {"ancho": 640, "alto": 480,
                             "frames": [{"t": 0, "m": [[x0,y0,z0, ... x20,y20,z20]], "l": ["Right"]}]}}]
 }
 `m` son las manos del frame en coordenadas normalizadas de imagen (tal
 cual las entrega MediaPipe) y `l` su lateralidad (opcional).
-`participante` identifica a la persona que hizo la seña (anónima: p1, p2, …),
-según el campo "Persona" del entrenador o, si quedó vacío, la cuenta que grabó.
 """
 from __future__ import annotations
 
@@ -30,7 +28,6 @@ class DatasetInvalido(ValueError):
 class Muestra:
     id: int
     sena_id: int
-    participante: str
     captura: dict  # forma "expandida": manos como np.ndarray (21, 3)
 
 
@@ -38,15 +35,9 @@ class Muestra:
 class Dataset:
     senas: dict[int, str]
     muestras: list[Muestra] = field(default_factory=list)
-    # código (p1, p2, …) -> apodo real; nunca viene del archivo del dataset (que sigue anonimizado),
-    # solo lo llena `entrenar.descargar()` para mostrarlo en la terminal (ver supabase_descarga.descargar_dataset).
-    apodos: dict[str, str] = field(default_factory=dict)
 
     def conteo_por_sena(self) -> Counter:
         return Counter(m.sena_id for m in self.muestras)
-
-    def participantes(self) -> set[str]:
-        return {m.participante for m in self.muestras}
 
     def palabras_repetidas(self) -> dict[str, list[int]]:
         """Palabras que aparecen en más de una seña con muestras (p. ej. "hola" en dos subniveles)."""
@@ -59,25 +50,6 @@ class Dataset:
         """Nombre para reportes: la palabra, o "palabra (#id)" si otra seña se llama igual."""
         palabra = self.senas[sena_id]
         return f"{palabra} (#{sena_id})" if palabra.strip().lower() in self.palabras_repetidas() else palabra
-
-    def personas_por_sena(self) -> dict[int, int]:
-        """Cuántas personas distintas grabaron cada seña."""
-        personas: dict[int, set[str]] = {}
-        for m in self.muestras:
-            personas.setdefault(m.sena_id, set()).add(m.participante)
-        return {sena_id: len(p) for sena_id, p in personas.items()}
-
-    def sin_participantes(self, nombres: set[str]) -> "Dataset":
-        """Copia sin las muestras de esas personas (p. ej. para descartar a quien grabó mal antes de entrenar)."""
-        if not nombres:
-            return self
-        return Dataset(senas=self.senas, apodos=self.apodos,
-                       muestras=[m for m in self.muestras if m.participante not in nombres])
-
-    def nombre_persona(self, codigo: str) -> str:
-        """Para mostrar en la terminal: "p1 (Cata)", o solo "p1" si no se conoce el apodo."""
-        apodo = self.apodos.get(codigo)
-        return f"{codigo} ({apodo})" if apodo else codigo
 
 
 def expandir_captura(compacta: dict) -> dict:
@@ -107,8 +79,7 @@ def leer_dataset(datos: dict) -> Dataset:
         if sena_id not in senas:
             raise DatasetInvalido(f"La muestra {m.get('id')} apunta a la seña {sena_id}, que no está en 'senas'.")
         ds.muestras.append(Muestra(
-            id=int(m["id"]), sena_id=sena_id, participante=str(m.get("participante") or "desconocido"),
-            captura=expandir_captura(m["captura"]),
+            id=int(m["id"]), sena_id=sena_id, captura=expandir_captura(m["captura"]),
         ))
     if not ds.muestras:
         raise DatasetInvalido("El dataset no tiene muestras.")

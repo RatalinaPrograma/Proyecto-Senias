@@ -16,3 +16,6 @@ Thumbs.db
 # dentro de ml/). Decenas de miles de archivos (pip + TensorFlow): nunca
 # va al repo, cada quien instala el suyo con ml/requirements.txt.
 .venv/
+
+# Notas de contexto para Claude Code, solo para uso local: no se comparte en el repo.
+CLAUDE.md

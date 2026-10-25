@@ -12,7 +12,6 @@ from __future__ import annotations
 import http.client
 import json
 import re
-import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -63,8 +62,6 @@ def _mensaje_error(estado: int, detalle: dict) -> str:
     texto = detalle.get("msg") or detalle.get("message") or detalle.get("error_description") or ""
     if codigo in ("invalid_credentials", "invalid_grant") or "Invalid login" in texto:
         return "Correo o contraseña incorrectos."
-    if codigo == "42703" and "participante" in texto:
-        return "Falta la columna participante: aplica la migración 20261013120000_participante_muestras_sena.sql."
     if codigo in ("42P01", "PGRST205") or "muestras_sena" in texto:
         return "La tabla muestras_sena no existe: falta aplicar la migración 20261004120000_dataset_muestras_sena.sql."
     return f"Supabase respondió {estado}: {texto or codigo or 'error desconocido'}"
@@ -90,55 +87,17 @@ def _leer_todo(url: str, clave: str, token: str, tabla: str, columnas: str, al_a
             return filas
 
 
-def limpiar_participante(texto) -> Optional[str]:
-    """Igual que `limpiarParticipante` en motor-senas/dataset.ts."""
-    limpio = " ".join(str(texto or "").split())[:40].strip()
-    return limpio or None
-
-
-def clave_persona(muestra: dict) -> str:
-    """Quién hizo la seña (igual que `clavePersona` en motor-senas/dataset.ts):
-    el apodo, sin mayúsculas ni tildes, o si no hay, la cuenta que grabó."""
-    apodo = limpiar_participante(muestra.get("participante"))
-    if apodo:
-        sin_tildes = "".join(c for c in unicodedata.normalize("NFD", apodo) if unicodedata.category(c) != "Mn")
-        return "persona:" + sin_tildes.lower()
-    return "cuenta:" + str(muestra.get("autor_id") or "sin-autor")
-
-
-COLUMNAS_MUESTRAS = "id,sena_id,autor_id,participante,tipo,manos_requeridas,captura"
+COLUMNAS_MUESTRAS = "id,sena_id,tipo,manos_requeridas,captura"
 
 
 def descargar_dataset(url: str, clave: str, email: str, password: str,
-                      al_avanzar: Optional[Callable[[int], None]] = None,
-                      apodos_salida: Optional[dict] = None) -> dict:
-    """Dataset en el mismo formato que exporta AI Studio (personas anonimizadas p1, p2, …).
-
-    Si se pasa `apodos_salida`, se llena ahí (código -> apodo real, p. ej. "p1" -> "Cata") para
-    mostrarlo solo en la terminal de quien entrena. No va dentro del dataset: este sigue
-    anonimizado, porque puede terminar en un reporte o archivo."""
+                      al_avanzar: Optional[Callable[[int], None]] = None) -> dict:
+    """Dataset en el mismo formato que exporta AI Studio."""
     token = iniciar_sesion(url, clave, email, password)
-    try:
-        muestras = _leer_todo(url, clave, token, "muestras_sena", COLUMNAS_MUESTRAS, al_avanzar)
-    except ErrorSupabase as e:
-        if e.codigo != "42703":
-            raise
-        # Aún no se aplica la migración de "participante": cada cuenta cuenta como una persona.
-        muestras = _leer_todo(url, clave, token, "muestras_sena", COLUMNAS_MUESTRAS.replace("participante,", ""), al_avanzar)
+    muestras = _leer_todo(url, clave, token, "muestras_sena", COLUMNAS_MUESTRAS, al_avanzar)
     if not muestras:
         raise ErrorSupabase("No hay muestras visibles: graba algunas con \"Al dataset\" o revisa que la cuenta sea admin.")
     senas = _leer_todo(url, clave, token, "senas", "id,palabra,subnivel_id")
-
-    participantes: dict[str, str] = {}
-
-    def anonimo(muestra: dict) -> str:
-        clave_muestra = clave_persona(muestra)
-        nuevo = clave_muestra not in participantes
-        codigo = participantes.setdefault(clave_muestra, f"p{len(participantes) + 1}")
-        if nuevo and apodos_salida is not None:
-            apodo = limpiar_participante(muestra.get("participante"))
-            apodos_salida[codigo] = apodo or "sin apodo (entró con su cuenta)"
-        return codigo
 
     con_muestras = {m["sena_id"] for m in muestras}
     return {
@@ -147,7 +106,7 @@ def descargar_dataset(url: str, clave: str, email: str, password: str,
         "exportado": "supabase",
         "senas": [{"id": s["id"], "palabra": s["palabra"], "subnivelId": s.get("subnivel_id")} for s in senas if s["id"] in con_muestras],
         "muestras": [{
-            "id": m["id"], "senaId": m["sena_id"], "participante": anonimo(m),
+            "id": m["id"], "senaId": m["sena_id"],
             "tipo": m["tipo"], "manosRequeridas": m["manos_requeridas"], "captura": m["captura"],
         } for m in muestras],
     }
