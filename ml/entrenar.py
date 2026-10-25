@@ -282,8 +282,11 @@ def menu_interactivo(a: argparse.Namespace) -> int:
         if not ds:
             return
         consola.print("Personas en el dataset: " + ", ".join(ds.nombre_persona(p) for p in sorted(ds.participantes())))
-        texto = Prompt.ask("Personas a excluir, separadas por coma (vacío = no excluir a nadie)",
-                           default=", ".join(sorted(sesion.get("excluir", set()))))
+        actuales = sesion.get("excluir", set())
+        if actuales:
+            consola.print(f"Actualmente excluidas: {', '.join(sorted(actuales))}")
+        # Sin default: si se deja vacío, no excluye a nadie (con default, Enter repetiría lo anterior).
+        texto = Prompt.ask("Personas a excluir ahora, separadas por coma (vacío = no excluir a nadie)", default="")
         sesion["excluir"] = {p.strip() for p in texto.split(",") if p.strip()}
 
     def ver(recargar: bool):
