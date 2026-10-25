@@ -102,9 +102,12 @@ python ml/entrenar.py --supabase --email admin@correo.cl
 Opciones (también aplican al menú): `--epocas 60`, `--frames 12`, `--sin-z`, `--capas 64,32`,
 `--aumentos 10`, `--precision 0.95`, `--umbral 0.6`, `--sin-ninguna`, `--salida carpeta/` (no reemplaza el modelo de la app).
 
-**El modelo solo se instala en la app si su exactitud en prueba es de 80 % o más.** Si no llega
-(o no hay datos para medirla), se guarda como prueba en `ml/reportes/prueba/` y no toca la app ni
-`ml/output/`: un modelo malo en la app aprobaría señas mal hechas. `--forzar` lo instala igual.
+**El modelo solo se instala en la app si su exactitud en prueba es de 80 % o más**, porque uno
+peor aprobaría señas mal hechas (o rechazaría señas bien hechas). Si no llega:
+- **En el menú**, muestra los números (exactitud, por persona, confusiones) y pregunta si instalarlo
+  igual — la decisión queda en quien entrena, viendo el reporte completo.
+- **Con `--supabase`** (sin menú), no se instala salvo que se pase `--forzar`; sin eso, se guarda
+  como prueba en `ml/reportes/prueba/` y no toca la app ni `ml/output/`.
 
 En Git Bash, `getpass` no puede pedir la contraseña: definir antes `export SIGNY_PASSWORD='...'`
 (en PowerShell: `$env:SIGNY_PASSWORD='...'`).

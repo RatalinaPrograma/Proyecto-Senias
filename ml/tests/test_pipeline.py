@@ -350,6 +350,33 @@ class TestCLI(unittest.TestCase):
         self.assertFalse(app.exists())
         self.assertIn("No se instala en la app", salida.getvalue())
 
+    def test_bajo_el_minimo_con_preguntar_instala_si_el_usuario_dice_que_si(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from unittest import mock
+
+        app = Path(tempfile.mkdtemp()) / "clasificador-senas.json"
+        op = OpcionesEntrenamiento(config=CONFIG, capas_ocultas=(8,), aumentos_por_muestra=1, epocas=2)
+        with mock.patch.object(cli, "SALIDA_APP", app), mock.patch.object(cli, "ConfirmarSiNo") as confirm, redirect_stdout(StringIO()):
+            confirm.ask.return_value = True
+            codigo = cli.entrenar_y_guardar(_ds(["HOLA", "SI"], 1, 1), op, Path(tempfile.mkdtemp()), True, preguntar=True)
+        self.assertEqual(codigo, 0)
+        self.assertTrue(app.exists())
+        confirm.ask.assert_called_once()
+
+    def test_bajo_el_minimo_con_preguntar_no_instala_si_el_usuario_dice_que_no(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from unittest import mock
+
+        app = Path(tempfile.mkdtemp()) / "clasificador-senas.json"
+        op = OpcionesEntrenamiento(config=CONFIG, capas_ocultas=(8,), aumentos_por_muestra=1, epocas=2)
+        with mock.patch.object(cli, "SALIDA_APP", app), mock.patch.object(cli, "ConfirmarSiNo") as confirm, redirect_stdout(StringIO()):
+            confirm.ask.return_value = False
+            codigo = cli.entrenar_y_guardar(_ds(["HOLA", "SI"], 1, 1), op, Path(tempfile.mkdtemp()), True, preguntar=True)
+        self.assertEqual(codigo, 0)
+        self.assertFalse(app.exists())
+
     def test_terminal_sin_utf8_no_lo_hace_caer(self):
         # Git Bash / terminales de Windows en cp1252: antes UnicodeEncodeError en el primer "⚠️".
         salida = Path(tempfile.mkdtemp())

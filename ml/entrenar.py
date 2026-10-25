@@ -35,7 +35,7 @@ from rich.prompt import Prompt  # noqa: E402
 from rich.table import Table  # noqa: E402
 
 from signy_ml.caracteristicas import ConfigCaracteristicas  # noqa: E402
-from signy_ml.consola import aviso, consola, consola_utf8, error, menu, ok  # noqa: E402
+from signy_ml.consola import ConfirmarSiNo, aviso, consola, consola_utf8, error, menu, ok  # noqa: E402
 from signy_ml.dataset import Dataset, DatasetInvalido, leer_dataset  # noqa: E402
 from signy_ml.modelo import OpcionesEntrenamiento, entrenar  # noqa: E402
 
@@ -153,9 +153,13 @@ def opciones(a: argparse.Namespace) -> OpcionesEntrenamiento:
     )
 
 
-def entrenar_y_guardar(ds: Dataset, op: OpcionesEntrenamiento, salida: Path, instalar_en_app: bool, forzar: bool = False) -> int:
+def entrenar_y_guardar(ds: Dataset, op: OpcionesEntrenamiento, salida: Path, instalar_en_app: bool,
+                       forzar: bool = False, preguntar: bool = False) -> int:
     """Entrena y escribe model.tflite, labels.json y model_weights.json en `salida` (y en la app si se pide
-    y el modelo aprobó la prueba: un modelo malo en la app aprobaría señas mal hechas)."""
+    y el modelo aprobó la prueba: un modelo malo en la app aprobaría señas mal hechas).
+
+    Si no aprueba y `preguntar` es true (solo desde el menú), muestra los números y deja elegir;
+    si no, con `forzar` se instala igual sin preguntar y, por defecto, no se instala."""
     avisar_dataset(ds)
     try:
         with consola.status("Entrenando (TensorFlow)…"):
@@ -164,11 +168,28 @@ def entrenar_y_guardar(ds: Dataset, op: OpcionesEntrenamiento, salida: Path, ins
         error(str(e))
         return 2
 
-    exactitud = r.metricas["exactitud"]
-    if instalar_en_app and not forzar and (exactitud is None or exactitud < EXACTITUD_MINIMA_APP):
-        salida, instalar_en_app = RAIZ / "reportes" / "prueba", False
-        aviso(f"No se instala en la app: la exactitud en prueba es {_pct(exactitud)} y se necesita al menos "
-              f"{_pct(EXACTITUD_MINIMA_APP)}. Graba más muestras y personas. Se guardó como prueba en {salida}.")
+    m = r.metricas
+    consola.print(f"Partición de prueba: {m['particion']}")
+    consola.print(f"Muestras de prueba: {m['muestrasPrueba']} de {len(ds.muestras)} ({m.get('personasPrueba', 0)} persona(s))")
+    consola.print(f"Exactitud en prueba: [bold]{_exactitud(m)}[/]")
+    if m["exactitudPorPersona"]:
+        consola.print("Por persona: " + ", ".join(f"{p} {_pct(v)}" for p, v in sorted(m["exactitudPorPersona"].items())))
+    consola.print(f"Umbral: {r.modelo['umbralSugerido']}{' (calculado)' if m['umbralCalculado'] else ' (por defecto: faltan datos de prueba)'}"
+                  f" · rechaza el {_pct(m['rechazoNinguna'])} de los movimientos que no son seña")
+
+    exactitud = m["exactitud"]
+    bajo_el_minimo = exactitud is None or exactitud < EXACTITUD_MINIMA_APP
+    if instalar_en_app and bajo_el_minimo and not forzar:
+        aviso(f"La exactitud en prueba es {_pct(exactitud)} y se necesita al menos {_pct(EXACTITUD_MINIMA_APP)} "
+              "para instalar en la app: con esto, alumnos que hacen la seña bien pueden salir reprobados "
+              "(y al revés). Conviene grabar más muestras y de más personas.")
+        if preguntar:
+            instalar_en_app = ConfirmarSiNo.ask("¿Instalar en la app de todas formas?", default=False)
+            if not instalar_en_app:
+                salida = RAIZ / "reportes" / "prueba"
+        else:
+            salida, instalar_en_app = RAIZ / "reportes" / "prueba", False
+            aviso(f"No se instala en la app (usa --forzar para instalarlo igual). Se guardó como prueba en {salida}.")
 
     salida.mkdir(parents=True, exist_ok=True)
     pesos = salida / "model_weights.json"
@@ -184,15 +205,6 @@ def entrenar_y_guardar(ds: Dataset, op: OpcionesEntrenamiento, salida: Path, ins
     reportes.mkdir(exist_ok=True)
     ruta_reporte = reportes / f"reporte-{datetime.now():%Y%m%d-%H%M%S}.md"
     escribir_reporte(ruta_reporte, ds, r.metricas, r.modelo, destino, kb)
-
-    m = r.metricas
-    consola.print(f"Partición de prueba: {m['particion']}")
-    consola.print(f"Muestras de prueba: {m['muestrasPrueba']} de {len(ds.muestras)} ({m.get('personasPrueba', 0)} persona(s))")
-    consola.print(f"Exactitud en prueba: [bold]{_exactitud(m)}[/]")
-    if m["exactitudPorPersona"]:
-        consola.print("Por persona: " + ", ".join(f"{p} {_pct(v)}" for p, v in sorted(m["exactitudPorPersona"].items())))
-    consola.print(f"Umbral: {r.modelo['umbralSugerido']}{' (calculado)' if m['umbralCalculado'] else ' (por defecto: faltan datos de prueba)'}"
-                  f" · rechaza el {_pct(m['rechazoNinguna'])} de los movimientos que no son seña")
     ok(f"Modelo guardado en {destino} ({kb:.0f} KB)")
     ok(f"TFLite y etiquetas en {salida}")
     ok(f"Reporte en {ruta_reporte}")
@@ -264,7 +276,7 @@ def menu_interactivo(a: argparse.Namespace) -> int:
 
     def entrenar_con(salida: Path, instalar: bool):
         if ds := dataset():
-            entrenar_y_guardar(ds, opciones(a), salida, instalar)
+            entrenar_y_guardar(ds, opciones(a), salida, instalar, preguntar=instalar)
 
     menu("Signy · entrenamiento del clasificador de señas", [
         ("Ver muestras de Supabase (por seña y persona)", lambda: ver(False)),

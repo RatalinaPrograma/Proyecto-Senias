@@ -6,11 +6,17 @@ from typing import Callable
 
 from rich.console import Console
 from rich.markup import escape
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
 
 # soft_wrap: no partir los mensajes largos (ni al redirigir la salida a un archivo).
 consola = Console(soft_wrap=True, highlight=False)
 errores = Console(stderr=True, soft_wrap=True, highlight=False)
+
+
+class ConfirmarSiNo(Confirm):
+    """Pregunta sí/no en español ("s"/"n"): la de rich por defecto es "y"/"n", en inglés."""
+    choices = ["s", "n"]
+    validate_error_message = "[prompt.invalid]Responde «s» o «n»"
 
 
 def consola_utf8() -> None:
