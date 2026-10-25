@@ -1,4 +1,4 @@
-"""Carga y validación del dataset que exporta Signy AI Studio.
+"""Validación del dataset descargado de Supabase (`supabase_descarga.descargar_dataset`).
 
 Formato (`signy-dataset`, versión 1):
 {
@@ -16,10 +16,8 @@ según el campo "Persona" del entrenador o, si quedó vacío, la cuenta que grab
 """
 from __future__ import annotations
 
-import json
 from collections import Counter
 from dataclasses import dataclass, field
-from pathlib import Path
 
 import numpy as np
 
@@ -82,8 +80,7 @@ def expandir_captura(compacta: dict) -> dict:
     return {"ancho": int(compacta["ancho"]), "alto": int(compacta["alto"]), "frames": frames}
 
 
-def cargar_dataset(ruta: str | Path) -> Dataset:
-    datos = json.loads(Path(ruta).read_text(encoding="utf-8"))
+def leer_dataset(datos: dict) -> Dataset:
     if datos.get("formato") != "signy-dataset":
         raise DatasetInvalido("El archivo no es un dataset de Signy (falta formato='signy-dataset').")
     if datos.get("version") != 1:

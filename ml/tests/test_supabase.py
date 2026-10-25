@@ -21,7 +21,7 @@ sys.path.insert(0, str(RAIZ))
 
 import entrenar as cli  # noqa: E402
 from signy_ml import supabase_descarga as sb  # noqa: E402
-from signy_ml.dataset import cargar_dataset  # noqa: E402
+from signy_ml.dataset import leer_dataset  # noqa: E402
 from signy_ml.sintetico import compactar, generar_captura  # noqa: E402
 
 CLAVE = "sb_publishable_prueba"
@@ -127,9 +127,7 @@ class TestDescargaSupabase(unittest.TestCase):
         self.assertEqual({m["participante"] for m in ds["muestras"]}, {"p1", "p2", "p3"})
         self.assertNotIn("uuid-", json.dumps(ds))
         self.assertEqual([s["palabra"] for s in ds["senas"]], ["hola", "si"])  # "chao" no tiene muestras
-        ruta = Path(tempfile.mkdtemp()) / "ds.json"
-        ruta.write_text(json.dumps(ds))
-        self.assertEqual(len(cargar_dataset(ruta).muestras), 230)
+        self.assertEqual(len(leer_dataset(ds).muestras), 230)
 
     def test_cada_persona_cuenta_aunque_las_grabe_la_misma_cuenta(self):
         originales = FalsoSupabase.muestras
@@ -184,19 +182,18 @@ class TestDescargaSupabase(unittest.TestCase):
 
     def test_cli_entrena_directo_desde_supabase(self):
         FalsoSupabase.muestras = _muestras(24)
-        salida = Path(tempfile.mkdtemp()) / "modelo.json"
-        guardado = salida.parent / "descargado.json"
+        salida = Path(tempfile.mkdtemp())
         try:
             with mock.patch.object(sb, "leer_config_app", return_value=(self.url, CLAVE)), \
                  mock.patch.dict(os.environ, {"SIGNY_PASSWORD": "clave-admin"}), redirect_stdout(StringIO()):
                 codigo = cli.main(["--supabase", "--email", "admin@signy.cl", "--salida", str(salida),
-                                   "--guardar-dataset", str(guardado), "--aumentos", "1", "--capas", "16"])
+                                   "--aumentos", "1", "--capas", "16"])
         finally:
             FalsoSupabase.muestras = _muestras(230)
         self.assertEqual(codigo, 0)
-        modelo = json.loads(salida.read_text())
-        self.assertEqual(sorted(c["palabra"] for c in modelo["clases"]), ["hola", "si"])
-        self.assertTrue(guardado.exists())
+        modelo = json.loads((salida / "model_weights.json").read_text())
+        self.assertEqual(sorted(c["senaId"] for c in modelo["clases"]), [0, 10, 11])  # 0 = "ninguna seña"
+        self.assertTrue((salida / "model.tflite").exists())
 
     def test_cli_pide_email(self):
         with redirect_stdout(StringIO()), mock.patch("sys.stderr", new=StringIO()):

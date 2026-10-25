@@ -14,10 +14,10 @@ import numpy as np
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
 
-from signy_ml.aumentacion import aumentar, espejar  # noqa: E402
+from signy_ml.aumentacion import PADRE, _perder_manos, _proporciones, _rotacion_camara, aumentar, espejar  # noqa: E402
 from signy_ml.caracteristicas import ConfigCaracteristicas, caracteristicas, dimension_por_frame, seguir_manos, a_isotropico  # noqa: E402
-from signy_ml.dataset import Dataset, DatasetInvalido, Muestra, cargar_dataset, expandir_captura  # noqa: E402
-from signy_ml.modelo import OpcionesEntrenamiento, capas_desde_red, entrenar, probabilidades  # noqa: E402
+from signy_ml.dataset import Dataset, DatasetInvalido, Muestra, expandir_captura, leer_dataset  # noqa: E402
+from signy_ml.modelo import NINGUNA, OpcionesEntrenamiento, calcular_umbral, empalmes, entrenar, probabilidades  # noqa: E402
 from signy_ml.sintetico import dataset_sintetico, generar_captura  # noqa: E402
 import entrenar as cli  # noqa: E402
 
@@ -86,31 +86,52 @@ class TestAumentacion(unittest.TestCase):
         aum = aumentar(cap, np.random.default_rng(2))
         self.assertEqual((aum["ancho"], aum["alto"]), (cap["ancho"], cap["alto"]))
         self.assertLessEqual(len(aum["frames"]), len(cap["frames"]))
-        self.assertEqual(aum["frames"][5]["manos"][0].shape, (21, 3))
+        self.assertEqual(next(f for f in aum["frames"] if f["manos"])["manos"][0].shape, (21, 3))
         self.assertIsNotNone(caracteristicas(aum, CONFIG))
         self.assertFalse(np.allclose(caracteristicas(aum, CONFIG), caracteristicas(cap, CONFIG)))
 
+    def test_proporciones_cambian_largos_y_conservan_la_muneca(self):
+        mano = generar_captura("L", np.random.default_rng(1))["frames"][10]["manos"][0]
+        factores = np.ones(21)
+        factores[6:9] = 1.2  # solo los huesos del índice (sin el de la palma)
+        nueva = _proporciones(mano, factores)
+        np.testing.assert_allclose(nueva[:6], mano[:6])
+        np.testing.assert_allclose(np.linalg.norm(nueva[8] - nueva[7]), 1.2 * np.linalg.norm(mano[8] - mano[7]))
+        self.assertEqual(len(PADRE), 21)
+
+    def test_camara_3d_es_una_rotacion(self):
+        R = _rotacion_camara(np.random.default_rng(3), 0.35)
+        np.testing.assert_allclose(R @ R.T, np.eye(3), atol=1e-12)
+        self.assertFalse(np.allclose(R, np.eye(3)))
+
+    def test_aumentar_deja_la_profundidad_relativa_a_la_muneca(self):
+        aum = aumentar(generar_captura("HOLA", np.random.default_rng(1)), np.random.default_rng(4), ruido=0.0)
+        for f in aum["frames"]:
+            for m in f["manos"]:
+                self.assertAlmostEqual(m[0, 2], 0.0, places=9)
+
+    def test_mediapipe_pierde_manos(self):
+        frames = generar_captura("HOLA", np.random.default_rng(1))["frames"]
+        perdidos = _perder_manos(frames, np.random.default_rng(0), perdida_max=0.5)
+        self.assertEqual(len(perdidos), len(frames))
+        self.assertLess(sum(len(f["manos"]) for f in perdidos), sum(len(f["manos"]) for f in frames))
+
 
 class TestDataset(unittest.TestCase):
-    def _escribir(self, contenido) -> Path:
-        ruta = Path(tempfile.mkdtemp()) / "ds.json"
-        ruta.write_text(json.dumps(contenido), encoding="utf-8")
-        return ruta
-
     def test_carga_dataset_valido(self):
-        ds = cargar_dataset(self._escribir(dataset_sintetico(["HOLA", "SI"], 2, 2)))
+        ds = leer_dataset(dataset_sintetico(["HOLA", "SI"], 2, 2))
         self.assertEqual(len(ds.muestras), 8)
         self.assertEqual(ds.participantes(), {"p1", "p2"})
 
     def test_rechaza_formato_desconocido(self):
         with self.assertRaises(DatasetInvalido):
-            cargar_dataset(self._escribir({"formato": "otro", "version": 1}))
+            leer_dataset({"formato": "otro", "version": 1})
 
     def test_rechaza_muestra_de_sena_inexistente(self):
         d = dataset_sintetico(["HOLA"], 1, 1)
         d["muestras"][0]["senaId"] = 999
         with self.assertRaises(DatasetInvalido):
-            cargar_dataset(self._escribir(d))
+            leer_dataset(d)
 
     def test_ignora_manos_corruptas(self):
         cap = expandir_captura({"ancho": 1, "alto": 1, "frames": [{"t": 0, "m": [[1, 2, 3], [float("nan")] * 63, [0.5] * 63]}]})
@@ -120,9 +141,16 @@ class TestDataset(unittest.TestCase):
 class TestEntrenamiento(unittest.TestCase):
     def test_reconoce_senas_de_personas_no_vistas(self):
         ds = _ds(["HOLA", "SI", "GRACIAS", "LLAMAR", "L", "SEPARAR"], participantes=4, repeticiones=3)
-        modelo, metricas = entrenar(ds, OpcionesEntrenamiento(config=CONFIG, aumentos_por_muestra=4))
+        r = entrenar(ds, OpcionesEntrenamiento(config=CONFIG, aumentos_por_muestra=4))
+        modelo, metricas = r.modelo, r.metricas
         self.assertIn("por persona", metricas["particion"])
         self.assertGreaterEqual(metricas["exactitud"], 0.9)
+        # Una ronda por persona: las 4 se prueban y el modelo final las usa a todas.
+        self.assertEqual((metricas["rondas"], metricas["personasPrueba"]), (4, 4))
+        self.assertEqual(set(metricas["exactitudPorPersona"]), {"p1", "p2", "p3", "p4"})
+        self.assertEqual(metricas["muestrasPrueba"], len(ds.muestras))
+        self.assertIsNotNone(metricas["desviacionPersonas"])
+        self.assertGreaterEqual(metricas["rechazoNinguna"], 0.5)
         rng = np.random.default_rng(123)
         ids = {c["palabra"]: c["senaId"] for c in modelo["clases"]}
         for nombre in ["HOLA", "SI", "L", "SEPARAR"]:
@@ -131,26 +159,44 @@ class TestEntrenamiento(unittest.TestCase):
             self.assertEqual(modelo["clases"][int(np.argmax(p))]["senaId"], ids[nombre.lower()], nombre)
 
     def test_formato_exportado(self):
-        modelo, _ = entrenar(_ds(["HOLA", "L"], 2, 3), OpcionesEntrenamiento(config=CONFIG, capas_ocultas=(8,), aumentos_por_muestra=1))
+        modelo = entrenar(_ds(["HOLA", "L"], 2, 3), OpcionesEntrenamiento(config=CONFIG, capas_ocultas=(8,), aumentos_por_muestra=1)).modelo
         self.assertEqual(modelo["formato"], "signy-clasificador")
         self.assertEqual(modelo["capas"][0]["entrada"], dimension_por_frame(CONFIG) * CONFIG.frames)
-        self.assertEqual(modelo["capas"][-1]["salida"], 2)  # binario → softmax de 2
+        self.assertEqual(modelo["capas"][-1]["salida"], 3)  # hola, l y "ninguna seña"
+        self.assertIn(NINGUNA, [c["senaId"] for c in modelo["clases"]])
         self.assertEqual(modelo["capas"][-1]["activacion"], "softmax")
         json.dumps(modelo)  # serializable
 
-    def test_binario_equivale_a_logistica(self):
-        from sklearn.neural_network import MLPClassifier
+    def test_json_de_la_app_reproduce_al_tflite(self):
+        """BatchNorm fusionada + pesos float16 (app) ≈ el .tflite que exporta TensorFlow."""
+        import tensorflow as tf
 
-        rng = np.random.default_rng(0)
-        X = rng.normal(size=(40, 3))
-        y = (X[:, 0] > 0).astype(int)
-        red = MLPClassifier(hidden_layer_sizes=(4,), max_iter=500, random_state=0).fit(X, y)
-        x = X[:5]
-        for W, b, act in capas_desde_red(red):
-            z = x @ W + b
-            x = np.maximum(z, 0) if act == "relu" else np.exp(z - z.max(axis=1, keepdims=True))
-        x = x / x.sum(axis=1, keepdims=True)
-        np.testing.assert_allclose(x, red.predict_proba(X[:5]), atol=1e-9)
+        ds = _ds(["HOLA", "SI", "L"], 2, 2)
+        r = entrenar(ds, OpcionesEntrenamiento(config=CONFIG, capas_ocultas=(16, 8), aumentos_por_muestra=2, epocas=20))
+        interprete = tf.lite.Interpreter(model_content=r.tflite)
+        interprete.allocate_tensors()
+        entrada, salida = interprete.get_input_details()[0], interprete.get_output_details()[0]
+        self.assertEqual(r.etiquetas, [c["palabra"] for c in r.modelo["clases"]])
+        for m in ds.muestras[:6]:
+            x = caracteristicas(m.captura, CONFIG)
+            interprete.set_tensor(entrada["index"], x[None].astype(np.float32))
+            interprete.invoke()
+            np.testing.assert_allclose(probabilidades(r.modelo, x), interprete.get_tensor(salida["index"])[0], atol=0.02)
+
+    def test_umbral_calculado_es_el_menor_que_logra_la_precision(self):
+        real = np.array([1, 1, 2, 2, NINGUNA])
+        pred = np.array([1, 2, 2, 1, 1])
+        conf = np.array([0.9, 0.55, 0.8, 0.6, 0.7])
+        # Con 0.75 solo quedan aceptadas las dos correctas (0.9 y 0.8).
+        self.assertEqual(calcular_umbral(real, pred, conf, 0.95), 0.75)
+        self.assertIsNone(calcular_umbral(real, pred, conf * 0.1, 0.95))  # nada supera 0.5
+
+    def test_empalmes_mezclan_senas_distintas(self):
+        ds = _ds(["HOLA", "SI"], 1, 2)
+        negativos = empalmes([m.captura for m in ds.muestras], [m.sena_id for m in ds.muestras], 5, np.random.default_rng(0))
+        self.assertEqual(len(negativos), 5)
+        self.assertTrue(all(caracteristicas(n, CONFIG) is not None for n in negativos))
+        self.assertEqual(empalmes([ds.muestras[0].captura], [1], 3, np.random.default_rng(0)), [])
 
     def test_rechaza_una_sola_sena(self):
         with self.assertRaises(ValueError):
@@ -165,15 +211,17 @@ class TestPocasMuestras(unittest.TestCase):
     def test_muchas_senas_con_2_muestras_cada_una(self):
         # Antes: "The test_size = 4 should be greater or equal to the number of classes = 8".
         ds = _ds(["HOLA", "SI", "GRACIAS", "LLAMAR", "A", "L", "SEPARAR", "JUNTAR"], participantes=1, repeticiones=2)
-        modelo, metricas = entrenar(ds, self.OP)
-        self.assertEqual(len(modelo["clases"]), 8)
+        r = entrenar(ds, self.OP)
+        modelo, metricas = r.modelo, r.metricas
+        self.assertEqual(len(modelo["clases"]), 8 + 1)
         self.assertEqual(metricas["muestrasPrueba"], 8)  # una de cada seña
         self.assertIsNotNone(metricas["exactitud"])
 
     def test_una_muestra_por_sena_entrena_sin_evaluar(self):
         # Antes: "At least one label specified must be in y_true".
-        modelo, metricas = entrenar(_ds(["HOLA", "SI"], participantes=1, repeticiones=1), self.OP)
-        self.assertEqual(len(modelo["clases"]), 2)
+        r = entrenar(_ds(["HOLA", "SI"], participantes=1, repeticiones=1), self.OP)
+        modelo, metricas = r.modelo, r.metricas
+        self.assertEqual(len(modelo["clases"]), 2 + 1)
         self.assertIn("sin evaluación", metricas["particion"])
         self.assertIsNone(metricas["exactitud"])
 
@@ -182,23 +230,25 @@ class TestPocasMuestras(unittest.TestCase):
         quitar = {m.id for m in ds.muestras if m.sena_id == 3}
         quitar.discard(min(quitar))  # la seña "a" queda con 1 sola muestra
         ds.muestras = [m for m in ds.muestras if m.id not in quitar]
-        modelo, metricas = entrenar(ds, self.OP)
-        self.assertEqual(len(modelo["clases"]), 3)
+        r = entrenar(ds, self.OP)
+        modelo, metricas = r.modelo, r.metricas
+        self.assertEqual(len(modelo["clases"]), 3 + 1)
         self.assertIn("no estratificada", metricas["particion"])
 
     def test_por_persona_si_una_persona_grabo_senas_que_otras_no(self):
         ds = _ds(["HOLA", "SI", "L"], participantes=3, repeticiones=2)
         ds.muestras = [m for m in ds.muestras if not (m.sena_id == 3 and m.participante != "p1")]
-        modelo, metricas = entrenar(ds, self.OP)
-        self.assertEqual(len(modelo["clases"]), 3)
+        r = entrenar(ds, self.OP)
+        modelo, metricas = r.modelo, r.metricas
+        self.assertEqual(len(modelo["clases"]), 3 + 1)
         self.assertIsNotNone(metricas["exactitud"])
 
     def test_reporte_cuenta_personas_por_sena(self):
         ds = _ds(["HOLA", "SI"], participantes=2, repeticiones=2)
         self.assertEqual(ds.personas_por_sena(), {1: 2, 2: 2})
-        modelo, metricas = entrenar(ds, self.OP)
+        r = entrenar(ds, self.OP)
         ruta = Path(tempfile.mkdtemp()) / "reporte.md"
-        cli.escribir_reporte(ruta, ds, metricas, modelo, Path("modelo.json"), 10)
+        cli.escribir_reporte(ruta, ds, r.metricas, r.modelo, Path("modelo.json"), 10)
         texto = ruta.read_text(encoding="utf-8")
         self.assertIn("| Seña | Muestras | Personas |", texto)
         self.assertIn("| hola | 4 ⚠️ pocas | 2 ⚠️ |", texto)
@@ -208,7 +258,8 @@ class TestReporte(unittest.TestCase):
     def test_sena_sin_muestras_de_prueba_no_aparece_como_0_por_ciento(self):
         ds = _ds(["HOLA", "SI"], participantes=1, repeticiones=2)
         metricas = {"particion": "por persona", "muestrasPrueba": 2, "personasPrueba": 1, "exactitud": 1.0,
-                    "exactitudSobreUmbral": 1.0, "coberturaUmbral": 1.0,
+                    "exactitudSobreUmbral": 1.0, "coberturaUmbral": 1.0, "exactitudPorPersona": {}, "desviacionPersonas": None,
+                    "rechazoNinguna": None, "umbralCalculado": False,
                     "reporte": {"hola": {"precision": 1.0, "recall": 1.0, "support": 2}}, "confusion": [], "clasesConfusion": []}
         ruta = Path(tempfile.mkdtemp()) / "reporte.md"
         cli.escribir_reporte(ruta, ds, metricas, {"umbralSugerido": 0.6}, Path("m.json"), 1)
@@ -222,32 +273,42 @@ class TestReporte(unittest.TestCase):
         for sena in crudo["senas"]:
             if sena["palabra"] == "l":
                 sena["palabra"] = "Hola "  # misma palabra que la seña 1, en otro subnivel
-        ruta = Path(tempfile.mkdtemp()) / "ds.json"
-        ruta.write_text(json.dumps(crudo), encoding="utf-8")
-        ds = cargar_dataset(ruta)
+        ds = leer_dataset(crudo)
         self.assertEqual(ds.palabras_repetidas(), {"hola": [1, 3]})
         self.assertEqual((ds.nombre(1), ds.nombre(3), ds.nombre(2)), ("hola (#1)", "Hola  (#3)", "si"))
         from contextlib import redirect_stdout
         from io import StringIO
         salida = StringIO()
         with redirect_stdout(salida):
-            codigo = cli.main(["--dataset", str(ruta), "--salida", str(ruta.parent / "m.json"), "--aumentos", "1", "--capas", "8"])
+            codigo = cli.entrenar_y_guardar(ds, OpcionesEntrenamiento(config=CONFIG, capas_ocultas=(8,), aumentos_por_muestra=1),
+                                            Path(tempfile.mkdtemp()), False)
         self.assertEqual(codigo, 0)
         self.assertIn('La palabra "hola" está en 2 señas distintas (ids 1, 3)', salida.getvalue())
 
 
 class TestCLI(unittest.TestCase):
     def test_demo_sintetico_genera_modelo_y_reporte(self):
-        salida = Path(tempfile.mkdtemp()) / "modelo.json"
+        salida = Path(tempfile.mkdtemp())
         self.assertEqual(cli.main(["--demo-sintetico", "--salida", str(salida), "--aumentos", "2", "--capas", "16"]), 0)
-        self.assertEqual(json.loads(salida.read_text())["formato"], "signy-clasificador")
+        self.assertEqual(json.loads((salida / "model_weights.json").read_text())["formato"], "signy-clasificador")
+        self.assertEqual(len(json.loads((salida / "labels.json").read_text(encoding="utf-8"))), 7 + 1)
+        self.assertGreater((salida / "model.tflite").stat().st_size, 0)
 
-    def test_dataset_inexistente_falla_limpio(self):
-        self.assertEqual(cli.main(["--dataset", "/no/existe.json"]), 2)
+    def test_modelo_sin_evaluar_no_se_instala_en_la_app(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from unittest import mock
+
+        app = Path(tempfile.mkdtemp()) / "clasificador-senas.json"
+        op = OpcionesEntrenamiento(config=CONFIG, capas_ocultas=(8,), aumentos_por_muestra=1, epocas=2)
+        with mock.patch.object(cli, "SALIDA_APP", app), redirect_stdout(StringIO()) as salida:
+            self.assertEqual(cli.entrenar_y_guardar(_ds(["HOLA", "SI"], 1, 1), op, Path(tempfile.mkdtemp()), True), 0)
+        self.assertFalse(app.exists())
+        self.assertIn("No se instala en la app", salida.getvalue())
 
     def test_terminal_sin_utf8_no_lo_hace_caer(self):
         # Git Bash / terminales de Windows en cp1252: antes UnicodeEncodeError en el primer "⚠️".
-        salida = Path(tempfile.mkdtemp()) / "modelo.json"
+        salida = Path(tempfile.mkdtemp())
         r = subprocess.run(
             [sys.executable, str(RAIZ / "entrenar.py"), "--demo-sintetico", "--salida", str(salida), "--aumentos", "1", "--capas", "8"],
             capture_output=True, env={**os.environ, "PYTHONIOENCODING": "cp1252"}, timeout=300,

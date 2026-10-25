@@ -37,7 +37,7 @@ def main() -> None:
     ds = Dataset(senas={int(s["id"]): s["palabra"] for s in crudo["senas"]})
     ds.muestras = [Muestra(m["id"], m["senaId"], m["participante"], expandir_captura(m["captura"])) for m in crudo["muestras"]]
     op = OpcionesEntrenamiento(config=ConfigCaracteristicas(frames=8, usar_z=True), capas_ocultas=(16,), aumentos_por_muestra=2)
-    modelo, _ = entrenar(ds, op)
+    modelo = entrenar(ds, op).modelo
 
     rng = np.random.default_rng(99)
     casos = []

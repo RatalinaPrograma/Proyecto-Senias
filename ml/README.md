@@ -1,101 +1,141 @@
-# Signy · Machine learning de señas
+# 🧠 Signy · Machine learning de señas (TensorFlow / TFLite)
 
-Entrena un clasificador de señas de LSCh a partir de grabaciones hechas con la
-propia app y lo deja dentro de la app, liviano y funcionando sin internet.
+Entrena un clasificador de señas de LSCh con las grabaciones hechas en la propia app
+(tabla `muestras_sena` de Supabase) y lo deja dentro de la app, liviano y funcionando sin internet.
 
 ```
- Entrenador del admin ──► tabla muestras_sena ──► python ml/entrenar.py --supabase ──► assets/modelos/clasificador-senas.json
- (graba con la cámara)    (captura cruda)          (descarga, entrena y evalúa)          (la app lo carga sola)
+ Entrenador del admin ──► tabla muestras_sena ──► python ml/entrenar.py ──► ml/output/ + assets/modelos/clasificador-senas.json
+ (graba con la cámara)    (captura cruda)          (descarga, entrena, evalúa)
 ```
 
-## 1. Preparar (una vez)
+Las muestras se leen **siempre directo de Supabase**: no hay que exportar ni guardar archivos locales.
 
-1. En Supabase → SQL Editor, correr **en este orden** (se pueden correr más de una vez sin problema):
-   1. `supabase/migrations/20261004120000_dataset_muestras_sena.sql` (crea la tabla `muestras_sena`).
-   2. `supabase/migrations/20261013120000_participante_muestras_sena.sql` (agrega la columna `participante`).
+---
 
-   Para comprobar que quedaron bien, en el SQL Editor:
-   ```sql
-   select column_name from information_schema.columns
-   where table_schema = 'public' and table_name = 'muestras_sena' order by ordinal_position;
-   ```
-   Debe listar, entre otras, `captura` y `participante`.
-2. En el computador, con Python 3.9 o más nuevo, **desde la carpeta raíz del repo** (`Proyecto-Senias`):
-   ```bash
-   python -m pip install -r ml/requirements.txt
-   ```
-   En Windows, si `python` o `pip` "no se reconoce" (o se abre la Microsoft Store), usar `py` en su lugar:
-   `py -m pip install -r ml\requirements.txt`. Para entrenar bastan numpy y scikit-learn;
-   `tflite` solo hace falta para `importar_tflite.py`.
-3. Las cuentas que graben tienen que ser admin (`profiles.es_admin = true`).
+## 📐 Arquitectura del modelo
 
-## 2. Grabar muestras
+Red MLP de Keras:
+
+* **Entrada:** características de la seña (las mismas que calcula la app: `signy_ml/caracteristicas.py` = `motor-senas/clasificador.ts`).
+  Con la configuración por defecto (12 frames, con z) son 12 × 127 = 1524 valores, normalizados dentro del modelo.
+* **Capa oculta 1:** 64 neuronas `ReLU` + Batch Normalization + Dropout (0.2).
+* **Capa oculta 2:** 32 neuronas `ReLU`.
+* **Salida:** N + 1 neuronas `Softmax`: una por seña con muestras y una para **"ninguna seña"** (`senaId` 0).
+
+> El modelo de 64 entradas de `dev` (un solo frame) no servía en la app, que no calcula ese vector.
+> Este pipeline usa las características que la app sí calcula (prueba de paridad incluida).
+
+---
+
+## 🚀 Requisitos e instalación
+
+Python **3.10 a 3.13** (TensorFlow todavía no publica una versión estable para 3.14).
+Desde la carpeta raíz del repo (`Proyecto-Senias`):
+
+```bash
+python -m pip install -r ml/requirements.txt
+```
+
+En Windows, si `python` no se reconoce, usar `py -3.12 -m pip install -r ml\requirements.txt`.
+
+En Supabase → SQL Editor, correr una vez (en este orden):
+1. `supabase/migrations/20261004120000_dataset_muestras_sena.sql` (tabla `muestras_sena`).
+2. `supabase/migrations/20261013120000_participante_muestras_sena.sql` (columna `participante`).
+
+Las cuentas que graben y entrenen tienen que ser admin (`profiles.es_admin = true`).
+
+---
+
+## 🎥 Grabar muestras
 
 En **AI Studio → Catálogo**, abrir una seña, escribir en **"Persona que hace la seña"** el apodo
 o las iniciales de quien está frente a la cámara (ej. `Cata`, `BV`) y:
 
-- **Grabar 5 seguidas al dataset** (modo ráfaga): graba 5 muestras una tras otra, con
-  una cuenta atrás entre cada una, y las guarda solas. Es la forma rápida.
-- O bien **Grabar seña** → hacerla → **Al dataset**, de a una.
-
-La lista del catálogo muestra cuántas muestras tiene cada seña (en naranjo si son menos de 10).
+- **Grabar 5 seguidas al dataset** (modo ráfaga), o
+- **Grabar seña** → hacerla → **Al dataset**, de a una. **Deshacer** borra una grabación mala.
 
 Para que el modelo funcione con alumnos reales:
 
 - **10 a 20 muestras por seña** como mínimo; más es mejor.
-- **Varias personas** (ojalá 3 o más): el modelo aprende la seña, no a la persona.
-  El reporte mide la precisión con personas que el modelo nunca vio.
-- **Cambiar el campo "Persona" cada vez que se graba a alguien distinto.** Se recuerda entre
-  señas (en ese dispositivo), y la cuenta atrás muestra a quién se está grabando. Si se deja
-  vacío, la persona es la cuenta con que se entró: sirve si cada uno graba con su propia
-  cuenta, pero si una cuenta graba a varias personas sin escribir el apodo, el modelo las
-  cuenta como una sola y la precisión del reporte sale engañosa.
-  No hace falta el nombre real: al descargar el dataset los apodos se reemplazan por `p1`, `p2`, …
-  ("Cata" y "cata" son la misma persona).
-- Variar un poco: distancia a la cámara, luz, velocidad, celular vertical y laptop.
-- Si una grabación salió mal, **Deshacer** la borra.
-- Las muestras son solo coordenadas de 21 puntos por mano: no se guardan imágenes ni video.
+- **Varias personas** (ojalá 3 o más), cambiando el campo "Persona" cada vez. El reporte mide la
+  precisión con personas que el modelo nunca vio. Al descargar, los apodos se anonimizan (`p1`, `p2`, …).
+- Variar distancia a la cámara, luz, velocidad, celular vertical y laptop.
+- Solo se guardan coordenadas de 21 puntos por mano: no imágenes ni video.
 
-## 3. Entrenar
+---
 
-Un solo comando, con una cuenta **admin** de la app (pide la contraseña; también se
-puede pasar en la variable `SIGNY_PASSWORD`):
+## 🏋️‍♂️ Entrenar
+
+```bash
+python ml/entrenar.py
+```
+
+Abre un menú:
+
+| Opción | Qué hace |
+|---|---|
+| 1 · Ver muestras de Supabase | Tabla de muestras y personas por seña (en amarillo, las que faltan) |
+| 2 · Volver a descargar | Refresca las muestras (se descargan una vez por sesión) |
+| 3 · Entrenar y actualizar el modelo de la app | Entrena, escribe `ml/output/` y actualiza la app (solo si la exactitud alcanza el mínimo: ver abajo) |
+| 4 · Entrenar de prueba | Igual, pero en `ml/reportes/prueba/` sin tocar la app |
+| 5 · Comparar configuraciones | Mide la configuración actual contra 8 frames, sin z, red chica, sin aumentación y sin clase "ninguna"; no guarda modelo |
+| 6 · Demo con datos sintéticos | Prueba el pipeline sin datos reales (no sirve para la app) |
+
+Correo y contraseña de admin se piden una sola vez por sesión y no se guardan
+(la contraseña también se puede pasar en `SIGNY_PASSWORD`).
+
+Sin menú (automatizable):
 
 ```bash
 python ml/entrenar.py --supabase --email admin@correo.cl
 ```
 
-Descarga todas las muestras (las personas quedan anonimizadas como `p1`, `p2`, …),
-entrena, mide la precisión y deja el modelo en
-`signy/src/assets/modelos/clasificador-senas.json` y el reporte en `ml/reportes/`
-(muestras y personas por seña, precisión por seña y confusiones más frecuentes).
-Hacer commit del modelo y compilar la app.
+Opciones (también aplican al menú): `--epocas 60`, `--frames 12`, `--sin-z`, `--capas 64,32`,
+`--aumentos 10`, `--precision 0.95`, `--umbral 0.6`, `--sin-ninguna`, `--salida carpeta/` (no reemplaza el modelo de la app).
 
-Se puede entrenar desde el primer día para probar que todo funciona: con muy pocas
-muestras el modelo igual se genera, pero el reporte dice "sin evaluación" hasta que
-haya suficientes para separar una parte de prueba. Un modelo con pocas muestras no
-conviene dejarlo en la app: usar `--salida ml/reportes/prueba.json` para no
-reemplazar el de la app mientras se junta el dataset.
+**El modelo solo se instala en la app si su exactitud en prueba es de 80 % o más.** Si no llega
+(o no hay datos para medirla), se guarda como prueba en `ml/reportes/prueba/` y no toca la app ni
+`ml/output/`: un modelo malo en la app aprobaría señas mal hechas. `--forzar` lo instala igual.
 
-En Windows, desde PowerShell o CMD en la carpeta raíz del repo:
-`py ml\entrenar.py --supabase --email admin@correo.cl` (o `python ...` si ese comando funciona).
-En Git Bash, `getpass` no puede pedir la contraseña: definirla antes con `export SIGNY_PASSWORD='...'`
-(en PowerShell: `$env:SIGNY_PASSWORD='...'`), o usar `winpty python ...`.
+En Git Bash, `getpass` no puede pedir la contraseña: definir antes `export SIGNY_PASSWORD='...'`
+(en PowerShell: `$env:SIGNY_PASSWORD='...'`).
 
-El reporte dice cuántas muestras y personas quedaron para la prueba. Una seña marcada
-"— (sin prueba)" no tuvo muestras en esa parte: no significa que el modelo falle con ella.
+Con pocas muestras el modelo igual se genera, pero el reporte dice "sin evaluación" hasta que haya
+suficientes para separar una parte de prueba. Mientras se junta el dataset, usar la opción 4.
 
-Alternativa sin conexión desde Python: AI Studio en el navegador del computador →
-botón **Dataset (N)** → `python ml/entrenar.py --dataset signy-dataset-AAAAMMDD.json`.
-(En la app del celular ese botón no descarga archivos: usar `--supabase`.)
+### Cómo se mide
 
-Opciones útiles: `--frames 12` (resolución temporal), `--sin-z` (ignora la
-profundidad), `--capas 64,32` (tamaño de la red), `--aumentos 10`, `--umbral 0.6`.
+Con 3 o más personas se entrena **una vez por persona**, dejándola fuera, y se prueba con ella: cada
+persona se mide como un alumno nuevo. El reporte da la exactitud promedio ± la variación entre personas
+y la exactitud de cada una (la peor dice a quién o qué condición falta grabar). Con menos personas se usa
+una partición al azar. Estas rondas solo miden: **el modelo que va a la app se entrena con el 100 % de
+las muestras y personas**, sin apartar validación.
 
-Para probar el pipeline sin datos reales: `python ml/entrenar.py --demo-sintetico`
-(escribe en `ml/reportes/`, **no** en la app).
+### Umbral y "ninguna seña"
 
-## 4. Cómo lo usa la app
+Además de las señas, el modelo aprende la clase "ninguna seña" con movimientos armados empalmando el
+comienzo de una seña con el final de otra (lo que pasa entre señas o cuando el alumno hace otra cosa).
+El umbral de confianza ya no es fijo: se elige el más bajo (0.50 a 0.95) con el que, de lo que el modelo
+acepta, acierta al menos `--precision` (95 %), contando como error aceptar un movimiento que no es seña.
+Un umbral más alto rechaza más intentos dudosos; bajar `--precision` lo hace más permisivo.
+La app no necesita cambios: el id 0 nunca coincide con la seña pedida.
+
+---
+
+## 📦 Salidas
+
+En `ml/output/`:
+1. `model.tflite` — modelo TensorFlow Lite para Android/iOS (incluye la normalización de la entrada).
+2. `model_weights.json` — pesos para la inferencia en TypeScript de la app (BatchNorm fusionada, float16).
+3. `labels.json` — palabra de cada salida del modelo, en orden.
+
+`model_weights.json` se copia a `signy/src/assets/modelos/clasificador-senas.json`, que es lo que carga
+la app. Hacer commit del modelo y compilar la app. El reporte (muestras, precisión por seña, exactitud
+por persona y confusiones más frecuentes) queda en `ml/reportes/`.
+
+---
+
+## 📱 Cómo lo usa la app
 
 `ReconocedorSenasService` combina dos motores:
 
@@ -104,50 +144,27 @@ Para probar el pipeline sin datos reales: `python ml/entrenar.py --demo-sintetic
 | Referencia (DTW) | 1 grabación de la seña ("Usar como referencia") | siempre que exista |
 | Clasificador entrenado | el modelo de este pipeline | si el archivo existe y conoce la seña |
 
-La seña se aprueba si **cualquiera** de los dos la reconoce (el clasificador, solo si
-la seña es su primera opción y supera el umbral). Sin modelo ni referencia, la
-práctica solo verifica que se vieron las manos (como antes).
+La seña se aprueba si **cualquiera** de los dos la reconoce (el clasificador, solo si la seña es su
+primera opción y supera el umbral).
 
-## 5. Modelos entrenados en Keras/TFLite
+---
 
-Si se entrena con otro framework (por ejemplo, el MLP de Keras en `ml/output/`), se
-puede llevar a la app siempre que use **las mismas características** que
-`signy_ml/caracteristicas.py`. El importador lee el `.tflite`, asocia cada etiqueta
-con su seña y verifica que el resultado reproduce al original:
+## ✅ Pruebas
 
-```bash
-python ml/importar_tflite.py --modelo modelo.tflite --etiquetas labels.json --dataset signy-dataset.json
-```
-
-Se lee el `.tflite` y no un JSON de pesos exportado a mano porque, al convertir a
-TFLite, las capas **BatchNormalization** quedan fusionadas en la capa densa
-siguiente; un JSON con solo las capas densas es otro modelo.
-
-Estado del modelo en `ml/output/` (subido a `dev` el 04-10-2026):
-- Espera **64 entradas** por predicción, cuyo cálculo no está en el repo (falta el
-  script de entrenamiento), así que la app no le puede entregar datos correctos todavía.
-- `model_weights.json` no incluye la BatchNorm: no coincide con `model.tflite`.
-- No trae métricas. Casi todos los pesos de la primera capa siguen cerca de su valor
-  inicial, lo que sugiere muy pocos datos o épocas de entrenamiento.
-
-## 6. Garantías (pruebas)
-
-- `python -m unittest discover -s ml/tests`: características, aumentación,
-  validación del dataset, entrenamiento de punta a punta, CLI, descarga desde
-  Supabase (contra un servidor simulado con login y RLS) e importador TFLite.
-- **Paridad Python ↔ app** (`clasificador.spec.ts`): la app calcula las mismas
-  características y probabilidades que Python (diferencia < 1e-6). Si se cambia
-  `signy_ml/caracteristicas.py` o `motor-senas/clasificador.ts`, hay que cambiar
-  ambos y regenerar el fixture: `python ml/generar_fixture_paridad.py`.
+- `python -m unittest discover -s ml/tests`: características, aumentación, validación del dataset,
+  partición de prueba por persona, entrenamiento de punta a punta, **paridad `model.tflite` ↔ `model_weights.json`**,
+  CLI y descarga desde Supabase (servidor simulado con login y RLS).
+- **Paridad Python ↔ app** (`clasificador.spec.ts`): si se cambia `signy_ml/caracteristicas.py` o
+  `motor-senas/clasificador.ts`, cambiar ambos y regenerar el fixture: `python ml/generar_fixture_paridad.py`.
 
 ## Detalle técnico
 
-- **Características** (`caracteristicas.py` = `clasificador.ts`): coordenadas
-  isotrópicas (corrige la relación de aspecto de la cámara), seguimiento estable
-  de las dos manos, remuestreo a N frames, centrado en la muñeca media y escalado
-  por el tamaño de mano mediano; mano A + mano B (o ceros) + bandera de presencia.
-- **Aumentación**: espejo (zurdos), giro de la mano ±17°, escala, temblor,
-  deformación no lineal del tiempo y recorte de bordes.
-- **Modelo**: red neuronal MLP (scikit-learn) con ReLU y softmax; pesos en float16
-  (~300 KB). La inferencia en la app es TypeScript puro, sin dependencias.
+- **Características**: coordenadas isotrópicas, seguimiento estable de las dos manos, remuestreo a N
+  frames, centrado en la muñeca media y escalado por el tamaño de mano; mano A + mano B (o ceros) + bandera de presencia.
+- **Aumentación**: espejo (zurdos), giro de la mano ±17°, ángulo de cámara 3D ±20° (lados e inclinación),
+  proporciones de la mano (palma y cada dedo ±10 %), temblor, velocidad dispareja, recorte de bordes y
+  frames en que MediaPipe pierde la mano. Cada 10 épocas se generan variantes nuevas, así el modelo
+  ve unas 60 versiones distintas de cada muestra en vez de 10 fijas.
+- **Exportación**: la BatchNorm se fusiona en la densa siguiente igual que lo hace TFLite; exportar solo
+  las densas daría otro modelo. Una prueba verifica que el JSON y el `.tflite` dan las mismas probabilidades.
 - **Formato del dataset**: ver el encabezado de `signy_ml/dataset.py`.
