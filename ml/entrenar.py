@@ -263,24 +263,44 @@ def menu_interactivo(a: argparse.Namespace) -> int:
                 return None
         return sesion["ds"]
 
+    def ds_activo(recargar: bool = False):
+        """El dataset descargado, sin las personas excluidas en el menú (ver `excluir`)."""
+        ds = dataset(recargar)
+        if ds is None:
+            return None
+        excluir = sesion.get("excluir", set())
+        if excluir:
+            aviso(f"Excluyendo del entrenamiento: {', '.join(sorted(excluir))}")
+        return ds.sin_participantes(excluir)
+
+    def excluir():
+        ds = dataset()
+        if not ds:
+            return
+        consola.print("Personas en el dataset: " + ", ".join(sorted(ds.participantes())))
+        texto = Prompt.ask("Personas a excluir, separadas por coma (vacío = no excluir a nadie)",
+                           default=", ".join(sorted(sesion.get("excluir", set()))))
+        sesion["excluir"] = {p.strip() for p in texto.split(",") if p.strip()}
+
     def ver(recargar: bool):
-        if ds := dataset(recargar):
+        if ds := ds_activo(recargar):
             mostrar_dataset(ds)
 
     def comparar_configuraciones():
-        if ds := dataset():
+        if ds := ds_activo():
             try:
                 comparar(ds, a)
             except ValueError as e:
                 error(str(e))
 
     def entrenar_con(salida: Path, instalar: bool):
-        if ds := dataset():
+        if ds := ds_activo():
             entrenar_y_guardar(ds, opciones(a), salida, instalar, preguntar=instalar)
 
     menu("Signy · entrenamiento del clasificador de señas", [
         ("Ver muestras de Supabase (por seña y persona)", lambda: ver(False)),
         ("Volver a descargar las muestras", lambda: ver(True)),
+        ("Excluir persona(s) antes de entrenar (ej. p1,p3)", excluir),
         ("Entrenar y actualizar el modelo de la app", lambda: entrenar_con(a.salida or SALIDA_ML, a.salida is None)),
         ("Entrenar de prueba (no toca la app → ml/reportes/prueba/)", lambda: entrenar_con(RAIZ / "reportes" / "prueba", False)),
         ("Comparar configuraciones (solo mide, no guarda modelo)", comparar_configuraciones),

@@ -137,6 +137,16 @@ class TestDataset(unittest.TestCase):
         cap = expandir_captura({"ancho": 1, "alto": 1, "frames": [{"t": 0, "m": [[1, 2, 3], [float("nan")] * 63, [0.5] * 63]}]})
         self.assertEqual(len(cap["frames"][0]["manos"]), 1)
 
+    def test_sin_participantes_descarta_sus_muestras(self):
+        ds = leer_dataset(dataset_sintetico(["HOLA", "SI"], 3, 2))
+        filtrado = ds.sin_participantes({"p1"})
+        self.assertEqual(filtrado.participantes(), {"p2", "p3"})
+        self.assertEqual(ds.participantes(), {"p1", "p2", "p3"})  # el original no cambia
+
+    def test_sin_participantes_vacio_devuelve_el_mismo_dataset(self):
+        ds = leer_dataset(dataset_sintetico(["HOLA"], 2, 1))
+        self.assertIs(ds.sin_participantes(set()), ds)
+
 
 class TestEntrenamiento(unittest.TestCase):
     def test_reconoce_senas_de_personas_no_vistas(self):

@@ -64,6 +64,12 @@ class Dataset:
             personas.setdefault(m.sena_id, set()).add(m.participante)
         return {sena_id: len(p) for sena_id, p in personas.items()}
 
+    def sin_participantes(self, nombres: set[str]) -> "Dataset":
+        """Copia sin las muestras de esas personas (p. ej. para descartar a quien grabó mal antes de entrenar)."""
+        if not nombres:
+            return self
+        return Dataset(senas=self.senas, muestras=[m for m in self.muestras if m.participante not in nombres])
+
 
 def expandir_captura(compacta: dict) -> dict:
     if "ancho" not in compacta or "alto" not in compacta or "frames" not in compacta:
