@@ -140,6 +140,18 @@ class TestDescargaSupabase(unittest.TestCase):
         self.assertEqual([m["participante"] for m in ds["muestras"][:6]], ["p1", "p2", "p1", "p3", "p3", "p4"])
         self.assertNotRegex(json.dumps(ds), "Cata|Benja|uuid-")
 
+    def test_apodos_salida_tiene_el_nombre_real_pero_el_dataset_sigue_anonimizado(self):
+        originales = FalsoSupabase.muestras
+        apodos_tipeados = ["Cata", "Benja", " cata ", "Benjamín", "benjamin", None]
+        FalsoSupabase.muestras = [{**m, "autor_id": "uuid-admin", "participante": apodos_tipeados[i % 6]} for i, m in enumerate(_muestras(12))]
+        try:
+            apodos = {}
+            ds = sb.descargar_dataset(self.url, CLAVE, "admin@signy.cl", "clave-admin", apodos_salida=apodos)
+        finally:
+            FalsoSupabase.muestras = originales
+        self.assertEqual(apodos, {"p1": "Cata", "p2": "Benja", "p3": "Benjamín", "p4": "sin apodo (entró con su cuenta)"})
+        self.assertNotRegex(json.dumps(ds), "Cata|Benja|uuid-")  # el dataset descargado sigue sin nombres
+
     def test_sin_la_migracion_de_participante_usa_la_cuenta(self):
         FalsoSupabase.sin_columna_participante = True
         ds = sb.descargar_dataset(self.url, CLAVE, "admin@signy.cl", "clave-admin")

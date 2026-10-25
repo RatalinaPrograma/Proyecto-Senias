@@ -58,7 +58,11 @@ Para que el modelo funcione con alumnos reales:
 
 - **10 a 20 muestras por seña** como mínimo; más es mejor.
 - **Varias personas** (ojalá 3 o más), cambiando el campo "Persona" cada vez. El reporte mide la
-  precisión con personas que el modelo nunca vio. Al descargar, los apodos se anonimizan (`p1`, `p2`, …).
+  precisión con personas que el modelo nunca vio. El dataset descargado se anonimiza (`p1`, `p2`, …);
+  en el menú y en el reporte se muestra entre paréntesis el apodo real (ej. `p1 (Cata)`), solo como
+  ayuda para decidir a quién excluir — nunca se guarda en el archivo del dataset.
+- Si alguien grabó mal (ej. 0 % de exactitud), el menú tiene **"Excluir persona(s) antes de entrenar"**
+  para entrenar sin sus muestras, sin tener que borrar nada en Supabase.
 - Variar distancia a la cámara, luz, velocidad, celular vertical y laptop.
 - Solo se guardan coordenadas de 21 puntos por mano: no imágenes ni video.
 

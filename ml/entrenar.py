@@ -93,7 +93,7 @@ def escribir_reporte(ruta: Path, ds, metricas: dict, modelo: dict, destino: Path
 
     if metricas.get("exactitudPorPersona"):
         lineas += ["", "## Exactitud por persona", "", "| Persona | Exactitud |", "|---|---|"]
-        lineas += [f"| {p} | {_pct(v)} |" for p, v in sorted(metricas["exactitudPorPersona"].items(), key=lambda x: x[1])]
+        lineas += [f"| {ds.nombre_persona(p)} | {_pct(v)} |" for p, v in sorted(metricas["exactitudPorPersona"].items(), key=lambda x: x[1])]
 
     confusiones = []
     nombres, matriz = metricas.get("clasesConfusion", []), metricas.get("confusion", [])
@@ -112,9 +112,13 @@ def descargar(email: str, password: str) -> Dataset:
     from signy_ml.supabase_descarga import descargar_dataset, leer_config_app
 
     url, clave = leer_config_app(RAIZ.parent)
+    apodos: dict[str, str] = {}
     with consola.status("Descargando muestras de Supabase…") as estado:
-        datos = descargar_dataset(url, clave, email, password, lambda n: estado.update(f"Descargando muestras de Supabase… {n}"))
-    return leer_dataset(datos)
+        datos = descargar_dataset(url, clave, email, password, lambda n: estado.update(f"Descargando muestras de Supabase… {n}"),
+                                  apodos_salida=apodos)
+    ds = leer_dataset(datos)
+    ds.apodos = apodos
+    return ds
 
 
 def mostrar_dataset(ds: Dataset) -> None:
@@ -173,7 +177,7 @@ def entrenar_y_guardar(ds: Dataset, op: OpcionesEntrenamiento, salida: Path, ins
     consola.print(f"Muestras de prueba: {m['muestrasPrueba']} de {len(ds.muestras)} ({m.get('personasPrueba', 0)} persona(s))")
     consola.print(f"Exactitud en prueba: [bold]{_exactitud(m)}[/]")
     if m["exactitudPorPersona"]:
-        consola.print("Por persona: " + ", ".join(f"{p} {_pct(v)}" for p, v in sorted(m["exactitudPorPersona"].items())))
+        consola.print("Por persona: " + ", ".join(f"{ds.nombre_persona(p)} {_pct(v)}" for p, v in sorted(m["exactitudPorPersona"].items())))
     consola.print(f"Umbral: {r.modelo['umbralSugerido']}{' (calculado)' if m['umbralCalculado'] else ' (por defecto: faltan datos de prueba)'}"
                   f" · rechaza el {_pct(m['rechazoNinguna'])} de los movimientos que no son seña")
 
@@ -231,7 +235,7 @@ def comparar(ds: Dataset, a: argparse.Namespace) -> None:
         with consola.status(f"Evaluando «{nombre}»…"):
             m = entrenar(ds, op, solo_evaluar=True).metricas
         peor = min(m["exactitudPorPersona"].items(), key=lambda x: x[1], default=None)
-        tabla.add_row(nombre, _exactitud(m), f"{_pct(peor[1])} ({peor[0]})" if peor else "—", _pct(m["rechazoNinguna"]),
+        tabla.add_row(nombre, _exactitud(m), f"{_pct(peor[1])} ({ds.nombre_persona(peor[0])})" if peor else "—", _pct(m["rechazoNinguna"]),
                       str(m["umbral"]), f"{time.perf_counter() - inicio:.0f} s")
     consola.print(tabla)
 
@@ -277,7 +281,7 @@ def menu_interactivo(a: argparse.Namespace) -> int:
         ds = dataset()
         if not ds:
             return
-        consola.print("Personas en el dataset: " + ", ".join(sorted(ds.participantes())))
+        consola.print("Personas en el dataset: " + ", ".join(ds.nombre_persona(p) for p in sorted(ds.participantes())))
         texto = Prompt.ask("Personas a excluir, separadas por coma (vacío = no excluir a nadie)",
                            default=", ".join(sorted(sesion.get("excluir", set()))))
         sesion["excluir"] = {p.strip() for p in texto.split(",") if p.strip()}

@@ -110,8 +110,13 @@ COLUMNAS_MUESTRAS = "id,sena_id,autor_id,participante,tipo,manos_requeridas,capt
 
 
 def descargar_dataset(url: str, clave: str, email: str, password: str,
-                      al_avanzar: Optional[Callable[[int], None]] = None) -> dict:
-    """Dataset en el mismo formato que exporta AI Studio (personas anonimizadas p1, p2, …)."""
+                      al_avanzar: Optional[Callable[[int], None]] = None,
+                      apodos_salida: Optional[dict] = None) -> dict:
+    """Dataset en el mismo formato que exporta AI Studio (personas anonimizadas p1, p2, …).
+
+    Si se pasa `apodos_salida`, se llena ahí (código -> apodo real, p. ej. "p1" -> "Cata") para
+    mostrarlo solo en la terminal de quien entrena. No va dentro del dataset: este sigue
+    anonimizado, porque puede terminar en un reporte o archivo."""
     token = iniciar_sesion(url, clave, email, password)
     try:
         muestras = _leer_todo(url, clave, token, "muestras_sena", COLUMNAS_MUESTRAS, al_avanzar)
@@ -128,8 +133,12 @@ def descargar_dataset(url: str, clave: str, email: str, password: str,
 
     def anonimo(muestra: dict) -> str:
         clave_muestra = clave_persona(muestra)
-        participantes.setdefault(clave_muestra, f"p{len(participantes) + 1}")
-        return participantes[clave_muestra]
+        nuevo = clave_muestra not in participantes
+        codigo = participantes.setdefault(clave_muestra, f"p{len(participantes) + 1}")
+        if nuevo and apodos_salida is not None:
+            apodo = limpiar_participante(muestra.get("participante"))
+            apodos_salida[codigo] = apodo or "sin apodo (entró con su cuenta)"
+        return codigo
 
     con_muestras = {m["sena_id"] for m in muestras}
     return {

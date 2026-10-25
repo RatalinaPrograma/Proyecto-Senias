@@ -38,6 +38,9 @@ class Muestra:
 class Dataset:
     senas: dict[int, str]
     muestras: list[Muestra] = field(default_factory=list)
+    # código (p1, p2, …) -> apodo real; nunca viene del archivo del dataset (que sigue anonimizado),
+    # solo lo llena `entrenar.descargar()` para mostrarlo en la terminal (ver supabase_descarga.descargar_dataset).
+    apodos: dict[str, str] = field(default_factory=dict)
 
     def conteo_por_sena(self) -> Counter:
         return Counter(m.sena_id for m in self.muestras)
@@ -68,7 +71,13 @@ class Dataset:
         """Copia sin las muestras de esas personas (p. ej. para descartar a quien grabó mal antes de entrenar)."""
         if not nombres:
             return self
-        return Dataset(senas=self.senas, muestras=[m for m in self.muestras if m.participante not in nombres])
+        return Dataset(senas=self.senas, apodos=self.apodos,
+                       muestras=[m for m in self.muestras if m.participante not in nombres])
+
+    def nombre_persona(self, codigo: str) -> str:
+        """Para mostrar en la terminal: "p1 (Cata)", o solo "p1" si no se conoce el apodo."""
+        apodo = self.apodos.get(codigo)
+        return f"{codigo} ({apodo})" if apodo else codigo
 
 
 def expandir_captura(compacta: dict) -> dict:

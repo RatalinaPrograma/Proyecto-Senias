@@ -147,6 +147,13 @@ class TestDataset(unittest.TestCase):
         ds = leer_dataset(dataset_sintetico(["HOLA"], 2, 1))
         self.assertIs(ds.sin_participantes(set()), ds)
 
+    def test_nombre_persona_muestra_el_apodo_si_se_conoce(self):
+        ds = leer_dataset(dataset_sintetico(["HOLA"], 2, 1))
+        ds.apodos = {"p1": "Cata"}
+        self.assertEqual(ds.nombre_persona("p1"), "p1 (Cata)")
+        self.assertEqual(ds.nombre_persona("p2"), "p2")  # sin apodo conocido
+        self.assertEqual(ds.sin_participantes({"p2"}).apodos, ds.apodos)  # se conserva al filtrar
+
 
 class TestEntrenamiento(unittest.TestCase):
     def test_reconoce_senas_de_personas_no_vistas(self):
