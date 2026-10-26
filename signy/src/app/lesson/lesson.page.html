@@ -109,7 +109,7 @@
             <span *ngIf="matchCompleto">🎉</span>
           </div>
           <div class="guide-message">
-            <span *ngIf="!selMano && !selPalabra && !matchCompleto">{{ hayTilesConVideo ? 'Toca una seña para verla en movimiento y luego su palabra' : 'Toca una seña y luego su palabra para unirlas' }}</span>
+            <span *ngIf="!selMano && !selPalabra && !matchCompleto">{{ hayTilesConVideo && !animarTodas ? 'Toca una seña para verla en movimiento y luego su palabra' : 'Toca una seña y luego su palabra para unirlas' }}</span>
             <span *ngIf="selMano && !selPalabra && !matchMal">¡Bien! Ahora toca la palabra que le corresponde</span>
             <span *ngIf="!selMano && selPalabra && !matchMal">¡Bien! Ahora toca el video de la seña</span>
             <span *ngIf="selMano && selPalabra && !matchMal">Comprobando pareja…</span>
@@ -133,7 +133,7 @@
             [class.wrong]="selMano === m && matchMal"
             (click)="elegirMano(m)">
             <div class="match-media-inner">
-              <app-gif-tile *ngIf="m.videoUrl" [url]="m.videoUrl" [activo]="selMano === m"></app-gif-tile>
+              <app-gif-tile *ngIf="m.videoUrl" [url]="m.videoUrl" [activo]="selMano === m" [siempreAnimado]="animarTodas"></app-gif-tile>
               <div class="match-icon-fallback" *ngIf="!m.videoUrl">
                 <app-sena-icon [seed]="m.seed" [size]="46" [color]="nivel.color || '#F2701A'" [dark]="nivel.color_oscuro || '#C6560E'"></app-sena-icon>
               </div>

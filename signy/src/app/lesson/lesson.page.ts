@@ -4,6 +4,7 @@ import { AlertController, IonicModule } from '@ionic/angular';
 import { ActivatedRoute, Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
 import { ContenidoService } from '../services/contenido';
+import { PreferenciasVideoService } from '../services/preferencias-video';
 import { TtsService } from '../services/tts';
 import { Nivel, Subnivel, Sena, RachaHistorialDia } from '../data/db-types';
 import { SenaIconComponent } from '../shared/sena-icon/sena-icon.component';
@@ -206,6 +207,9 @@ export class LessonPage implements OnInit, OnDestroy {
 
   // ---- salir de la lección (botón atrás del teléfono y la X) ----
   private readonly alertCtrl = inject(AlertController);
+  private readonly preferenciasVideo = inject(PreferenciasVideoService);
+  /** Emparejar: todas las señas en movimiento a la vez (Ajustes → Rendimiento). */
+  animarTodas = true;
   private readonly atras = inject(BotonAtrasService).paraPantalla(() => this.alPresionarAtras());
   private alertaSalida: HTMLIonAlertElement | null = null;
   /** Mientras se guarda el progreso final no se puede salir a medias. */
@@ -228,6 +232,7 @@ export class LessonPage implements OnInit, OnDestroy {
       // una lección), así que si el usuario ya vio este subnivel antes la
       // precarga de abajo no vuelve a gastar datos: solo lee de disco.
       this.cargaProgreso = 5;
+      void this.preferenciasVideo.animarTodas().then((v) => (this.animarTodas = v));
 
       const subnivelId = Number(this.route.snapshot.paramMap.get('subnivelId'));
 

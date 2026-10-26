@@ -7,13 +7,14 @@ import { SupabaseService } from '../services/supabase';
 import { BotonAtrasService } from '../services/boton-atras';
 import { TtsService } from '../services/tts';
 import { ContenidoService } from '../services/contenido';
+import { PreferenciasVideoService } from '../services/preferencias-video';
 import { NotificationsService, NotifConfig } from '../services/notifications';
 import { PermissionState } from '@capacitor/core';
 import { SpeechSynthesisVoice } from '@capacitor-community/text-to-speech';
 import { passwordStrengthValidator, passwordsMatchValidator } from '../shared/validators';
 import { Profile } from '../data/db-types';
 import { addIcons } from 'ionicons';
-import { arrowBack, paw, cameraOutline, shieldCheckmark, trashOutline, volumeHigh, notificationsOutline, personCircleOutline, keyOutline } from 'ionicons/icons';
+import { arrowBack, paw, cameraOutline, shieldCheckmark, trashOutline, volumeHigh, notificationsOutline, personCircleOutline, keyOutline, speedometerOutline } from 'ionicons/icons';
 
 addIcons({
   'arrow-back': arrowBack,
@@ -25,6 +26,7 @@ addIcons({
   'notifications-outline': notificationsOutline,
   'person-circle-outline': personCircleOutline,
   'key-outline': keyOutline,
+  'speedometer-outline': speedometerOutline,
 });
 
 @Component({
@@ -71,6 +73,10 @@ export class SettingsPage implements OnInit {
   voces: SpeechSynthesisVoice[] = [];
   vozSeleccionada: string | null = null;
   guardandoVoz = false;
+
+  // ---- rendimiento (preferencia de este dispositivo) ----
+  animarTodasLasSenas = true;
+  private readonly preferenciasVideo = inject(PreferenciasVideoService);
 
   // ---- notificaciones ----
   notifDisponible = true;
@@ -129,6 +135,8 @@ export class SettingsPage implements OnInit {
       this.voces = await this.ttsService.listarVoces();
       this.vozSeleccionada = await this.ttsService.obtenerVozPreferida(this.userId);
     }
+
+    this.animarTodasLasSenas = await this.preferenciasVideo.animarTodas();
 
     const { data: factores } = await this.supabaseService.mfaListFactors();
     const verificado = factores?.totp?.find(f => f.status === 'verified');
@@ -207,6 +215,12 @@ export class SettingsPage implements OnInit {
   }
 
   // ========== ACCESIBILIDAD (TEXTO A VOZ) ==========
+  /** En el emparejar: todas las señas en movimiento a la vez, o solo la que se toca (celulares lentos). */
+  async cambiarAnimarTodas(evento: any) {
+    this.animarTodasLasSenas = !!evento?.detail?.checked;
+    await this.preferenciasVideo.setAnimarTodas(this.animarTodasLasSenas);
+  }
+
   async cambiarTts(evento: any) {
     const valor: boolean = evento.detail.checked;
     this.ttsHabilitado = valor; // optimista, se revierte si falla el guardado

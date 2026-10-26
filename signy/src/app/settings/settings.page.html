@@ -106,6 +106,24 @@
       </ion-button>
     </section>
 
+    <!-- ===== RENDIMIENTO ===== -->
+    <section class="card-section">
+      <h2><ion-icon name="speedometer-outline"></ion-icon> Rendimiento</h2>
+
+      <p class="section-hint">
+        Si en el ejercicio de emparejar el celular se pone lento, desactívalo: solo se moverá la seña que toques.
+      </p>
+
+      <ion-item lines="none" class="tts-toggle-row">
+        <ion-label>Animar todas las señas a la vez</ion-label>
+        <ion-toggle
+          [checked]="animarTodasLasSenas"
+          (ionChange)="cambiarAnimarTodas($event)"
+          aria-label="Animar todas las señas a la vez">
+        </ion-toggle>
+      </ion-item>
+    </section>
+
     <!-- ===== NOTIFICACIONES ===== -->
     <section class="card-section" *ngIf="notifDisponible">
       <h2><ion-icon name="notifications-outline"></ion-icon> Notificaciones</h2>

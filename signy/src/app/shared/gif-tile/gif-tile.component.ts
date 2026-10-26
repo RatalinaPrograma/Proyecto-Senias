@@ -4,9 +4,12 @@ import { ImageCacheService, POSTER_TRANSPARENTE } from '../../services/image-cac
 import { esVideoMp4 } from '../media-utils';
 
 /**
- * Tile multimedia para la fase de Emparejar ("Match"): muestra la seña
- * "congelada" en su primer frame, con un ícono ▶ que invita a tocarla, hasta
- * que el tile pasa a [activo]=true, y recién ahí se anima/reproduce.
+ * Tile multimedia para la fase de Emparejar ("Match").
+ *
+ * Con [siempreAnimado]=true (lo normal, ver Ajustes → Rendimiento) la seña se
+ * reproduce en bucle todo el tiempo. Si no, muestra la seña "congelada" en su
+ * primer frame, con un ícono ▶ que invita a tocarla, hasta que el tile pasa a
+ * [activo]=true, y recién ahí se anima/reproduce (para celulares lentos).
  *
  * Por qué congelar por defecto: si varios tiles muestran su seña animada a la
  * vez, se ve como un solo bloque de movimiento confuso, y en celulares de gama
@@ -43,9 +46,9 @@ import { esVideoMp4 } from '../media-utils';
       </ng-container>
       <ng-template #gifTpl>
         <canvas #lienzo class="gif-tile-media" [class.listo]="listo"></canvas>
-        <img #imagen class="gif-tile-media" [class.listo]="listo" [class.oculto]="!activo" alt="" decoding="async" />
+        <img #imagen class="gif-tile-media" [class.listo]="listo" [class.oculto]="!reproduciendo" alt="" decoding="async" />
       </ng-template>
-      <span class="gif-tile-play" *ngIf="!activo" aria-hidden="true"></span>
+      <span class="gif-tile-play" *ngIf="!reproduciendo" aria-hidden="true"></span>
     </div>
   `,
   styles: [`
@@ -116,6 +119,8 @@ import { esVideoMp4 } from '../media-utils';
 export class GifTileComponent implements OnChanges, AfterViewInit {
   @Input() url: string | null | undefined;
   @Input() activo = false;
+  /** Reproducir siempre, aunque no esté seleccionado (preferencia "Animar todas las señas a la vez"). */
+  @Input() siempreAnimado = false;
 
   @ViewChild('lienzo') private lienzoRef?: ElementRef<HTMLCanvasElement>;
   @ViewChild('imagen') private imagenRef?: ElementRef<HTMLImageElement>;
@@ -152,6 +157,10 @@ export class GifTileComponent implements OnChanges, AfterViewInit {
     this.actualizarReproduccion();
   }
 
+  get reproduciendo(): boolean {
+    return this.activo || this.siempreAnimado;
+  }
+
   marcarListo() {
     this.listo = true;
   }
@@ -164,7 +173,7 @@ export class GifTileComponent implements OnChanges, AfterViewInit {
       video.muted = true; // el atributo `muted` puesto por Angular no siempre llega a la propiedad
       if (video.src !== this.urlResuelta) {
         video.src = this.urlResuelta;
-        if (!this.activo) this.mostrarPrimerCuadro(video);
+        if (!this.reproduciendo) this.mostrarPrimerCuadro(video);
       }
       if (video.readyState >= 2) this.listo = true;
     } else {
@@ -180,7 +189,7 @@ export class GifTileComponent implements OnChanges, AfterViewInit {
   private mostrarPrimerCuadro(video: HTMLVideoElement) {
     video.play()
       .then(() => {
-        if (this.activo) return;
+        if (this.reproduciendo) return;
         video.pause();
         video.currentTime = 0;
       })
@@ -212,7 +221,7 @@ export class GifTileComponent implements OnChanges, AfterViewInit {
     if (this.esVideo) {
       const video = this.videoRef?.nativeElement;
       if (!video) return;
-      if (this.activo) {
+      if (this.reproduciendo) {
         video.currentTime = 0;
         video.loop = true;
         video.play().catch(() => {});
@@ -224,7 +233,7 @@ export class GifTileComponent implements OnChanges, AfterViewInit {
     }
 
     if (!this.imagenRef) return;
-    if (this.activo && this.urlResuelta) {
+    if (this.reproduciendo && this.urlResuelta) {
       this.imagenRef.nativeElement.src = this.urlResuelta;
     } else {
       this.imagenRef.nativeElement.src = '';
