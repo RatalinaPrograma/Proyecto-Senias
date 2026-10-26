@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, Input, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, ElementRef, HostListener, Input, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IonicModule, ModalController } from '@ionic/angular';
@@ -27,6 +27,7 @@ import {
   compactarCaptura,
   dibujarManos,
   limpiarParticipante,
+  sincronizarTamanoCanvas,
 } from '../../motor-senas';
 
 addIcons({
@@ -76,7 +77,8 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
   private stream: MediaStream | null = null;
   private handLandmarker: HandLandmarker | null = null;
   private animationFrameId = 0;
-  private readonly controlFrames = new ControlFramesVideo();
+  private readonly controlFrames = new ControlFramesVideo(45); // ~22 FPS máx para evitar saturación en móvil
+  private readonly ngZone = inject(NgZone);
 
   // Configuración de la seña
   tipoSena: 'dinamica' | 'estatica' = 'dinamica';
@@ -252,7 +254,12 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: this.facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
+          video: {
+            facingMode: this.facingMode,
+            width: { ideal: 480, max: 640 },
+            height: { ideal: 360, max: 480 },
+            frameRate: { ideal: 24, max: 30 },
+          },
           audio: false,
         });
       } catch {
@@ -303,33 +310,50 @@ export class SenaTrainerModalComponent implements OnInit, OnDestroy {
   // ---------- Bucle de detección ----------
   private iniciarBucle() {
     this.controlFrames.reiniciar();
-    const render = () => {
-      const video = this.videoRef?.nativeElement;
-      const canvas = this.canvasRef?.nativeElement;
+    this.ngZone.runOutsideAngular(() => {
+      const render = () => {
+        const video = this.videoRef?.nativeElement;
+        const canvas = this.canvasRef?.nativeElement;
+        const ahora = performance.now();
 
-      if (video && canvas && this.handLandmarker && this.estadoCamara === 'activa' && video.videoWidth > 0 && !video.paused && this.controlFrames.esFrameNuevo(video)) {
-        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
+        if (
+          video &&
+          canvas &&
+          this.handLandmarker &&
+          this.estadoCamara === 'activa' &&
+          video.videoWidth > 0 &&
+          !video.paused &&
+          this.controlFrames.esFrameNuevo(video, ahora)
+        ) {
+          sincronizarTamanoCanvas(canvas, video.videoWidth, video.videoHeight);
+          const ctx = canvas.getContext('2d');
+          ctx?.clearRect(0, 0, canvas.width, canvas.height);
+          const marca = this.controlFrames.marcaDeTiempo(ahora);
+          try {
+            const results = this.handLandmarker.detectForVideo(video, marca);
+            const detectadas = results?.landmarks?.length || 0;
+            if (detectadas !== this.manosDetectadasCount) {
+              this.ngZone.run(() => {
+                this.manosDetectadasCount = detectadas;
+              });
+            }
+            if (ctx && results?.landmarks?.length) dibujarManos(ctx, canvas.width, canvas.height, results.landmarks);
+            if (this.estadoGrabacion === 'grabando') {
+              this.ngZone.run(() => {
+                this.procesarFrame(results, marca, video.videoWidth, video.videoHeight);
+              });
+            }
+          } catch (e) {
+            console.warn('MediaPipe no pudo procesar el frame:', e);
+          }
         }
-        const ctx = canvas.getContext('2d');
-        ctx?.clearRect(0, 0, canvas.width, canvas.height);
-        const marca = this.controlFrames.marcaDeTiempo();
-        try {
-          const results = this.handLandmarker.detectForVideo(video, marca);
-          this.manosDetectadasCount = results?.landmarks?.length || 0;
-          if (ctx && results?.landmarks?.length) dibujarManos(ctx, canvas.width, canvas.height, results.landmarks);
-          this.procesarFrame(results, marca, video.videoWidth, video.videoHeight);
-        } catch (e) {
-          console.warn('MediaPipe no pudo procesar el frame:', e);
-        }
-      }
 
-      if (this.estadoCamara === 'activa') {
-        this.animationFrameId = requestAnimationFrame(render);
-      }
-    };
-    this.animationFrameId = requestAnimationFrame(render);
+        if (this.estadoCamara === 'activa') {
+          this.animationFrameId = requestAnimationFrame(render);
+        }
+      };
+      this.animationFrameId = requestAnimationFrame(render);
+    });
   }
 
   private procesarFrame(results: any, marca: number, ancho: number, alto: number) {

@@ -110,6 +110,9 @@
 .flash-icon-wrap {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 18px;
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
   padding: 16px;
 }
 
@@ -118,6 +121,9 @@
   height: 140px;
   object-fit: cover;
   border-radius: 18px;
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 .flash-word {
@@ -262,6 +268,9 @@
 .quiz-icon-wrap {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 18px;
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
   padding: 16px;
 }
 
@@ -433,7 +442,9 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scaleX(-1);
+  transform: scaleX(-1) translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 .cam-canvas {
@@ -442,7 +453,9 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scaleX(-1);
+  transform: scaleX(-1) translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
   pointer-events: none;
   z-index: 2;
 }
@@ -908,3 +921,116 @@
   }
 }
 
+
+/* ---------- Animaciones de entrada estilo Menú Principal ---------- */
+.flash-card,
+.quiz-card {
+  animation: rc-fade-up 0.4s ease-out backwards;
+  transition: transform 0.16s ease;
+
+  &:active {
+    transform: scale(0.985);
+  }
+}
+
+.media-shell {
+  width: 140px;
+  height: 140px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: media-shell-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  transform: translateZ(0);
+
+  .real-media {
+    width: 100%;
+    height: 100%;
+    border-radius: 18px;
+  }
+}
+
+.flash-word {
+  animation: media-shell-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.listen-btn {
+  animation: rc-fade-up 0.32s 0.05s ease-out backwards;
+}
+
+.btn-cta-anim {
+  animation: rc-fade-up 0.4s 0.08s ease-out backwards;
+  transition: transform 0.18s ease, opacity 0.2s ease;
+
+  &.btn-ready {
+    animation: cta-ready-pop 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+}
+
+.match-tile-left {
+  animation: match-row-in-left 0.45s ease-out backwards;
+}
+
+.match-tile-right {
+  animation: match-row-in-right 0.45s ease-out backwards;
+}
+
+.quiz-option {
+  animation: rc-fade-up 0.38s ease-out backwards;
+  transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
+@keyframes media-shell-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94) translateZ(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1) translateZ(0);
+  }
+}
+
+@keyframes cta-ready-pop {
+  0% {
+    opacity: 0.7;
+    transform: translateY(8px) scale(0.96);
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes match-row-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes match-row-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

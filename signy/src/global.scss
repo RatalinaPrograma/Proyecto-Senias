@@ -273,3 +273,29 @@ ion-textarea.signy-input {
 input, textarea, select {
   color: var(--signy-cream);
 }
+
+
+/* Ocultar el ícono gris de "Play" y controles nativos de Android WebView en todos los <video> */
+video::-webkit-media-controls,
+video::-webkit-media-controls-enclosure,
+video::-webkit-media-controls-panel,
+video::-webkit-media-controls-overlay-play-button,
+video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  -webkit-appearance: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Transición suave de entrada cuando un <video> o <img> con [appCachedSrc] ya tiene decodificado su primer frame */
+.media-animada {
+  opacity: 0;
+  transform: scale(0.95) translateZ(0);
+  transition: opacity 0.26s ease-out, transform 0.26s ease-out;
+  will-change: opacity, transform;
+
+  &.media-lista {
+    opacity: 1;
+    transform: scale(1) translateZ(0);
+  }
+}

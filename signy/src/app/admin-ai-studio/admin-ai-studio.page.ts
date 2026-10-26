@@ -1,6 +1,7 @@
 import {
   Component,
   ElementRef,
+  NgZone,
   OnDestroy,
   OnInit,
   ViewChild,
@@ -41,6 +42,7 @@ import {
   ReconocedorSenasService,
   construirDatasetExportable,
   dibujarManos,
+  sincronizarTamanoCanvas,
 } from '../motor-senas';
 
 addIcons({
@@ -120,11 +122,12 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   private labStream: MediaStream | null = null;
   private labHandLandmarker: HandLandmarker | null = null;
   private labRafId = 0;
-  private readonly labControl = new ControlFramesVideo();
+  private readonly labControl = new ControlFramesVideo(45); // ~22 FPS máx
   /** Últimos 3 s de captura cruda: se compara contra señas de 1 y de 2 manos por igual. */
   private readonly labBuffer = new GrabadorCaptura(3000);
   private labUltimaEvaluacion = 0;
   private labUltimaMano = 0;
+  private readonly ngZone = inject(NgZone);
 
   mejorPrediccion: PrediccionEnVivo | null = null;
   /** Top 3 del clasificador entrenado (vacío si todavía no hay modelo entrenado). */
@@ -307,7 +310,12 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: this.labFacingMode, width: { ideal: 640 }, height: { ideal: 480 } },
+          video: {
+            facingMode: this.labFacingMode,
+            width: { ideal: 480, max: 640 },
+            height: { ideal: 360, max: 480 },
+            frameRate: { ideal: 24, max: 30 },
+          },
           audio: false,
         });
       } catch {
@@ -357,61 +365,79 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
 
   private bucleReconocimientoReal() {
     this.labControl.reiniciar();
-    const loop = () => {
-      const video = this.labVideoRef?.nativeElement;
-      const canvas = this.labCanvasRef?.nativeElement;
+    this.ngZone.runOutsideAngular(() => {
+      const loop = () => {
+        const video = this.labVideoRef?.nativeElement;
+        const canvas = this.labCanvasRef?.nativeElement;
+        const ahora = performance.now();
 
-      if (video && canvas && this.labHandLandmarker && this.labEstado === 'activo' && video.videoWidth > 0 && !video.paused && this.labControl.esFrameNuevo(video)) {
-        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
+        if (
+          video &&
+          canvas &&
+          this.labHandLandmarker &&
+          this.labEstado === 'activo' &&
+          video.videoWidth > 0 &&
+          !video.paused &&
+          this.labControl.esFrameNuevo(video, ahora)
+        ) {
+          sincronizarTamanoCanvas(canvas, video.videoWidth, video.videoHeight);
+          const ctx = canvas.getContext('2d');
+          ctx?.clearRect(0, 0, canvas.width, canvas.height);
+          const marca = this.labControl.marcaDeTiempo(ahora);
+          try {
+            const results = this.labHandLandmarker.detectForVideo(video, marca);
+            const detectadas = results?.landmarks?.length || 0;
+            if (detectadas !== this.manosEnLaboratorio) {
+              this.ngZone.run(() => {
+                this.manosEnLaboratorio = detectadas;
+              });
+            }
+
+            if (detectadas > 0) {
+              this.labUltimaMano = marca;
+              if (ctx) dibujarManos(ctx, canvas.width, canvas.height, results.landmarks, ESTILO_LAB);
+            } else if (marca - this.labUltimaMano > PAUSA_REINICIO_LAB_MS && this.labBuffer.totalFrames) {
+              // Las manos salieron de cuadro: termina la "toma" actual.
+              this.labBuffer.reiniciar();
+              this.ngZone.run(() => {
+                this.prediccionesClasificador = [];
+                this.mejorPrediccion = null;
+              });
+            }
+
+            if (detectadas > 0 || this.labBuffer.totalFrames) {
+              this.labBuffer.agregar(results, marca, video.videoWidth, video.videoHeight);
+            }
+            if (marca - this.labUltimaEvaluacion >= INTERVALO_EVALUACION_LAB_MS && this.labBuffer.framesConManos(1) >= 8) {
+              this.labUltimaEvaluacion = marca;
+              void this.evaluarBufferEnVivo();
+            }
+          } catch (e) {
+            console.warn('MediaPipe no pudo procesar el frame:', e);
+          }
         }
-        const ctx = canvas.getContext('2d');
-        ctx?.clearRect(0, 0, canvas.width, canvas.height);
-        const marca = this.labControl.marcaDeTiempo();
-        try {
-          const results = this.labHandLandmarker.detectForVideo(video, marca);
-          this.manosEnLaboratorio = results?.landmarks?.length || 0;
 
-          if (this.manosEnLaboratorio > 0) {
-            this.labUltimaMano = marca;
-            if (ctx) dibujarManos(ctx, canvas.width, canvas.height, results.landmarks, ESTILO_LAB);
-          } else if (marca - this.labUltimaMano > PAUSA_REINICIO_LAB_MS && this.labBuffer.totalFrames) {
-            // Las manos salieron de cuadro: termina la "toma" actual.
-            this.labBuffer.reiniciar();
-            this.prediccionesClasificador = [];
-            this.mejorPrediccion = null;
-          }
-
-          if (this.manosEnLaboratorio > 0 || this.labBuffer.totalFrames) {
-            this.labBuffer.agregar(results, marca, video.videoWidth, video.videoHeight);
-          }
-          if (marca - this.labUltimaEvaluacion >= INTERVALO_EVALUACION_LAB_MS && this.labBuffer.framesConManos(1) >= 8) {
-            this.labUltimaEvaluacion = marca;
-            this.evaluarBufferEnVivo();
-          }
-        } catch (e) {
-          console.warn('MediaPipe no pudo procesar el frame:', e);
+        if (this.labEstado === 'activo') {
+          this.labRafId = requestAnimationFrame(loop);
         }
-      }
+      };
 
-      if (this.labEstado === 'activo') {
-        this.labRafId = requestAnimationFrame(loop);
-      }
-    };
-
-    this.labRafId = requestAnimationFrame(loop);
+      this.labRafId = requestAnimationFrame(loop);
+    });
   }
 
   /** Compara los últimos 3 s de cámara contra el clasificador entrenado. */
   private async evaluarBufferEnVivo() {
     const captura = this.labBuffer.captura();
     const clf = await this.reconocedor.clasificador();
-    this.prediccionesClasificador = clf ? clf.predecir(captura).slice(0, 3) : [];
-    const top = this.prediccionesClasificador[0];
-    this.mejorPrediccion = top
-      ? { palabra: top.palabra, similitud: Math.round(top.probabilidad * 100), esCoincidente: top.probabilidad >= (clf?.umbralSugerido ?? 0.6) }
-      : null;
+    const predicciones = clf ? clf.predecir(captura).slice(0, 3) : [];
+    const top = predicciones[0];
+    this.ngZone.run(() => {
+      this.prediccionesClasificador = predicciones;
+      this.mejorPrediccion = top
+        ? { palabra: top.palabra, similitud: Math.round(top.probabilidad * 100), esCoincidente: top.probabilidad >= (clf?.umbralSugerido ?? 0.6) }
+        : null;
+    });
   }
 
   // ================= Calibrar / Entrenar Seña =================

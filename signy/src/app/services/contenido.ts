@@ -5,59 +5,111 @@ import {
   UserStats, PracticaFallo, Logro, NivelConEstado, RachaHistorialDia, EventoRacha, RankingEntry
 } from '../data/db-types';
 
+/** TTL en memoria para el catálogo estático (niveles, subniveles, pool de palabras). */
+const CACHE_CATALOGO_TTL_MS = 5 * 60 * 1000;
+
 @Injectable({ providedIn: 'root' })
 export class ContenidoService {
+  private nivelesCache: { data: Nivel[]; expira: number } | null = null;
+  private subnivelesTodosCache: { data: Subnivel[]; expira: number } | null = null;
+  private subnivelesConContenidoCache: { data: Set<number>; expira: number } | null = null;
+  private poolPalabrasCache: { data: { palabra: string; icono: string | null }[]; expira: number } | null = null;
+  private mapaCache: { userId: string; data: NivelConEstado[]; expira: number } | null = null;
+  private ultimaVersionCatalogo = 0;
+
+  private sincronizarVersionCatalogo(): void {
+    if (this.ultimaVersionCatalogo !== this.supabaseService.catalogoVersion) {
+      this.invalidarCacheCatalogo();
+      this.ultimaVersionCatalogo = this.supabaseService.catalogoVersion;
+    }
+  }
+
   constructor(private supabaseService: SupabaseService) {}
 
   private get db() {
     return this.supabaseService.supabase;
   }
 
+  /** Limpia el caché en memoria del catálogo y del mapa (útil tras completar una lección o editar vocabulario). */
+  invalidarCacheProgreso(): void {
+    this.mapaCache = null;
+  }
+
+  invalidarCacheCatalogo(): void {
+    this.nivelesCache = null;
+    this.subnivelesTodosCache = null;
+    this.subnivelesConContenidoCache = null;
+    this.poolPalabrasCache = null;
+    this.mapaCache = null;
+  }
+
   // ---------- Contenido (igual para todos los usuarios) ----------
   async getNiveles(): Promise<Nivel[]> {
+    this.sincronizarVersionCatalogo();
+    const ahora = Date.now();
+    if (this.nivelesCache && ahora < this.nivelesCache.expira) {
+      return this.nivelesCache.data;
+    }
     const { data, error } = await this.db.from('niveles').select('*').order('numero_nivel');
     if (error) throw error;
-    return data ?? [];
+    const lista = data ?? [];
+    this.nivelesCache = { data: lista, expira: ahora + CACHE_CATALOGO_TTL_MS };
+    return lista;
   }
 
   async getSubniveles(nivelId: number): Promise<Subnivel[]> {
-    const { data, error } = await this.db
-      .from('subniveles')
-      .select('*')
-      .eq('nivel_id', nivelId)
-      .order('numero_subnivel');
-    if (error) throw error;
-    return data ?? [];
+    const todos = await this.getSubnivelesTodos();
+    return todos.filter(s => s.nivel_id === nivelId);
   }
 
   /** Todos los subniveles de todos los niveles en una sola consulta (evita
    * el N+1 de llamar getSubniveles por cada nivel al armar el camino). */
   async getSubnivelesTodos(): Promise<Subnivel[]> {
+    this.sincronizarVersionCatalogo();
+    const ahora = Date.now();
+    if (this.subnivelesTodosCache && ahora < this.subnivelesTodosCache.expira) {
+      return this.subnivelesTodosCache.data;
+    }
     const { data, error } = await this.db
       .from('subniveles')
       .select('*')
       .order('nivel_id')
       .order('numero_subnivel');
     if (error) throw error;
-    return data ?? [];
+    const lista = data ?? [];
+    this.subnivelesTodosCache = { data: lista, expira: ahora + CACHE_CATALOGO_TTL_MS };
+    return lista;
   }
 
   /** IDs de subniveles que ya tienen al menos una seña con video_url
    * cargado. Una fila de seña sin video_url (palabra cargada de antemano,
    * pendiente del GIF real) no cuenta como "lista" todavía. */
   async getSubnivelesConContenido(): Promise<Set<number>> {
+    this.sincronizarVersionCatalogo();
+    const ahora = Date.now();
+    if (this.subnivelesConContenidoCache && ahora < this.subnivelesConContenidoCache.expira) {
+      return this.subnivelesConContenidoCache.data;
+    }
     const { data, error } = await this.db.from('senas').select('subnivel_id').not('video_url', 'is', null);
     if (error) throw error;
-    return new Set((data ?? []).map(r => r.subnivel_id));
+    const conj = new Set((data ?? []).map(r => r.subnivel_id));
+    this.subnivelesConContenidoCache = { data: conj, expira: ahora + CACHE_CATALOGO_TTL_MS };
+    return conj;
   }
 
   async getSubnivelPorId(subnivelId: number): Promise<Subnivel | null> {
+    if (this.subnivelesTodosCache && Date.now() < this.subnivelesTodosCache.expira) {
+      return this.subnivelesTodosCache.data.find(s => s.id === subnivelId) ?? null;
+    }
     const { data, error } = await this.db.from('subniveles').select('*').eq('id', subnivelId).maybeSingle();
     if (error) throw error;
     return data;
   }
 
   async getNivelPorId(nivelId: number): Promise<Nivel | null> {
+    if (this.nivelesCache && Date.now() < this.nivelesCache.expira) {
+      return this.nivelesCache.data.find(n => n.id === nivelId) ?? null;
+    }
     const { data, error } = await this.db.from('niveles').select('*').eq('id', nivelId).maybeSingle();
     if (error) throw error;
     return data;
@@ -66,9 +118,16 @@ export class ContenidoService {
   /** Pool de palabras (con su ícono de concepto, si tiene) para armar los
    * distractores del quiz — no solo las de la lección actual. */
   async getPoolDePalabras(limite = 200): Promise<{ palabra: string; icono: string | null }[]> {
+    this.sincronizarVersionCatalogo();
+    const ahora = Date.now();
+    if (this.poolPalabrasCache && ahora < this.poolPalabrasCache.expira) {
+      return this.poolPalabrasCache.data;
+    }
     const { data, error } = await this.db.from('senas').select('palabra, icono').limit(limite);
     if (error) throw error;
-    return data ?? [];
+    const lista = data ?? [];
+    this.poolPalabrasCache = { data: lista, expira: ahora + CACHE_CATALOGO_TTL_MS };
+    return lista;
   }
 
   async getSenas(subnivelId: number): Promise<Sena[]> {
@@ -114,6 +173,14 @@ export class ContenidoService {
     const { data, error } = await this.db.from('progreso_subnivel_usuario').select('*').eq('user_id', userId);
     if (error) throw error;
     return data ?? [];
+  }
+
+  /** Reutiliza el mapa recién cargado en Home (evita 5 queries en `lessonGuard` al tocar una lección). */
+  async obtenerMapaCacheadoOActual(userId: string): Promise<NivelConEstado[]> {
+    if (this.mapaCache && this.mapaCache.userId === userId && Date.now() < this.mapaCache.expira) {
+      return this.mapaCache.data;
+    }
+    return this.obtenerMapaDeAprendizaje(userId);
   }
 
   /** Junta niveles + subniveles + progreso real del usuario en un solo
@@ -178,6 +245,7 @@ export class ContenidoService {
       resultado.push({ ...nivel, accesible, completado: completadoNivel, subniveles: subnivelesConEstado });
     }
 
+    this.mapaCache = { userId, data: resultado, expira: Date.now() + 60_000 };
     return resultado;
   }
 
@@ -190,6 +258,7 @@ export class ContenidoService {
    * esto era un `.upsert()` directo, así que cualquiera con su propio
    * token podía marcar como completado un subnivel que nunca desbloqueó. */
   async marcarSubnivelCompletado(userId: string, subnivelId: number, puntaje: number) {
+    this.invalidarCacheProgreso();
     const { data, error } = await this.db.rpc('completar_subnivel', {
       p_subnivel_id: subnivelId,
       p_xp_ganado: puntaje,
@@ -197,10 +266,14 @@ export class ContenidoService {
     if (error) throw error;
     if (!data?.ok) throw new Error(data?.error ?? 'No se pudo completar el subnivel.');
 
-    const totalCompletadas = await this.contarLeccionesCompletadas(userId);
-    if (totalCompletadas >= 1) this.otorgarLogroPorCodigo(userId, 'primera_leccion').catch(console.error);
-    if (totalCompletadas >= 10) this.otorgarLogroPorCodigo(userId, 'diez_lecciones').catch(console.error);
-    if (totalCompletadas >= 50) this.otorgarLogroPorCodigo(userId, 'cincuenta_lecciones').catch(console.error);
+    // Se evalúan logros en segundo plano para no bloquear el cierre de la lección
+    void this.contarLeccionesCompletadas(userId)
+      .then((totalCompletadas) => {
+        if (totalCompletadas >= 1) this.otorgarLogroPorCodigo(userId, 'primera_leccion').catch(console.error);
+        if (totalCompletadas >= 10) this.otorgarLogroPorCodigo(userId, 'diez_lecciones').catch(console.error);
+        if (totalCompletadas >= 50) this.otorgarLogroPorCodigo(userId, 'cincuenta_lecciones').catch(console.error);
+      })
+      .catch(console.error);
   }
 
   /** Cuántas lecciones (subniveles) distintas ha completado el usuario en
@@ -225,6 +298,7 @@ export class ContenidoService {
    * repaso). Eso es lo que necesita la pantalla de celebración: mostrarse
    * una sola vez, justo cuando corresponde. */
   async avanzarNivelSiCorresponde(userId: string, nivelId: number): Promise<{ nivelRecienCompletado: boolean }> {
+    this.invalidarCacheProgreso();
     const [niveles, subniveles, progresoSubniveles] = await Promise.all([
       this.getNiveles(),
       this.getSubniveles(nivelId),
@@ -496,12 +570,14 @@ export class ContenidoService {
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await this.db.from('user_stats').update(actualizado).eq('user_id', userId);
-    if (error) throw error;
-
-    const { error: errorHistorial } = await this.db
-      .from('racha_historial')
-      .upsert({ user_id: userId, fecha: hoy, estado: 'practicado' }, { onConflict: 'user_id,fecha' });
+    const [, { error: errorHistorial }] = await Promise.all([
+      this.db.from('user_stats').update(actualizado).eq('user_id', userId).then(({ error }) => {
+        if (error) throw error;
+      }),
+      this.db
+        .from('racha_historial')
+        .upsert({ user_id: userId, fecha: hoy, estado: 'practicado' }, { onConflict: 'user_id,fecha' }),
+    ]);
     if (errorHistorial) console.error(errorHistorial);
 
     // otorgarLogroPorCodigo hace upsert (no duplica ni revienta si ya lo
@@ -515,12 +591,13 @@ export class ContenidoService {
     return { ...stats, ...actualizado };
   }
 
-  async descontarVida(userId: string): Promise<number> {
-    const stats = await this.getMisStats(userId);
-    const nuevasVidas = Math.max(0, (stats.vidas ?? 5) - 1);
+  async descontarVida(userId: string, vidasActuales?: number): Promise<number> {
+    const baseVidas = vidasActuales !== undefined ? vidasActuales : ((await this.getMisStats(userId)).vidas ?? 5);
+    const nuevasVidas = Math.max(0, baseVidas - 1);
+    const ahoraIso = new Date().toISOString();
     await this.db
       .from('user_stats')
-      .update({ vidas: nuevasVidas, ultima_vida_perdida: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .update({ vidas: nuevasVidas, ultima_vida_perdida: ahoraIso, updated_at: ahoraIso })
       .eq('user_id', userId);
     return nuevasVidas;
   }

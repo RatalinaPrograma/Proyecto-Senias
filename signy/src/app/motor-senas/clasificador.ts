@@ -194,11 +194,13 @@ export class ClasificadorSenas {
   private readonly capas: CapaLista[];
   private readonly media: Float32Array;
   private readonly escala: Float32Array;
+  private readonly idsConocidos: Set<number>;
   readonly umbralSugerido: number;
 
   private constructor(readonly modelo: ModeloClasificadorJson) {
     this.media = decodificarNumeros(modelo.normalizacion.media, 'float32');
     this.escala = decodificarNumeros(modelo.normalizacion.escala, 'float32');
+    this.idsConocidos = new Set(modelo.clases.map((c) => c.senaId));
     this.capas = modelo.capas.map((c) => ({
       entrada: c.entrada,
       salida: c.salida,
@@ -232,7 +234,7 @@ export class ClasificadorSenas {
   }
 
   conoce(senaId: number): boolean {
-    return this.modelo.clases.some((c) => c.senaId === senaId);
+    return this.idsConocidos.has(senaId);
   }
 
   /** Probabilidades por clase a partir de un vector de características. */

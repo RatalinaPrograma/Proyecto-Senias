@@ -7,6 +7,8 @@ import { MuestraSena } from '../motor-senas/dataset';
 @Injectable({ providedIn: 'root' })
 export class SupabaseService {
   public supabase: SupabaseClient;
+  /** Se incrementa cada vez que un admin modifica niveles, subniveles o señas para invalidar el caché de ContenidoService. */
+  public catalogoVersion = 0;
 
   constructor() {
     this.supabase = createClient(environment.supabase.url, environment.supabase.key);
@@ -157,22 +159,25 @@ export class SupabaseService {
   // ---------- Amigos (tabla follows) ----------
 
   async seguir(followedId: string) {
-    const { data: userData } = await this.supabase.auth.getUser();
-    const myId = userData.user?.id;
+    const { user } = await this.getUsuarioLocal();
+    const myId = user?.id;
+
     if (!myId) return { error: { message: 'No hay sesión activa' } };
     return this.supabase.from('follows').insert({ follower_id: myId, followed_id: followedId });
   }
 
   async dejarDeSeguir(followedId: string) {
-    const { data: userData } = await this.supabase.auth.getUser();
-    const myId = userData.user?.id;
+    const { user } = await this.getUsuarioLocal();
+    const myId = user?.id;
+
     if (!myId) return { error: { message: 'No hay sesión activa' } };
     return this.supabase.from('follows').delete().eq('follower_id', myId).eq('followed_id', followedId);
   }
 
   async loSigo(followedId: string): Promise<boolean> {
-    const { data: userData } = await this.supabase.auth.getUser();
-    const myId = userData.user?.id;
+    const { user } = await this.getUsuarioLocal();
+    const myId = user?.id;
+
     if (!myId) return false;
     const { data } = await this.supabase
       .from('follows')
@@ -309,14 +314,17 @@ export class SupabaseService {
   }
 
   async crearNivel(nivel: Omit<Nivel, 'id' | 'created_at'>) {
+    this.catalogoVersion++;
     return this.supabase.from('niveles').insert(nivel).select().single();
   }
 
   async actualizarNivel(id: number, cambios: Partial<Omit<Nivel, 'id' | 'created_at'>>) {
+    this.catalogoVersion++;
     return this.supabase.from('niveles').update(cambios).eq('id', id);
   }
 
   async eliminarNivel(id: number) {
+    this.catalogoVersion++;
     return this.supabase.from('niveles').delete().eq('id', id);
   }
 
@@ -330,14 +338,17 @@ export class SupabaseService {
   }
 
   async crearSubnivel(subnivel: Omit<Subnivel, 'id' | 'created_at'>) {
+    this.catalogoVersion++;
     return this.supabase.from('subniveles').insert(subnivel).select().single();
   }
 
   async actualizarSubnivel(id: number, cambios: Partial<Omit<Subnivel, 'id' | 'created_at'>>) {
+    this.catalogoVersion++;
     return this.supabase.from('subniveles').update(cambios).eq('id', id);
   }
 
   async eliminarSubnivel(id: number) {
+    this.catalogoVersion++;
     return this.supabase.from('subniveles').delete().eq('id', id);
   }
 
@@ -351,14 +362,17 @@ export class SupabaseService {
   }
 
   async crearSena(sena: Omit<Sena, 'id' | 'created_at'>) {
+    this.catalogoVersion++;
     return this.supabase.from('senas').insert(sena).select().single();
   }
 
   async actualizarSena(id: number, cambios: Partial<Omit<Sena, 'id' | 'created_at'>>) {
+    this.catalogoVersion++;
     return this.supabase.from('senas').update(cambios).eq('id', id);
   }
 
   async eliminarSena(id: number) {
+    this.catalogoVersion++;
     return this.supabase.from('senas').delete().eq('id', id);
   }
 

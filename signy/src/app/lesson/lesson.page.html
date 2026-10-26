@@ -55,8 +55,10 @@
           <div class="flash-icon-wrap" *ngIf="!senas[flashIndex].video_url">
             <app-sena-icon [seed]="nivel.id * 10 + flashIndex" [size]="80" color="#fff" dark="rgba(0,0,0,0.2)"></app-sena-icon>
           </div>
-          <video *ngIf="senas[flashIndex].video_url && esVideoMp4(senas[flashIndex].video_url)" [appCachedSrc]="senas[flashIndex].video_url" class="real-media" autoplay loop muted playsinline></video>
-          <img *ngIf="senas[flashIndex].video_url && !esVideoMp4(senas[flashIndex].video_url)" [appCachedSrc]="senas[flashIndex].video_url" [alt]="senas[flashIndex].palabra" class="real-media" decoding="async" />
+          <div class="media-shell" *ngIf="senas[flashIndex].video_url">
+            <video *ngIf="esVideoMp4(senas[flashIndex].video_url)" [appCachedSrc]="senas[flashIndex].video_url" poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" preload="auto" class="real-media" autoplay loop muted playsinline webkit-playsinline></video>
+            <img *ngIf="!esVideoMp4(senas[flashIndex].video_url)" [appCachedSrc]="senas[flashIndex].video_url" [alt]="senas[flashIndex].palabra" class="real-media" decoding="async" />
+          </div>
         </ng-container>
         <div class="flash-word" *ngIf="flipped">
           <span class="flash-icon" *ngIf="senas[flashIndex].icono">{{ senas[flashIndex].icono }}</span>
@@ -74,7 +76,7 @@
         Escuchar
       </button>
 
-      <ion-button expand="block" class="btn-fox" (click)="siguienteFlash()" [disabled]="!flipped">
+      <ion-button expand="block" class="btn-fox btn-cta-anim" [class.btn-ready]="flipped" (click)="siguienteFlash()" [disabled]="!flipped">
         {{ flashIndex + 1 >= senas.length ? 'Ir a emparejar' : 'Siguiente' }}
       </ion-button>
       <p class="flash-lock-hint" *ngIf="!flipped">Revela la palabra para continuar</p>
@@ -88,8 +90,9 @@
       <div class="match-columnas">
         <div class="match-col">
           <button
-            *ngFor="let m of manos; trackBy: trackPar"
-            class="match-tile"
+            *ngFor="let m of manos; let i = index; trackBy: trackPar"
+            class="match-tile match-tile-left"
+            [style.animation-delay.ms]="i * 70"
             [class.match-tile-gif]="m.videoUrl"
             [disabled]="emparejados.includes(m.palabra)"
             [class.matched]="emparejados.includes(m.palabra)"
@@ -105,8 +108,9 @@
 
         <div class="match-col">
           <button
-            *ngFor="let p of palabrasMezcladas; trackBy: trackPar"
-            class="match-tile match-word"
+            *ngFor="let p of palabrasMezcladas; let i = index; trackBy: trackPar"
+            class="match-tile match-word match-tile-right"
+            [style.animation-delay.ms]="i * 70"
             [disabled]="emparejados.includes(p.palabra)"
             [class.matched]="emparejados.includes(p.palabra)"
             [class.selected]="selPalabra === p.palabra && !matchMal"
@@ -120,7 +124,7 @@
         </div>
       </div>
 
-      <ion-button expand="block" class="btn-fox" *ngIf="matchCompleto" (click)="siguienteRondaOQuiz()">
+      <ion-button expand="block" class="btn-fox btn-cta-anim btn-ready" *ngIf="matchCompleto" (click)="siguienteRondaOQuiz()">
         {{ hayMasRondas ? 'Siguiente grupo' : 'Ir a las preguntas' }}
       </ion-button>
     </div>
@@ -134,15 +138,18 @@
         <div class="quiz-icon-wrap" *ngIf="!preguntaActual.videoUrl">
           <app-sena-icon [seed]="preguntaActual.seed" [size]="90" color="#fff" dark="rgba(0,0,0,0.2)"></app-sena-icon>
         </div>
-        <video *ngIf="preguntaActual.videoUrl && esVideoMp4(preguntaActual.videoUrl)" [appCachedSrc]="preguntaActual.videoUrl" class="real-media" autoplay loop muted playsinline></video>
-        <img *ngIf="preguntaActual.videoUrl && !esVideoMp4(preguntaActual.videoUrl)" [appCachedSrc]="preguntaActual.videoUrl" [alt]="preguntaActual.palabra" class="real-media" decoding="async" />
+        <div class="media-shell" *ngIf="preguntaActual.videoUrl">
+          <video *ngIf="esVideoMp4(preguntaActual.videoUrl)" [appCachedSrc]="preguntaActual.videoUrl" poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" preload="auto" class="real-media" autoplay loop muted playsinline webkit-playsinline></video>
+          <img *ngIf="!esVideoMp4(preguntaActual.videoUrl)" [appCachedSrc]="preguntaActual.videoUrl" [alt]="preguntaActual.palabra" class="real-media" decoding="async" />
+        </div>
         <span class="quiz-hint">{{ preguntaActual.videoUrl ? 'seña real' : 'video de referencia (demo)' }}</span>
       </div>
 
       <div class="quiz-options">
         <button
-          *ngFor="let opt of preguntaActual.opciones"
+          *ngFor="let opt of preguntaActual.opciones; let i = index"
           class="quiz-option"
+          [style.animation-delay.ms]="i * 55"
           [class.ok]="estado && opt === preguntaActual.palabra"
           [class.bad]="estado === 'incorrecto' && seleccionada === opt"
           (click)="elegirOpcion(opt)">
@@ -193,7 +200,6 @@
 
         <div class="cam-video-wrap" [class.hidden]="camStage !== 'countdown' && camStage !== 'recording'">
           <video #video muted playsinline class="cam-video"></video>
-          <canvas #canvas class="cam-canvas"></canvas>
           <div class="cam-oval" [class.recording]="camStage === 'recording'"></div>
           <div class="cam-overlay" *ngIf="camStage === 'countdown'">
             <span>{{ camCount }}</span>

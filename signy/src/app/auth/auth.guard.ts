@@ -71,7 +71,7 @@ export const lessonGuard: CanActivateFn = async (route) => {
   }
 
   const subnivelId = Number(route.paramMap.get('subnivelId'));
-  const mapa = await contenidoService.obtenerMapaDeAprendizaje(user.id);
+  const mapa = await contenidoService.obtenerMapaCacheadoOActual(user.id);
   const todosLosSubniveles = mapa.reduce<typeof mapa[number]['subniveles']>((acc, n) => acc.concat(n.subniveles), []);
   const subnivel = todosLosSubniveles.find(s => s.id === subnivelId);
 
