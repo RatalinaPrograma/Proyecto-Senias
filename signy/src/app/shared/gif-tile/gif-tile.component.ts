@@ -67,7 +67,7 @@ import { esVideoMp4 } from '../media-utils';
       inset: 0;
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      object-fit: cover;
       opacity: 0;
       transform: scale(0.94) translateZ(0);
       transition: opacity 0.28s ease-out, transform 0.28s ease-out;

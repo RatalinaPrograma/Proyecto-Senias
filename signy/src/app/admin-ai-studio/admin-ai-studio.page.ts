@@ -27,6 +27,15 @@ import {
   closeOutline,
   cameraReverseOutline,
   downloadOutline,
+  bodyOutline,
+  playCircleOutline,
+  pauseCircleOutline,
+  colorPaletteOutline,
+  eyeOutline,
+  eyeOffOutline,
+  pawOutline,
+  optionsOutline,
+  happyOutline,
 } from 'ionicons/icons';
 import type { HandLandmarker } from '@mediapipe/tasks-vision';
 import { Capacitor } from '@capacitor/core';
@@ -35,15 +44,22 @@ import { BotonAtrasService } from '../services/boton-atras';
 import { Nivel, Subnivel, Sena } from '../data/db-types';
 import { SenaTrainerModalComponent } from '../shared/sena-trainer-modal/sena-trainer-modal.component';
 import {
+  CapturaCruda,
   ControlFramesVideo,
   GrabadorCaptura,
   MediaPipeManosService,
   Prediccion,
   ReconocedorSenasService,
+  RenderizadorAvatar2D,
+  TemaAvatar,
+  ConfiguracionAvatar,
+  CONFIG_AVATAR_PREDETERMINADA,
   construirDatasetExportable,
   dibujarManos,
   sincronizarTamanoCanvas,
 } from '../motor-senas';
+import { expandirCaptura } from '../motor-senas/dataset';
+import { generarCaptura } from '../motor-senas/testing/manos-sinteticas';
 
 addIcons({
   'arrow-back': arrowBack,
@@ -60,6 +76,15 @@ addIcons({
   'close-outline': closeOutline,
   'camera-reverse-outline': cameraReverseOutline,
   'download-outline': downloadOutline,
+  'body-outline': bodyOutline,
+  'play-circle-outline': playCircleOutline,
+  'pause-circle-outline': pauseCircleOutline,
+  'color-palette-outline': colorPaletteOutline,
+  'eye-outline': eyeOutline,
+  'eye-off-outline': eyeOffOutline,
+  'paw-outline': pawOutline,
+  'options-outline': optionsOutline,
+  'happy-outline': happyOutline,
 });
 
 const ESTILO_LAB = { linea: '#2CA6A4', punta: '#F2701A', nudillo: '#ffffff', borde: '#0A1526', brillo: '#F2701A' };
@@ -85,6 +110,10 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   @ViewChild('labVideo', { static: false }) labVideoRef?: ElementRef<HTMLVideoElement>;
   @ViewChild('labCanvas', { static: false }) labCanvasRef?: ElementRef<HTMLCanvasElement>;
 
+  // Avatar 2D View
+  @ViewChild('avatarCanvas', { static: false }) avatarCanvasRef?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('avatarVideo', { static: false }) avatarVideoRef?: ElementRef<HTMLVideoElement>;
+
   cargando = true;
   error: string | null = null;
 
@@ -97,8 +126,8 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   filtroEstado: 'todas' | 'calibradas' | 'pendientes' = 'todas';
   filtroSubnivelId: number | 'todos' = 'todos';
 
-  // Vista activa: 'lista' (catálogo) o 'lab' (reconocimiento en vivo)
-  vistaModo: 'lista' | 'lab' = 'lista';
+  // Vista activa: 'lista' (catálogo), 'lab' (reconocimiento en vivo) o 'avatar' (Avatar 2D Plano)
+  vistaModo: 'lista' | 'lab' | 'avatar' = 'lista';
 
   // Métricas de IA
   totalSenas = 0;
@@ -141,6 +170,26 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   exportando = false;
   progresoExportacion = '';
 
+  // ================= MÓDULO AVATAR 2D PLANO (CINTURA HACIA ARRIBA) =================
+  readonly renderizadorAvatar = new RenderizadorAvatar2D();
+  avatarConfig: ConfiguracionAvatar = { ...CONFIG_AVATAR_PREDETERMINADA };
+  avatarFuente: 'camara' | 'dataset' | 'sintetica' = 'sintetica';
+  avatarSinteticaActual: 'hola' | 'si' | 'l' | 'separar' = 'hola';
+  avatarSenaIdSeleccionada: number | null = null;
+  avatarMuestraCaptura: CapturaCruda | null = null;
+  avatarCargandoMuestra = false;
+  avatarMostrarVideoFondo = false;
+  avatarPausado = false;
+  avatarFPS = 0;
+  avatarMensaje = '';
+
+  private avatarRafId = 0;
+  private avatarStream: MediaStream | null = null;
+  private avatarInicioPlayback = 0;
+  private avatarFramesRenderizados = 0;
+  private avatarUltimoCalculoFPS = 0;
+  private readonly avatarControl = new ControlFramesVideo(30);
+
   constructor(
     private supabaseService: SupabaseService,
     private modalCtrl: ModalController,
@@ -155,8 +204,8 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    // El HandLandmarker es compartido (MediaPipeManosService): no se cierra acá.
     this.detenerLaboratorioReconocimiento();
+    this.detenerAvatar();
   }
 
   private async cargarClasificadorConocidos() {
@@ -164,13 +213,20 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     this.clasificadorConocidos = new Set(clf?.clases.map((c) => c.senaId) ?? []);
   }
 
-  cambiarVista(modo: 'lista' | 'lab') {
+  cambiarVista(modo: 'lista' | 'lab' | 'avatar') {
     if (this.vistaModo === 'lab' && modo !== 'lab') {
       this.detenerLaboratorioReconocimiento();
     }
+    if (this.vistaModo === 'avatar' && modo !== 'avatar') {
+      this.detenerAvatar();
+    }
+
     this.vistaModo = modo;
+
     if (modo === 'lab') {
       setTimeout(() => this.iniciarLaboratorioReconocimiento(), 50);
+    } else if (modo === 'avatar') {
+      setTimeout(() => this.iniciarModuloAvatar(), 50);
     }
   }
 
@@ -218,7 +274,6 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   async exportarDataset() {
     if (this.exportando) return;
     if (Capacitor.isNativePlatform()) {
-      // El WebView de Android no descarga archivos generados en el navegador.
       alert(
         'Desde la app del celular no se puede descargar el archivo. Para entrenar, en el computador corre:\n\n' +
           'python ml/entrenar.py --supabase --email <tu correo de admin>\n\n' +
@@ -234,8 +289,6 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
         alert('Todavía no hay muestras en el dataset. Graba algunas desde el entrenador de cada seña ("Al dataset").');
         return;
       }
-      // Señas recién pedidas: si alguien creó una seña y le grabó muestras con
-      // esta página ya abierta, la lista vieja dejaba el archivo inválido.
       const senas = await this.supabaseService.listarSenas();
       const dataset = construirDatasetExportable(senas, muestras);
       const blob = new Blob([JSON.stringify(dataset)], { type: 'application/json' });
@@ -397,7 +450,6 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
               this.labUltimaMano = marca;
               if (ctx) dibujarManos(ctx, canvas.width, canvas.height, results.landmarks, ESTILO_LAB);
             } else if (marca - this.labUltimaMano > PAUSA_REINICIO_LAB_MS && this.labBuffer.totalFrames) {
-              // Las manos salieron de cuadro: termina la "toma" actual.
               this.labBuffer.reiniciar();
               this.ngZone.run(() => {
                 this.prediccionesClasificador = [];
@@ -438,6 +490,240 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
         ? { palabra: top.palabra, similitud: Math.round(top.probabilidad * 100), esCoincidente: top.probabilidad >= (clf?.umbralSugerido ?? 0.6) }
         : null;
     });
+  }
+
+  // ================= MÓDULO AVATAR 2D PLANO (CINTURA HACIA ARRIBA) =================
+  async iniciarModuloAvatar() {
+    this.renderizadorAvatar.actualizarConfig(this.avatarConfig);
+    this.avatarInicioPlayback = performance.now();
+    this.avatarFramesRenderizados = 0;
+    this.avatarUltimoCalculoFPS = performance.now();
+
+    if (this.avatarFuente === 'camara') {
+      await this.iniciarCamaraAvatar();
+    } else if (this.avatarFuente === 'dataset') {
+      if (!this.avatarSenaIdSeleccionada) {
+        const candidata = this.senas.find((s) => this.muestrasDe(s.id) > 0) || this.senas[0];
+        if (candidata) {
+          this.avatarSenaIdSeleccionada = candidata.id;
+        }
+      }
+      if (this.avatarSenaIdSeleccionada) {
+        await this.cargarMuestraParaAvatar(this.avatarSenaIdSeleccionada);
+      }
+    }
+
+    this.bucleAvatar();
+  }
+
+  detenerAvatar() {
+    if (this.avatarRafId) {
+      cancelAnimationFrame(this.avatarRafId);
+      this.avatarRafId = 0;
+    }
+    if (this.avatarStream) {
+      this.avatarStream.getTracks().forEach((t) => t.stop());
+      this.avatarStream = null;
+    }
+    this.renderizadorAvatar.reiniciar();
+  }
+
+  cambiarTemaAvatar(nuevoTema: TemaAvatar) {
+    this.avatarConfig.tema = nuevoTema;
+    this.renderizadorAvatar.actualizarConfig({ tema: nuevoTema });
+  }
+
+  actualizarAjustesAvatar() {
+    this.renderizadorAvatar.actualizarConfig(this.avatarConfig);
+  }
+
+  async cambiarFuenteAvatar(fuente: 'camara' | 'dataset' | 'sintetica') {
+    this.avatarFuente = fuente;
+    this.detenerAvatar();
+    await this.iniciarModuloAvatar();
+  }
+
+  alternarPausaAvatar() {
+    this.avatarPausado = !this.avatarPausado;
+    if (!this.avatarPausado) {
+      this.avatarInicioPlayback = performance.now();
+    }
+  }
+
+  async seleccionarSenaDatasetAvatar(valor: number | Sena | null) {
+    const id = typeof valor === 'object' && valor !== null ? valor.id : Number(valor);
+    if (!id || !Number.isFinite(id)) return;
+    this.avatarSenaIdSeleccionada = id;
+    await this.cargarMuestraParaAvatar(id);
+  }
+
+  private async cargarMuestraParaAvatar(senaId: number) {
+    const idNum = Number(senaId);
+    if (!idNum || !Number.isFinite(idNum)) {
+      this.avatarMuestraCaptura = null;
+      this.avatarMensaje = 'Selecciona una seña válida de la lista.';
+      return;
+    }
+
+    this.avatarCargandoMuestra = true;
+    this.avatarMensaje = 'Cargando muestra del dataset…';
+    try {
+      const { data, error } = await this.supabaseService.supabase
+        .from('muestras_sena')
+        .select('*')
+        .eq('sena_id', idNum)
+        .order('id', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      const filas = (data ?? []).filter((f: any) => f && f.captura);
+      if (filas.length > 0) {
+        const expandidas = filas.map((f: any) => expandirCaptura(f.captura));
+        // Preferir la muestra con mayor cantidad de cuadros con manos detectadas
+        expandidas.sort(
+          (a, b) =>
+            b.frames.filter((fr) => fr.manos && fr.manos.length > 0).length -
+            a.frames.filter((fr) => fr.manos && fr.manos.length > 0).length
+        );
+        this.avatarMuestraCaptura = expandidas[0];
+        this.avatarInicioPlayback = performance.now();
+        this.avatarMensaje = `Reproduciendo muestra real (${this.avatarMuestraCaptura.frames.length} cuadros grabados)`;
+      } else {
+        this.avatarMuestraCaptura = null;
+        this.avatarMensaje = 'Esta seña no tiene muestras grabadas todavía.';
+      }
+    } catch (e: any) {
+      this.avatarMensaje = 'Error al cargar muestra: ' + (e?.message || 'Error de conexión');
+    } finally {
+      this.avatarCargandoMuestra = false;
+    }
+  }
+
+  private async iniciarCamaraAvatar() {
+    try {
+      this.labHandLandmarker = await this.mediaPipe.obtener();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 480, max: 640 }, height: { ideal: 360, max: 480 }, frameRate: { ideal: 30 } },
+        audio: false,
+      });
+      this.avatarStream = stream;
+
+      setTimeout(async () => {
+        const video = this.avatarVideoRef?.nativeElement;
+        if (video && this.avatarStream) {
+          video.srcObject = this.avatarStream;
+          video.setAttribute('playsinline', 'true');
+          video.setAttribute('webkit-playsinline', 'true');
+          video.muted = true;
+          await video.play().catch(() => {});
+        }
+      }, 100);
+    } catch (e) {
+      console.warn('Error al iniciar cámara de avatar:', e);
+    }
+  }
+
+  private bucleAvatar() {
+    this.ngZone.runOutsideAngular(() => {
+      const render = () => {
+        if (this.vistaModo !== 'avatar') return;
+
+        const canvas = this.avatarCanvasRef?.nativeElement;
+        const ahora = performance.now();
+
+        // Cálculo de FPS
+        this.avatarFramesRenderizados++;
+        if (ahora - this.avatarUltimoCalculoFPS >= 500) {
+          const fps = Math.round((this.avatarFramesRenderizados * 1000) / (ahora - this.avatarUltimoCalculoFPS));
+          this.ngZone.run(() => {
+            this.avatarFPS = fps;
+          });
+          this.avatarFramesRenderizados = 0;
+          this.avatarUltimoCalculoFPS = ahora;
+        }
+
+        if (canvas) {
+          const ancho = canvas.clientWidth || 400;
+          const alto = canvas.clientHeight || 400;
+          sincronizarTamanoCanvas(canvas, ancho, alto);
+
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, ancho, alto);
+
+            let manosARenderizar: { x: number; y: number; z?: number }[][] = [];
+
+            if (this.avatarFuente === 'camara') {
+              const video = this.avatarVideoRef?.nativeElement;
+              if (video && this.labHandLandmarker && video.videoWidth > 0 && !video.paused) {
+                const results = this.labHandLandmarker.detectForVideo(video, ahora);
+                // Espejar X en cámara frontal para que el personaje actúe como espejo frente al usuario
+                manosARenderizar = (results?.landmarks || []).map((mano) =>
+                  mano.map((p) => ({ x: 1 - p.x, y: p.y, z: p.z }))
+                );
+              }
+            } else if (this.avatarFuente === 'dataset' && this.avatarMuestraCaptura) {
+              manosARenderizar = this.obtenerFrameMuestra(this.avatarMuestraCaptura, ahora);
+            } else if (this.avatarFuente === 'sintetica') {
+              manosARenderizar = this.obtenerFrameSintetico(this.avatarSinteticaActual, ahora);
+            }
+
+            this.renderizadorAvatar.renderizar(ctx, ancho, alto, manosARenderizar);
+          }
+        }
+
+        this.avatarRafId = requestAnimationFrame(render);
+      };
+
+      this.avatarRafId = requestAnimationFrame(render);
+    });
+  }
+
+  /** Interpola cíclicamente los cuadros grabados de la muestra seleccionada a 60 FPS */
+  private obtenerFrameMuestra(captura: CapturaCruda, ahora: number): { x: number; y: number; z?: number }[][] {
+    // Filtrar cuadros que tengan al menos una mano para evitar parpadeos vacíos al inicio/fin de la grabación
+    const framesConManos = captura.frames.filter((f) => f.manos && f.manos.length > 0);
+    const frames = framesConManos.length > 0 ? framesConManos : captura.frames;
+    if (!frames.length) return [];
+
+    const tInicio = frames[0].t || 0;
+    const duracionTotal = Math.max(200, (frames[frames.length - 1].t || 1000) - tInicio);
+    const tiempoRelativo = ((ahora - this.avatarInicioPlayback) % (duracionTotal + 550)) + tInicio;
+
+    if (tiempoRelativo > tInicio + duracionTotal) {
+      return (frames[frames.length - 1].manos || []) as any;
+    }
+
+    let idxA = 0;
+    for (let i = 0; i < frames.length; i++) {
+      if (frames[i].t <= tiempoRelativo) idxA = i;
+      else break;
+    }
+
+    const frameA = frames[idxA];
+    const frameB = frames[Math.min(frames.length - 1, idxA + 1)];
+
+    // Si ambos cuadros consecutivos tienen el mismo número de manos, interpolar linealmente entre ellos
+    if (frameA !== frameB && frameB.t > frameA.t && frameA.manos.length === frameB.manos.length) {
+      const f = Math.max(0, Math.min(1, (tiempoRelativo - frameA.t) / (frameB.t - frameA.t)));
+      return frameA.manos.map((manoA, idxMano) => {
+        const manoB = frameB.manos[idxMano];
+        if (!manoB || manoB.length !== manoA.length) return manoA;
+        return manoA.map((pA, i) => ({
+          x: pA.x + (manoB[i].x - pA.x) * f,
+          y: pA.y + (manoB[i].y - pA.y) * f,
+          z: (pA.z ?? 0) + ((manoB[i].z ?? 0) - (pA.z ?? 0)) * f,
+        }));
+      });
+    }
+
+    return (frameA.manos || []) as any;
+  }
+
+  /** Genera animación cíclica a partir del modelo cinemático sintético */
+  private obtenerFrameSintetico(tipo: 'hola' | 'si' | 'l' | 'separar', ahora: number): { x: number; y: number; z?: number }[][] {
+    const captura = generarCaptura(tipo.toUpperCase() as any, { semilla: 7 });
+    return this.obtenerFrameMuestra(captura, ahora);
   }
 
   // ================= Calibrar / Entrenar Seña =================

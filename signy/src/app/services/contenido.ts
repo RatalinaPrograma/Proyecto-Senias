@@ -257,11 +257,20 @@ export class ContenidoService {
    * llamada en vez de confiar en el `puntaje` que mande el cliente. Antes
    * esto era un `.upsert()` directo, así que cualquiera con su propio
    * token podía marcar como completado un subnivel que nunca desbloqueó. */
-  async marcarSubnivelCompletado(userId: string, subnivelId: number, puntaje: number) {
+  async marcarSubnivelCompletado(userId: string, subnivelId: number, puntaje: number): Promise<{ xpOtorgado: number; esRepaso: boolean }> {
     this.invalidarCacheProgreso();
+    const { data: previo } = await this.db
+      .from('progreso_subnivel_usuario')
+      .select('completado')
+      .eq('user_id', userId)
+      .eq('subnivel_id', subnivelId)
+      .maybeSingle();
+
+    const yaCompletadoAntes = previo?.completado === true;
+    const puntajeEfectivo = yaCompletadoAntes ? 0 : puntaje;
     const { data, error } = await this.db.rpc('completar_subnivel', {
       p_subnivel_id: subnivelId,
-      p_xp_ganado: puntaje,
+      p_xp_ganado: puntajeEfectivo,
     });
     if (error) throw error;
     if (!data?.ok) throw new Error(data?.error ?? 'No se pudo completar el subnivel.');
@@ -274,6 +283,9 @@ export class ContenidoService {
         if (totalCompletadas >= 50) this.otorgarLogroPorCodigo(userId, 'cincuenta_lecciones').catch(console.error);
       })
       .catch(console.error);
+    const xpOtorgado = yaCompletadoAntes ? 0 : Number(data?.xp_otorgado ?? puntajeEfectivo);
+    const esRepaso = yaCompletadoAntes || data?.repaso === true || xpOtorgado === 0;
+    return { xpOtorgado, esRepaso };
   }
 
   /** Cuántas lecciones (subniveles) distintas ha completado el usuario en

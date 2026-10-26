@@ -4,6 +4,16 @@ import { environment } from '../../environments/environment';
 import { Profile, Nivel, Subnivel, Sena } from '../data/db-types';
 import { MuestraSena } from '../motor-senas/dataset';
 
+export interface ArchivoBucket {
+  nombre: string;
+  ruta: string;
+  bucket: string;
+  url: string;
+  tamanoBytes: number;
+  esVideo: boolean;
+  createdAt: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SupabaseService {
   public supabase: SupabaseClient;
@@ -102,9 +112,6 @@ export class SupabaseService {
   }
 
   // ---------- Recuperar contraseña con código por correo (EmailJS) ----------
-  // El código se genera, guarda y verifica en la Edge Function
-  // supabase/functions/password-reset, que también envía el correo vía la
-  // API de EmailJS y cambia la contraseña con la service role key.
   async requestPasswordResetCode(email: string) {
     const { error } = await this.supabase.functions.invoke('password-reset', {
       body: { action: 'request', email },
@@ -119,8 +126,6 @@ export class SupabaseService {
     return { error: await this.mensajeErrorFuncion(error) };
   }
 
-  /** Las Edge Functions devuelven { error: "mensaje" } en el body cuando fallan;
-   * invoke() solo da un mensaje genérico, así que hay que leer el body real. */
   private async mensajeErrorFuncion(error: any) {
     if (!error) return null;
     const body = await error.context?.json?.().catch(() => null);
@@ -157,7 +162,6 @@ export class SupabaseService {
   }
 
   // ---------- Amigos (tabla follows) ----------
-
   async seguir(followedId: string) {
     const { user } = await this.getUsuarioLocal();
     const myId = user?.id;
@@ -204,21 +208,16 @@ export class SupabaseService {
     return count ?? 0;
   }
 
-  /** IDs de las personas que userId sigue. */
   async idsSeguidos(userId: string): Promise<string[]> {
     const { data } = await this.supabase.from('follows').select('followed_id').eq('follower_id', userId);
     return (data ?? []).map((f: any) => f.followed_id);
   }
 
-  /** Perfiles completos de quienes userId sigue. Si alguno no tiene fila
-   * en profiles todavía (se registró antes de esta función), se rellena
-   * con un perfil mínimo en vez de desaparecer de la lista. */
   async listaSeguidos(userId: string): Promise<Profile[]> {
     const ids = await this.idsSeguidos(userId);
     return this.perfilesParaIds(ids);
   }
 
-  /** Perfiles completos de quienes siguen a userId. */
   async listaSeguidores(userId: string): Promise<Profile[]> {
     const { data } = await this.supabase.from('follows').select('follower_id').eq('followed_id', userId);
     const ids = (data ?? []).map((f: any) => f.follower_id);
@@ -243,19 +242,6 @@ export class SupabaseService {
     });
   }
 
-  /** Busca personas por nombre o username, excluyéndome a mí mismo.
-   *
-   * 
-   *  Antes esto armaba el filtro con `.or(\`full_name.ilike.%${query}%,...\`)`,
-   * interpolando el texto de búsqueda directo dentro de un string de
-   * filtro de PostgREST. Los caracteres `,` `(` `)` tienen significado
-   * propio en esa sintaxis (separan condiciones / agrupan), así que un
-   * texto de búsqueda con una coma, por ejemplo, podía romper el filtro
-   * pensado y colarse como condiciones adicionales sobre otras columnas
-   * -- el equivalente, en una API tipo PostgREST, a una inyección SQL.
-   * `.ilike()` no tiene ese problema: el valor va como parámetro aparte,
-   * no como texto libre dentro de la sintaxis del filtro, así que se hacen
-   * dos búsquedas simples y se combinan acá. */
   async buscarPersonas(query: string, miUserId: string): Promise<Profile[]> {
     const texto = query.trim();
     if (!texto) return [];
@@ -273,8 +259,6 @@ export class SupabaseService {
     return Array.from(combinados.values()).slice(0, 20);
   }
 
-  /** Trae el perfil, y si el usuario no tiene fila todavía (se registró
-   * antes de que existiera esta función), la crea con datos mínimos. */
   async getOCrearProfile(userId: string, nombreFallback: string): Promise<Profile> {
     const { data } = await this.getProfile(userId);
     if (data) return data;
@@ -284,7 +268,7 @@ export class SupabaseService {
     return nuevo;
   }
 
-  // ---------- Eliminar cuenta (vía Edge Function, ver supabase/functions/delete-account) ----------
+  // ---------- Eliminar cuenta (vía Edge Function) ----------
   async deleteAccount() {
     const { data: sessionData } = await this.supabase.auth.getSession();
     const token = sessionData.session?.access_token;
@@ -297,10 +281,6 @@ export class SupabaseService {
   }
 
   // ==================== ADMINISTRACIÓN DE VOCABULARIO ====================
-  // Todo lo de acá abajo requiere que profiles.es_admin sea true para el
-  // usuario logueado — eso lo hace cumplir el RLS de la base de datos, no
-  // solo el guard de rutas del lado del cliente.
-
   async esAdmin(userId: string): Promise<boolean> {
     const { data } = await this.getProfile(userId);
     return data?.es_admin ?? false;
@@ -415,14 +395,22 @@ export class SupabaseService {
   }
 
   /**
-   * Sube el GIF/foto de una seña al bucket `senas` y devuelve la URL
-   * pública. Mismo patrón que `uploadAvatar`. El nombre del archivo
-   * incluye timestamp para no pisar versiones anteriores por accidente
-   * (a diferencia del avatar, donde sí queremos que se sobrescriba).
+   * Sube el GIF/foto/video de una seña al bucket `senas-media` conservando el
+   * nombre base del archivo para que sea fácil de identificar en el explorador
+   * visual del bucket.
    */
   async uploadSenaMedia(file: File) {
-    const ext = file.name.split('.').pop();
-    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const partes = file.name.split('.');
+    const ext = (partes.pop() || 'mp4').toLowerCase();
+    const baseLimpia =
+      (partes.join('.') || 'sena')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase()
+        .slice(0, 48) || 'sena';
+    const path = `${baseLimpia}-${Date.now().toString(36)}.${ext}`;
     const { error: uploadError } = await this.supabase.storage
       .from('senas-media')
       .upload(path, file);
@@ -434,12 +422,72 @@ export class SupabaseService {
   }
 
   /**
+   * Lista todos los archivos multimedia (.mp4, .gif, .webp, etc.) disponibles
+   * en el bucket de señas (incluyendo subcarpetas de primer nivel) para que el
+   * administrador pueda explorarlos y asignarlos visualmente sin copiar URLs.
+   */
+  async listarArchivosBucket(bucketsAdicionales: string[] = []): Promise<ArchivoBucket[]> {
+    const buckets = new Set<string>(['senas-media', ...bucketsAdicionales.filter(Boolean)]);
+
+    try {
+      const { data: listaBuckets } = await this.supabase.storage.listBuckets();
+      for (const b of listaBuckets ?? []) {
+        if (b.name && b.name !== 'avatars' && b.name !== 'icons') {
+          buckets.add(b.name);
+        }
+      }
+    } catch {
+      // Si el rol no tiene permiso para listBuckets(), usamos los buckets conocidos
+    }
+
+    const resultados: ArchivoBucket[] = [];
+    const regexMedia = /\.(mp4|webm|mov|m4v|gif|webp|png|jpg|jpeg)$/i;
+    const regexVideo = /\.(mp4|webm|mov|m4v)$/i;
+
+    for (const bucket of buckets) {
+      const explorarCarpeta = async (prefijo: string, profundidad: number) => {
+        const { data, error } = await this.supabase.storage
+          .from(bucket)
+          .list(prefijo, { limit: 500, sortBy: { column: 'name', order: 'asc' } });
+
+        if (error || !data) return;
+
+        for (const item of data) {
+          if (!item.name || item.name === '.emptyFolderPlaceholder') continue;
+          const rutaCompleta = prefijo ? `${prefijo}/${item.name}` : item.name;
+
+          if (!item.id && profundidad < 2) {
+            await explorarCarpeta(rutaCompleta, profundidad + 1);
+            continue;
+          }
+
+          if (!regexMedia.test(item.name)) continue;
+
+          const { data: pub } = this.supabase.storage.from(bucket).getPublicUrl(rutaCompleta);
+          resultados.push({
+            nombre: item.name,
+            ruta: rutaCompleta,
+            bucket,
+            url: pub.publicUrl,
+            tamanoBytes: Number((item.metadata as any)?.size ?? 0),
+            esVideo: regexVideo.test(item.name),
+            createdAt: item.created_at ?? null,
+          });
+        }
+      };
+
+      await explorarCarpeta('', 0);
+    }
+
+    return resultados.sort((a, b) => {
+      if (a.esVideo !== b.esVideo) return a.esVideo ? -1 : 1;
+      return a.nombre.localeCompare(b.nombre, 'es', { numeric: true });
+    });
+  }
+
+  /**
    * Borra un archivo del bucket `senas-media` a partir de su URL pública,
-   * pero SOLO si la URL de verdad apunta a ese bucket — si alguien pegó
-   * una URL externa a mano (otro sitio, otro bucket), no se toca nada. Se
-   * usa para no dejar basura acumulándose cuando se reemplaza o borra una
-   * seña. Falla en silencio: es limpieza de fondo, no debe romper el
-   * flujo principal de guardar/borrar si algo sale mal acá.
+   * pero SOLO si la URL de verdad apunta a ese bucket.
    */
   async eliminarSenaMediaSiEsPropia(url: string) {
     const marcador = '/storage/v1/object/public/senas-media/';

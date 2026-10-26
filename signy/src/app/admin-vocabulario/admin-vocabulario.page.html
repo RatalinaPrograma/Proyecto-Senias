@@ -73,7 +73,6 @@
       <div class="form-card" *ngIf="formNivelAbierto">
         <h3>{{ editandoNivelId ? 'Editar nivel' : 'Nuevo nivel' }}</h3>
 
-        <!-- vista previa en vivo, igual a como lo va a ver un estudiante -->
         <div class="nivel-preview" [style.background]="formNivel.color" [style.boxShadow]="'0 4px 0 ' + formNivel.color_oscuro">
           <div class="nivel-icon"><ion-icon [name]="formNivel.icono || 'layers-outline'"></ion-icon></div>
           <div class="nivel-info">
@@ -190,14 +189,26 @@
 
       <div class="item-card sena-card" *ngFor="let s of senasFiltradas; trackBy: trackById" (click)="editarSena(s)">
         <div class="item-thumb-wrap">
-          <video *ngIf="s.video_url && esVideoMp4(s.video_url)" [appCachedSrc]="s.video_url" class="item-thumb" muted playsinline preload="metadata"></video>
+          <video
+            *ngIf="s.video_url && esVideoMp4(s.video_url)"
+            [appCachedSrc]="s.video_url"
+            poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+            class="item-thumb"
+            autoplay
+            loop
+            muted
+            playsinline
+            webkit-playsinline
+            preload="metadata">
+          </video>
           <img *ngIf="s.video_url && !esVideoMp4(s.video_url)" [appCachedSrc]="s.video_url" [alt]="s.palabra" class="item-thumb" loading="lazy" decoding="async" />
           <div class="item-thumb placeholder" *ngIf="!s.video_url"><ion-icon name="image-outline"></ion-icon></div>
           <span class="item-icono-badge" *ngIf="s.icono">{{ s.icono }}</span>
         </div>
         <div class="item-info">
           <p class="item-title">{{ s.palabra }}</p>
-          <p class="item-sub warn" *ngIf="!s.video_url"><ion-icon name="alert-circle-outline"></ion-icon> Sin video</p>
+          <p class="item-sub" *ngIf="s.video_url">Video asignado · toca para configurar</p>
+          <p class="item-sub warn" *ngIf="!s.video_url"><ion-icon name="alert-circle-outline"></ion-icon> Sin video asignado</p>
         </div>
         <button class="icon-btn small" (click)="editarSena(s); $event.stopPropagation()" aria-label="Editar">
           <ion-icon name="create-outline"></ion-icon>
@@ -210,7 +221,7 @@
       <div class="empty-state" *ngIf="!senasDe(subnivelActivo.id).length">
         <ion-icon name="image-outline"></ion-icon>
         <p>"{{ subnivelActivo.nombre }}" todavía no tiene señas.</p>
-        <p class="empty-sub">Agrega la primera palabra con su GIF o foto de la seña real.</p>
+        <p class="empty-sub">Agrega la primera palabra seleccionando su MP4 directo desde el bucket.</p>
       </div>
 
       <p class="empty-hint" *ngIf="senasDe(subnivelActivo.id).length && !senasFiltradas.length">
@@ -221,23 +232,42 @@
         <ion-icon name="add" slot="start"></ion-icon> {{ senasDe(subnivelActivo.id).length ? 'Nueva seña' : 'Agregar la primera seña' }}
       </ion-button>
 
-      <!-- form seña -->
-      <div class="form-card" *ngIf="formSenaAbierto">
-        <h3>{{ editandoSenaId ? 'Editar seña' : 'Nueva seña' }}</h3>
-        <p class="form-context">Dentro de <strong>{{ subnivelActivo.nombre }}</strong></p>
+      <!-- ===================== FORMULARIO MANUAL DE SEÑA CON EXPLORADOR DE BUCKET ===================== -->
+      <div class="form-card sena-form-card" *ngIf="formSenaAbierto">
+        <h3>{{ editandoSenaId ? 'Configurar seña' : 'Nueva seña' }}</h3>
+        <p class="form-context">Configuración manual de palabra, ubicación y video MP4 del bucket</p>
 
-        <ion-input label="Palabra" labelPlacement="floating" fill="outline"
-          [(ngModel)]="formSena.palabra" class="signy-input"></ion-input>
+        <!-- Selector manual de Subnivel -->
+        <div class="manual-field-group">
+          <label class="manual-field-label">Subnivel de destino:</label>
+          <select class="manual-select" [(ngModel)]="formSena.subnivel_id">
+            <option *ngFor="let sub of subniveles" [ngValue]="sub.id">
+              {{ nombreCompletoSubnivel(sub) }}
+            </option>
+          </select>
+        </div>
 
-        <ion-textarea label="Descripción (opcional)" labelPlacement="floating" fill="outline" autoGrow="true"
+        <!-- Palabra + botón rápido para tomar nombre del archivo -->
+        <div class="palabra-row">
+          <ion-input label="Palabra de la seña" labelPlacement="floating" fill="outline"
+            [(ngModel)]="formSena.palabra" class="signy-input"></ion-input>
+          <button
+            type="button"
+            class="btn-autoname"
+            *ngIf="formSena.video_url"
+            (click)="usarNombreDeArchivoSeleccionado()"
+            title="Tomar el nombre del archivo MP4 seleccionado">
+            <ion-icon name="sparkles-outline"></ion-icon>
+            <span>Usar nombre del MP4</span>
+          </button>
+        </div>
+
+        <ion-textarea label="Descripción o nota pedagógica (opcional)" labelPlacement="floating" fill="outline" autoGrow="true"
           [(ngModel)]="formSena.descripcion" class="signy-input"></ion-textarea>
 
         <ion-input label="Ícono de concepto (emoji, opcional)" labelPlacement="floating" fill="outline"
           placeholder="Ej: 🐱 para &quot;gato&quot;"
           [(ngModel)]="formSena.icono" class="signy-input"></ion-input>
-        <p class="field-hint">
-          Ayuda a personas cuya primera lengua es LSCh a reconocer la palabra por dibujo, no solo por texto. No reemplaza el video de la seña real.
-        </p>
         <div class="icono-picker">
           <button
             type="button"
@@ -249,26 +279,156 @@
           </button>
         </div>
 
+        <!-- Selector de Modo de Media (Bucket por defecto) -->
         <div class="media-mode">
-          <button class="mode-btn" [class.active]="modoMedia === 'url'" (click)="modoMedia = 'url'">
-            <ion-icon name="link-outline"></ion-icon> Pegar URL
+          <button type="button" class="mode-btn" [class.active]="modoMedia === 'bucket'" (click)="cambiarModoMedia('bucket')">
+            <ion-icon name="folder-open-outline"></ion-icon> Explorar Bucket ({{ archivosBucket.length }})
           </button>
-          <button class="mode-btn" [class.active]="modoMedia === 'subir'" (click)="modoMedia = 'subir'">
-            <ion-icon name="cloud-upload-outline"></ion-icon> Subir archivo
+          <button type="button" class="mode-btn" [class.active]="modoMedia === 'subir'" (click)="cambiarModoMedia('subir')">
+            <ion-icon name="cloud-upload-outline"></ion-icon> Subir MP4
+          </button>
+          <button type="button" class="mode-btn" [class.active]="modoMedia === 'url'" (click)="cambiarModoMedia('url')">
+            <ion-icon name="link-outline"></ion-icon> URL Manual
           </button>
         </div>
 
-        <ion-input *ngIf="modoMedia === 'url'" label="URL del GIF/WebP/video" labelPlacement="floating" fill="outline"
+        <!-- MODO 1: EXPLORADOR VISUAL DEL BUCKET -->
+        <div *ngIf="modoMedia === 'bucket'" class="bucket-explorer">
+          <div class="bucket-toolbar">
+            <div class="bucket-search">
+              <ion-icon name="search-outline"></ion-icon>
+              <input
+                type="text"
+                placeholder="Buscar archivo .mp4 en el bucket…"
+                [(ngModel)]="buscarArchivoBucket"
+                (ngModelChange)="filtrarArchivosBucket()" />
+            </div>
+            <button type="button" class="btn-refresh-bucket" (click)="asegurarArchivosBucket(true)" [disabled]="cargandoBucket" title="Recargar archivos del bucket">
+              <ion-icon name="refresh-outline" [class.spin]="cargandoBucket"></ion-icon>
+            </button>
+          </div>
+
+          <div class="bucket-filters">
+            <button type="button" class="b-pill" [class.active]="filtroBucket === 'todos'" (click)="cambiarFiltroBucket('todos')">
+              Todos ({{ archivosBucket.length }})
+            </button>
+            <button type="button" class="b-pill" [class.active]="filtroBucket === 'disponibles'" (click)="cambiarFiltroBucket('disponibles')">
+              Sin asignar ({{ cantidadDisponiblesBucket }})
+            </button>
+            <button type="button" class="b-pill" [class.active]="filtroBucket === 'mp4'" (click)="cambiarFiltroBucket('mp4')">
+              Solo .MP4
+            </button>
+          </div>
+
+          <div class="bucket-loading" *ngIf="cargandoBucket">
+            <ion-spinner name="dots"></ion-spinner>
+            <span>Leyendo archivos del bucket de Supabase…</span>
+          </div>
+
+          <div class="bucket-empty" *ngIf="!cargandoBucket && !archivosBucketFiltrados.length">
+            <ion-icon name="film-outline"></ion-icon>
+            <p>No se encontraron archivos con este filtro en el bucket.</p>
+          </div>
+
+          <div class="bucket-grid" *ngIf="!cargandoBucket && archivosBucketFiltrados.length">
+            <button
+              type="button"
+              class="bucket-item"
+              *ngFor="let arch of archivosBucketFiltrados; trackBy: trackByUrl"
+              [class.selected]="formSena.video_url === arch.url"
+              [class.in-use]="senaQueUsaUrl(arch.url) && senaQueUsaUrl(arch.url)?.id !== editandoSenaId"
+              (click)="seleccionarArchivoBucket(arch)">
+              <div class="bucket-thumb-box">
+                <video
+                  *ngIf="arch.esVideo"
+                  [src]="arch.url"
+                  poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+                  class="bucket-thumb-media"
+                  muted
+                  loop
+                  playsinline
+                  webkit-playsinline
+                  preload="metadata"
+                  (mouseenter)="$any($event.target).play()"
+                  (mouseleave)="$any($event.target).pause()">
+                </video>
+                <img
+                  *ngIf="!arch.esVideo"
+                  [src]="arch.url"
+                  alt=""
+                  class="bucket-thumb-media"
+                  loading="lazy" />
+
+                <span class="bucket-status-tag selected-tag" *ngIf="formSena.video_url === arch.url">
+                  <ion-icon name="checkmark-circle"></ion-icon> Seleccionado
+                </span>
+                <span class="bucket-status-tag used-tag" *ngIf="formSena.video_url !== arch.url && senaQueUsaUrl(arch.url) as senaUso">
+                  En uso: {{ senaUso.palabra }}
+                </span>
+                <span class="bucket-status-tag free-tag" *ngIf="formSena.video_url !== arch.url && !senaQueUsaUrl(arch.url)">
+                  Disponible
+                </span>
+              </div>
+
+              <div class="bucket-meta">
+                <span class="bucket-filename" [title]="arch.ruta">{{ arch.nombre }}</span>
+                <span class="bucket-size">{{ arch.bucket }} · {{ formatearTamano(arch.tamanoBytes) }}</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- MODO 2: SUBIR UNO O VARIOS ARCHIVOS AL BUCKET -->
+        <div *ngIf="modoMedia === 'subir'" class="upload-box">
+          <p class="upload-box-title">Selecciona uno o varios videos .MP4 para subirlos al bucket:</p>
+          <input type="file" accept="image/*,video/mp4,video/webm" multiple (change)="onArchivoSeleccionado($event)" />
+          <p class="upload-hint" *ngIf="archivosSubidaMultiple.length === 1">Archivo listo: {{ archivosSubidaMultiple[0].name }}</p>
+          <p class="upload-hint" *ngIf="archivosSubidaMultiple.length > 1">{{ archivosSubidaMultiple.length }} archivos seleccionados para subir al bucket</p>
+          <p class="upload-hint" *ngIf="subiendoArchivo">{{ progresoSubida || 'Subiendo al bucket…' }}</p>
+
+          <ion-button
+            *ngIf="archivosSubidaMultiple.length > 0"
+            class="btn-fox btn-upload-now"
+            expand="block"
+            [disabled]="subiendoArchivo"
+            (click)="subirArchivosAlBucketAhora()">
+            <ion-icon name="cloud-upload-outline" slot="start"></ion-icon>
+            {{ subiendoArchivo ? 'Subiendo…' : ('Subir ' + archivosSubidaMultiple.length + ' archivo(s) al Bucket') }}
+          </ion-button>
+        </div>
+
+        <!-- MODO 3: PEGAR URL MANUALMENTE -->
+        <ion-input *ngIf="modoMedia === 'url'" label="URL del video MP4 o GIF" labelPlacement="floating" fill="outline"
           [(ngModel)]="formSena.video_url" class="signy-input"></ion-input>
 
-        <div *ngIf="modoMedia === 'subir'" class="upload-box">
-          <input type="file" accept="image/*,video/mp4" (change)="onArchivoSeleccionado($event)" />
-          <p class="upload-hint" *ngIf="archivoSeleccionado">{{ archivoSeleccionado.name }}</p>
-          <p class="upload-hint" *ngIf="subiendoArchivo">Subiendo…</p>
+        <!-- VISTA PREVIA GRANDE DEL VIDEO SELECCIONADO -->
+        <div class="preview-media-container" *ngIf="formSena.video_url">
+          <div class="preview-header">
+            <span>Vista previa del video asignado</span>
+            <small>{{ formSena.video_url.split('/').pop() }}</small>
+          </div>
+          <div class="preview-media-box">
+            <video
+              *ngIf="esVideoMp4(formSena.video_url)"
+              [appCachedSrc]="formSena.video_url"
+              poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+              class="preview-img-large"
+              autoplay
+              loop
+              controls
+              muted
+              playsinline
+              webkit-playsinline
+              preload="auto">
+            </video>
+            <img
+              *ngIf="!esVideoMp4(formSena.video_url)"
+              [appCachedSrc]="formSena.video_url"
+              alt="Vista previa"
+              class="preview-img-large"
+              decoding="async" />
+          </div>
         </div>
-
-        <video *ngIf="formSena.video_url && esVideoMp4(formSena.video_url)" [appCachedSrc]="formSena.video_url" class="preview-img" controls muted playsinline preload="metadata"></video>
-        <img *ngIf="formSena.video_url && !esVideoMp4(formSena.video_url)" [appCachedSrc]="formSena.video_url" alt="Vista previa" class="preview-img" decoding="async" />
 
         <p class="form-error" *ngIf="errorForm">{{ errorForm }}</p>
 
@@ -277,7 +437,7 @@
             <ion-icon name="close-outline" slot="start"></ion-icon> Cancelar
           </ion-button>
           <ion-button class="btn-success" (click)="guardarSena()" [disabled]="guardando">
-            <ion-icon name="save-outline" slot="start"></ion-icon> {{ guardando ? 'Guardando…' : 'Guardar' }}
+            <ion-icon name="save-outline" slot="start"></ion-icon> {{ guardando ? 'Guardando…' : 'Guardar Seña' }}
           </ion-button>
         </div>
       </div>

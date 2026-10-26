@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { CachedSrcDirective } from '../shared/cached-src.directive';
 import { IonicModule, ModalController } from '@ionic/angular';
 import { Router } from '@angular/router';
-import { SupabaseService } from '../services/supabase';
+import { SupabaseService, ArchivoBucket } from '../services/supabase';
 import { BotonAtrasService } from '../services/boton-atras';
 import { Nivel, Subnivel, Sena } from '../data/db-types';
 import { addIcons } from 'ionicons';
@@ -25,6 +25,11 @@ import {
   sparklesOutline,
   videocamOutline,
   hardwareChipOutline,
+  folderOpenOutline,
+  refreshOutline,
+  checkmarkCircle,
+  searchOutline,
+  filmOutline,
 } from 'ionicons/icons';
 
 addIcons({
@@ -43,19 +48,16 @@ addIcons({
   'sparkles-outline': sparklesOutline,
   'videocam-outline': videocamOutline,
   'hardware-chip-outline': hardwareChipOutline,
+  'folder-open-outline': folderOpenOutline,
+  'refresh-outline': refreshOutline,
+  'checkmark-circle': checkmarkCircle,
+  'search-outline': searchOutline,
+  'film-outline': filmOutline,
 });
 
-/** El input ya filtra por accept="image/*,video/mp4", pero eso es solo una
- * sugerencia para el selector de archivos del sistema operativo — no
- * bloquea nada por sí solo. Esta lista sí se revisa en código antes de
- * subir cualquier archivo al bucket. */
-const TIPOS_MEDIA_PERMITIDOS = ['image/gif', 'image/webp', 'image/png', 'image/jpeg', 'video/mp4'];
-const TAMANO_MAX_ARCHIVO = 20 * 1024 * 1024; // 20 MB
+const TIPOS_MEDIA_PERMITIDOS = ['image/gif', 'image/webp', 'image/png', 'image/jpeg', 'video/mp4', 'video/webm', 'video/quicktime'];
+const TAMANO_MAX_ARCHIVO = 25 * 1024 * 1024; // 25 MB
 
-/** Atajos rápidos para el campo "ícono de concepto" del formulario de
- * señas — no pretende cubrir toda palabra posible, es solo un punto de
- * partida común. Para cualquier otra cosa, el admin puede escribir/pegar
- * cualquier emoji directo desde el teclado del celular o computador. */
 const SUGERENCIAS_ICONO = [
   '👋', '🤝', '❤️', '😊', '😢', '😡',
   '👨‍👩‍👧', '👶', '🏠',
@@ -68,7 +70,8 @@ const SUGERENCIAS_ICONO = [
 ];
 
 type Vista = 'niveles' | 'subniveles' | 'senas';
-type ModoMedia = 'url' | 'subir';
+type ModoMedia = 'bucket' | 'subir' | 'url';
+type FiltroBucket = 'todos' | 'disponibles' | 'mp4';
 
 const COLOR_DEFECTO = '#2CA6A4';
 const COLOR_OSCURO_DEFECTO = '#1F7E7C';
@@ -81,9 +84,6 @@ const COLOR_OSCURO_DEFECTO = '#1F7E7C';
   styleUrls: ['./admin-vocabulario.page.scss'],
 })
 export class AdminVocabularioPage implements OnInit {
-  // La pantalla se navega como carpetas: Niveles -> (entras a uno) ->
-  // Subniveles -> (entras a uno) -> Señas. Así el admin nunca tiene que
-  // adivinar "¿dónde estoy? ¿qué le pertenece a qué?" — se ve solo.
   vista: Vista = 'niveles';
   nivelActivo: Nivel | null = null;
   subnivelActivo: Subnivel | null = null;
@@ -95,14 +95,10 @@ export class AdminVocabularioPage implements OnInit {
   subniveles: Subnivel[] = [];
   senas: Sena[] = [];
 
-  // Índices por padre: se arman una vez al cargar en vez de filtrar el array
-  // entero en cada llamada desde el template (que corría por cada ciclo de CD).
   private subnivelesPorNivel = new Map<number, Subnivel[]>();
   private senasPorSubnivel = new Map<number, Sena[]>();
 
   buscarSena = '';
-  // Lista ya filtrada por el buscador; se recalcula al cargar, al entrar a un
-  // subnivel y al escribir — no en cada render.
   senasFiltradas: Sena[] = [];
 
   // ---- formulario de nivel ----
@@ -119,10 +115,20 @@ export class AdminVocabularioPage implements OnInit {
   formSenaAbierto = false;
   editandoSenaId: number | null = null;
   formSena: Partial<Sena> = {};
-  modoMedia: ModoMedia = 'url';
+  modoMedia: ModoMedia = 'bucket';
   archivoSeleccionado: File | null = null;
+  archivosSubidaMultiple: File[] = [];
   subiendoArchivo = false;
+  progresoSubida = '';
   sugerenciasIcono = SUGERENCIAS_ICONO;
+
+  // ---- Explorador visual del Bucket ----
+  archivosBucket: ArchivoBucket[] = [];
+  archivosBucketFiltrados: ArchivoBucket[] = [];
+  cargandoBucket = false;
+  buscarArchivoBucket = '';
+  filtroBucket: FiltroBucket = 'todos';
+  private mapaUrlASena = new Map<string, Sena>();
 
   guardando = false;
   errorForm: string | null = null;
@@ -155,6 +161,7 @@ export class AdminVocabularioPage implements OnInit {
       this.senas = senas;
       this.reindexar();
       this.filtrarSenas();
+      this.filtrarArchivosBucket();
     } catch (e: any) {
       this.error = e?.message ?? 'No se pudo cargar el vocabulario.';
     } finally {
@@ -169,9 +176,13 @@ export class AdminVocabularioPage implements OnInit {
       if (arr) arr.push(s); else this.subnivelesPorNivel.set(s.nivel_id, [s]);
     }
     this.senasPorSubnivel.clear();
+    this.mapaUrlASena.clear();
     for (const s of this.senas) {
       const arr = this.senasPorSubnivel.get(s.subnivel_id);
       if (arr) arr.push(s); else this.senasPorSubnivel.set(s.subnivel_id, [s]);
+      if (s.video_url) {
+        this.mapaUrlASena.set(s.video_url.trim(), s);
+      }
     }
   }
 
@@ -182,11 +193,9 @@ export class AdminVocabularioPage implements OnInit {
   }
 
   trackById = (_: number, item: { id: number }) => item.id;
+  trackByUrl = (_: number, item: ArchivoBucket) => item.url;
 
   // ==================== NAVEGACIÓN (breadcrumb) ====================
-  // La flechita de "volver" del topbar retrocede un escalón a la vez,
-  // igual que en el resto de la app — nunca saca de la pantalla de golpe
-  // si estás adentro de un nivel o subnivel.
   volver() {
     if (this.vista === 'senas') {
       this.volverASubniveles();
@@ -197,7 +206,6 @@ export class AdminVocabularioPage implements OnInit {
     }
   }
 
-  // ---- botón atrás del teléfono ----
   private readonly atras = inject(BotonAtrasService).paraPantalla(() => this.alPresionarAtras());
 
   ionViewWillEnter() {
@@ -208,11 +216,6 @@ export class AdminVocabularioPage implements OnInit {
     this.atras.desactivar();
   }
 
-  /**
-   * Atrás cierra primero el formulario abierto y después sube un escalón
-   * (señas → subniveles → niveles), igual que la flecha del topbar; recién
-   * en la lista de niveles sale de la pantalla.
-   */
   alPresionarAtras(): boolean {
     if (this.guardando) return true;
     if (this.formNivelAbierto || this.formSubnivelAbierto || this.formSenaAbierto) {
@@ -253,15 +256,17 @@ export class AdminVocabularioPage implements OnInit {
     this.cerrarFormularios();
   }
 
-  // ==================== helpers de conteo / filtrado ====================
-  // Lookups O(1) sobre los índices; devuelven la MISMA referencia de array
-  // entre llamadas, así que son seguros de usar en el template.
   subnivelesDe(nivelId: number): Subnivel[] {
     return this.subnivelesPorNivel.get(nivelId) ?? [];
   }
 
   senasDe(subnivelId: number): Sena[] {
     return this.senasPorSubnivel.get(subnivelId) ?? [];
+  }
+
+  nombreCompletoSubnivel(sub: Subnivel): string {
+    const niv = this.niveles.find(n => n.id === sub.nivel_id);
+    return niv ? `Nivel ${niv.numero_nivel} (${niv.nombre}) · ${sub.numero_subnivel}. ${sub.nombre}` : `${sub.numero_subnivel}. ${sub.nombre}`;
   }
 
   get subnivelesDelNivelActivo(): Subnivel[] {
@@ -441,64 +446,235 @@ export class AdminVocabularioPage implements OnInit {
     await this.cargarTodo();
   }
 
-  // ==================== SEÑAS ====================
+  // ==================== SEÑAS & EXPLORADOR DE BUCKET ====================
   abrirNuevaSena() {
     if (!this.subnivelActivo) return;
     this.formSena = { subnivel_id: this.subnivelActivo.id };
     this.editandoSenaId = null;
-    this.modoMedia = 'url';
+    this.modoMedia = 'bucket';
     this.archivoSeleccionado = null;
+    this.archivosSubidaMultiple = [];
     this.formSenaAbierto = true;
     this.errorForm = null;
+    void this.asegurarArchivosBucket();
   }
 
   editarSena(s: Sena) {
     this.formSena = { ...s };
     this.editandoSenaId = s.id;
-    this.modoMedia = 'url';
+    this.modoMedia = 'bucket';
     this.archivoSeleccionado = null;
+    this.archivosSubidaMultiple = [];
     this.formSenaAbierto = true;
     this.errorForm = null;
+    void this.asegurarArchivosBucket();
+  }
+
+  cambiarModoMedia(modo: ModoMedia) {
+    this.modoMedia = modo;
+    if (modo === 'bucket') {
+      void this.asegurarArchivosBucket();
+    }
+  }
+
+  async asegurarArchivosBucket(forzarRecarga = false) {
+    if (this.archivosBucket.length > 0 && !forzarRecarga) {
+      this.filtrarArchivosBucket();
+      return;
+    }
+    await this.cargarArchivosBucket();
+  }
+
+  async cargarArchivosBucket() {
+    this.cargandoBucket = true;
+    try {
+      // Detectar buckets utilizados en URLs actuales por si hay varios buckets configurados
+      const bucketsEnUso = new Set<string>(['senas-media']);
+      for (const s of this.senas) {
+        if (!s.video_url) continue;
+        const m = s.video_url.match(/\/storage\/v1\/object\/public\/([^/]+)\//);
+        if (m && m[1]) bucketsEnUso.add(m[1]);
+      }
+
+      const desdeStorage = await this.supabaseService.listarArchivosBucket(Array.from(bucketsEnUso));
+      const mapaUnico = new Map<string, ArchivoBucket>();
+      for (const arch of desdeStorage) {
+        mapaUnico.set(arch.url, arch);
+      }
+
+      // Respaldo: incluir también las URLs que ya estén en `senas` por si alguna política RLS oculta `list()`
+      for (const s of this.senas) {
+        const url = s.video_url?.trim();
+        if (!url || mapaUnico.has(url)) continue;
+        const partesUrl = url.split('/');
+        const nombreArchivo = decodeURIComponent(partesUrl[partesUrl.length - 1] || `${s.palabra}.mp4`);
+        const mBucket = url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+        mapaUnico.set(url, {
+          nombre: nombreArchivo,
+          ruta: mBucket ? mBucket[2] : nombreArchivo,
+          bucket: mBucket ? mBucket[1] : 'externo',
+          url,
+          tamanoBytes: 0,
+          esVideo: esVideoMp4(url),
+          createdAt: null,
+        });
+      }
+
+      this.archivosBucket = Array.from(mapaUnico.values()).sort((a, b) => {
+        if (a.esVideo !== b.esVideo) return a.esVideo ? -1 : 1;
+        return a.nombre.localeCompare(b.nombre, 'es', { numeric: true });
+      });
+      this.filtrarArchivosBucket();
+    } catch (e) {
+      console.warn('Error al listar bucket:', e);
+    } finally {
+      this.cargandoBucket = false;
+    }
+  }
+
+  filtrarArchivosBucket() {
+    const q = this.buscarArchivoBucket.trim().toLowerCase();
+    this.archivosBucketFiltrados = this.archivosBucket.filter((arch) => {
+      if (this.filtroBucket === 'mp4' && !arch.esVideo) return false;
+      if (this.filtroBucket === 'disponibles') {
+        const asignada = this.senaQueUsaUrl(arch.url);
+        if (asignada && asignada.id !== this.editandoSenaId) return false;
+      }
+      if (!q) return true;
+      const asignada = this.senaQueUsaUrl(arch.url);
+      return (
+        arch.nombre.toLowerCase().includes(q) ||
+        arch.ruta.toLowerCase().includes(q) ||
+        (asignada?.palabra.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }
+
+  cambiarFiltroBucket(f: FiltroBucket) {
+    this.filtroBucket = f;
+    this.filtrarArchivosBucket();
+  }
+
+  senaQueUsaUrl(url: string): Sena | undefined {
+    return this.mapaUrlASena.get(url.trim());
+  }
+
+  get cantidadDisponiblesBucket(): number {
+    return this.archivosBucket.filter((a) => {
+      const s = this.senaQueUsaUrl(a.url);
+      return !s || s.id === this.editandoSenaId;
+    }).length;
+  }
+
+  seleccionarArchivoBucket(arch: ArchivoBucket) {
+    this.formSena.video_url = arch.url;
+    this.errorForm = null;
+  }
+
+  /** Sugiere un nombre de palabra limpio a partir del nombre del archivo .mp4 */
+  sugerirPalabraDesdeArchivo(nombreArchivo: string): string {
+    const sinExt = nombreArchivo.replace(/\.[^.]+$/, '');
+    // Quitar sufijos de timestamp tipo "-17283912" o "-m2k9f1"
+    const sinTimestamp = sinExt.replace(/-[a-z0-9]{6,}$/i, '').replace(/^\d{10,}-/, '');
+    const limpio = sinTimestamp.replace(/[_-]+/g, ' ').trim();
+    if (!limpio) return '';
+    return limpio.charAt(0).toUpperCase() + limpio.slice(1);
+  }
+
+  usarNombreDeArchivoSeleccionado() {
+    if (!this.formSena.video_url) return;
+    const partes = this.formSena.video_url.split('/');
+    const ultimo = decodeURIComponent(partes[partes.length - 1] || '');
+    const sugerencia = this.sugerirPalabraDesdeArchivo(ultimo);
+    if (sugerencia) {
+      this.formSena.palabra = sugerencia;
+    }
+  }
+
+  formatearTamano(bytes: number): string {
+    if (!bytes || bytes <= 0) return 'MP4';
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   onArchivoSeleccionado(evento: Event) {
     const input = evento.target as HTMLInputElement;
-    const file = input.files?.[0] ?? null;
+    const files = Array.from(input.files ?? []);
     this.errorForm = null;
 
-    if (file && !TIPOS_MEDIA_PERMITIDOS.includes(file.type)) {
-      this.errorForm = 'Ese tipo de archivo no está permitido. Usa GIF, WebP, PNG, JPG o MP4.';
-      input.value = '';
+    if (!files.length) {
       this.archivoSeleccionado = null;
-      return;
-    }
-    if (file && file.size > TAMANO_MAX_ARCHIVO) {
-      this.errorForm = 'El archivo pesa más de 20 MB — comprímelo antes de subirlo.';
-      input.value = '';
-      this.archivoSeleccionado = null;
+      this.archivosSubidaMultiple = [];
       return;
     }
 
-    this.archivoSeleccionado = file;
+    for (const file of files) {
+      if (!TIPOS_MEDIA_PERMITIDOS.includes(file.type) && !/\.(mp4|webm|mov|gif|webp|png|jpg|jpeg)$/i.test(file.name)) {
+        this.errorForm = `El archivo "${file.name}" no tiene un formato permitido. Usa MP4, WebM, GIF, WebP, PNG o JPG.`;
+        input.value = '';
+        this.archivoSeleccionado = null;
+        this.archivosSubidaMultiple = [];
+        return;
+      }
+      if (file.size > TAMANO_MAX_ARCHIVO) {
+        this.errorForm = `El archivo "${file.name}" pesa más de 25 MB — comprímelo antes de subirlo.`;
+        input.value = '';
+        this.archivoSeleccionado = null;
+        this.archivosSubidaMultiple = [];
+        return;
+      }
+    }
+
+    this.archivoSeleccionado = files[0];
+    this.archivosSubidaMultiple = files;
+  }
+
+  /** Sube uno o varios archivos directamente al bucket y los deja listos en el explorador */
+  async subirArchivosAlBucketAhora() {
+    if (!this.archivosSubidaMultiple.length || this.subiendoArchivo) return;
+    this.subiendoArchivo = true;
+    this.errorForm = null;
+
+    try {
+      let ultimaUrl: string | null = null;
+      for (let i = 0; i < this.archivosSubidaMultiple.length; i++) {
+        const f = this.archivosSubidaMultiple[i];
+        this.progresoSubida = `Subiendo ${i + 1}/${this.archivosSubidaMultiple.length}: ${f.name}…`;
+        const { data, error } = await this.supabaseService.uploadSenaMedia(f);
+        if (error) throw error;
+        if (data) ultimaUrl = data;
+      }
+
+      if (ultimaUrl) {
+        this.formSena.video_url = ultimaUrl;
+      }
+      this.archivoSeleccionado = null;
+      this.archivosSubidaMultiple = [];
+      await this.cargarArchivosBucket();
+      this.modoMedia = 'bucket';
+    } catch (e: any) {
+      this.errorForm = e?.message ?? 'Error al subir archivo(s) al bucket.';
+    } finally {
+      this.subiendoArchivo = false;
+      this.progresoSubida = '';
+    }
   }
 
   elegirIcono(emoji: string) {
     this.formSena.icono = emoji;
   }
 
-  /** true si la URL/nombre de archivo apunta a un video (.mp4), para decidir
-   * si la vista previa se muestra con <video> en vez de <img>. */
   esVideoMp4(url: string | null | undefined): boolean {
     return esVideoMp4(url);
   }
 
   async guardarSena() {
     if (!this.formSena.palabra?.trim() || !this.formSena.subnivel_id) {
-      this.errorForm = 'La palabra es obligatoria.';
+      this.errorForm = 'La palabra y el subnivel son obligatorios.';
       return;
     }
     if (this.modoMedia === 'subir' && !this.archivoSeleccionado && !this.formSena.video_url) {
-      this.errorForm = 'Selecciona un archivo para subir.';
+      this.errorForm = 'Selecciona un archivo para subir o elige un MP4 desde el explorador del bucket.';
       return;
     }
 
@@ -510,16 +686,12 @@ export class AdminVocabularioPage implements OnInit {
         s.id !== this.editandoSenaId
     );
     if (duplicada) {
-      this.errorForm = `"${this.formSena.palabra.trim()}" ya existe acá.`;
+      this.errorForm = `"${this.formSena.palabra.trim()}" ya existe en este subnivel.`;
       return;
     }
 
     this.guardando = true;
     this.errorForm = null;
-
-    const urlAnterior = this.editandoSenaId
-      ? this.senas.find(s => s.id === this.editandoSenaId)?.video_url ?? null
-      : null;
 
     let videoUrl = this.formSena.video_url?.trim() || null;
 
@@ -537,7 +709,7 @@ export class AdminVocabularioPage implements OnInit {
     }
 
     const datos = {
-      subnivel_id: this.formSena.subnivel_id!,
+      subnivel_id: Number(this.formSena.subnivel_id),
       palabra: this.formSena.palabra!.trim(),
       descripcion: this.formSena.descripcion?.trim() || null,
       icono: this.formSena.icono?.trim() || null,
@@ -554,16 +726,11 @@ export class AdminVocabularioPage implements OnInit {
       return;
     }
 
-    if (urlAnterior && urlAnterior !== videoUrl) {
-      this.supabaseService.eliminarSenaMediaSiEsPropia(urlAnterior);
-    }
-
     this.cerrarFormularios();
     await this.cargarTodo();
   }
 
   async eliminarSena(s: Sena) {
-    // Borrar una seña borra también sus muestras del dataset (ON DELETE CASCADE): se avisa cuántas son.
     const muestras = await this.muestrasDeSena(s.id);
     const aviso = muestras > 0
       ? `\n\n⚠️ También se borrarán sus ${muestras} muestra(s) grabadas para entrenar el modelo.`
@@ -575,13 +742,9 @@ export class AdminVocabularioPage implements OnInit {
       alert(error.message ?? 'No se pudo eliminar la seña.');
       return;
     }
-    if (s.video_url) {
-      this.supabaseService.eliminarSenaMediaSiEsPropia(s.video_url);
-    }
     await this.cargarTodo();
   }
 
-  /** Muestras del dataset de una seña (0 si la tabla aún no existe o no hay conexión). */
   private async muestrasDeSena(senaId: number): Promise<number> {
     try {
       return (await this.supabaseService.contarMuestrasPorSena()).get(senaId) ?? 0;

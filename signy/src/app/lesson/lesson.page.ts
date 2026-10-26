@@ -99,6 +99,7 @@ export class LessonPage implements OnInit, OnDestroy {
 
   vidas = 5;
   xpGanado = 0;
+  esRepasoSubnivel = false;
 
   // ---- flashcards ----
   flashIndex = 0;
@@ -773,7 +774,11 @@ export class LessonPage implements OnInit, OnDestroy {
     this.finalizando = true;
     this.xpGanado = xpFinal;
     try {
-      await this.contenidoService.marcarSubnivelCompletado(this.userId, this.subnivel.id, xpFinal);
+      const resMarcado = await this.contenidoService.marcarSubnivelCompletado(this.userId, this.subnivel.id, xpFinal);
+      const xpOtorgado = resMarcado?.xpOtorgado ?? xpFinal;
+      const esRepaso = resMarcado?.esRepaso ?? false;
+      this.xpGanado = xpOtorgado;
+      this.esRepasoSubnivel = esRepaso;
       const [statsFinal, { nivelRecienCompletado }] = await Promise.all([
         this.contenidoService.actualizarStatsTrasLeccion(this.userId),
         this.contenidoService.avanzarNivelSiCorresponde(this.userId, this.nivel.id),

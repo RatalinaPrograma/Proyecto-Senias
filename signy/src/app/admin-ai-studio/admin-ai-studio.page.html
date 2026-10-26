@@ -9,7 +9,7 @@
         <ion-icon name="hardware-chip-outline" class="brand-icon"></ion-icon>
         <span>Signy AI Studio</span>
       </div>
-      <p class="brand-subtitle">Entrenamiento y reconocimiento de señas</p>
+      <p class="brand-subtitle">Entrenamiento, laboratorio y Avatar 2D</p>
     </div>
     <div class="studio-top-actions">
       <button class="btn-link" (click)="exportarDataset()" [disabled]="exportando" title="Descargar las muestras para entrenar el modelo (ml/entrenar.py)">
@@ -61,7 +61,7 @@
       </div>
     </div>
 
-    <!-- Selector de vista -->
+    <!-- Selector de vista con 3 pestañas -->
     <div class="studio-nav-tabs">
       <button
         class="tab-btn"
@@ -76,6 +76,13 @@
         (click)="cambiarVista('lab')">
         <ion-icon name="videocam-outline"></ion-icon>
         <span>Lab en Vivo</span>
+      </button>
+      <button
+        class="tab-btn tab-btn-avatar"
+        [class.active]="vistaModo === 'avatar'"
+        (click)="cambiarVista('avatar')">
+        <ion-icon name="paw-outline"></ion-icon>
+        <span>Avatar 2D</span>
       </button>
     </div>
 
@@ -244,6 +251,241 @@
               Ve a "Catálogo", toca "Entrenar" en una seña y calíbrala con tu cámara para que el laboratorio pueda reconocerla.
             </p>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= VISTA: AVATAR 2D PLANO (CINTURA HACIA ARRIBA) ================= -->
+    <div class="avatar-section" *ngIf="vistaModo === 'avatar'">
+      <!-- Banner Estratégico -->
+      <div class="avatar-vision-card">
+        <div class="vision-header">
+          <div class="vision-icon-wrap">
+            <ion-icon name="paw-outline"></ion-icon>
+          </div>
+          <div>
+            <h3>Signy 2D Character Avatar (Cintura a Cabeza)</h3>
+            <p>Personaje plano articulado por Cinemática Inversa (IK) sobre los landmarks de las manos.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Selector de Fuente (Datos) -->
+      <div class="avatar-source-selector">
+        <button
+          class="source-chip"
+          [class.active]="avatarFuente === 'sintetica'"
+          (click)="cambiarFuenteAvatar('sintetica')">
+          <ion-icon name="sparkles-outline"></ion-icon>
+          <span>Gesto Sintético</span>
+        </button>
+
+        <button
+          class="source-chip"
+          [class.active]="avatarFuente === 'dataset'"
+          (click)="cambiarFuenteAvatar('dataset')">
+          <ion-icon name="layers-outline"></ion-icon>
+          <span>Muestra del Dataset</span>
+        </button>
+
+        <button
+          class="source-chip"
+          [class.active]="avatarFuente === 'camara'"
+          (click)="cambiarFuenteAvatar('camara')">
+          <ion-icon name="videocam-outline"></ion-icon>
+          <span>Cámara en Vivo</span>
+        </button>
+      </div>
+
+      <!-- Controles de la fuente actual -->
+      <div class="avatar-source-controls" [ngSwitch]="avatarFuente">
+        <!-- Sub-selector: Gestos Sintéticos -->
+        <div class="chips-subgroup" *ngSwitchCase="'sintetica'">
+          <span class="chips-label">Gesto:</span>
+          <button class="pill" [class.active]="avatarSinteticaActual === 'hola'" (click)="avatarSinteticaActual = 'hola'">Hola</button>
+          <button class="pill" [class.active]="avatarSinteticaActual === 'si'" (click)="avatarSinteticaActual = 'si'">Sí</button>
+          <button class="pill" [class.active]="avatarSinteticaActual === 'l'" (click)="avatarSinteticaActual = 'l'">Letra L</button>
+          <button class="pill" [class.active]="avatarSinteticaActual === 'separar'" (click)="avatarSinteticaActual = 'separar'">Separar (2 manos)</button>
+        </div>
+
+        <!-- Sub-selector: Muestra del Dataset -->
+        <div class="dataset-picker-wrap" *ngSwitchCase="'dataset'">
+          <label>Selecciona una seña grabada:</label>
+          <select
+            class="select-input"
+            [ngModel]="avatarSenaIdSeleccionada"
+            (ngModelChange)="seleccionarSenaDatasetAvatar($event)">
+            <option [ngValue]="null" disabled>Elige una seña con muestras…</option>
+            <option *ngFor="let s of senas" [ngValue]="s.id">
+              {{ s.palabra }} ({{ muestrasDe(s.id) }} muestras)
+            </option>
+          </select>
+          <p class="avatar-msg" *ngIf="avatarMensaje">{{ avatarMensaje }}</p>
+        </div>
+
+        <!-- Sub-selector: Cámara en Vivo -->
+        <div class="camera-avatar-hint" *ngSwitchCase="'camara'">
+          <ion-icon name="videocam-outline"></ion-icon>
+          <span>Pon tus manos frente a la cámara: el personaje moverá sus brazos y dedos como un espejo.</span>
+        </div>
+      </div>
+
+      <!-- Visor del Avatar 2D -->
+      <div class="avatar-viewport-container">
+        <!-- Video opcional de fondo -->
+        <video
+          #avatarVideo
+          class="avatar-video-background"
+          *ngIf="avatarFuente === 'camara'"
+          [style.opacity]="avatarMostrarVideoFondo ? '0.25' : '0'"
+          autoplay
+          playsinline
+          muted>
+        </video>
+
+        <!-- Canvas Principal del Avatar 2D -->
+        <canvas #avatarCanvas class="avatar-canvas"></canvas>
+
+        <!-- HUD de métricas sobre el canvas -->
+        <div class="avatar-hud">
+          <span class="fps-badge">{{ avatarFPS }} FPS</span>
+          <span class="theme-badge">{{ avatarConfig.tema | uppercase }}</span>
+        </div>
+      </div>
+
+      <!-- Selector de Personaje / Estilo Visual -->
+      <div class="avatar-panel-card">
+        <div class="panel-header">
+          <ion-icon name="color-palette-outline"></ion-icon>
+          <h4>Personaje 2D (Cintura hacia Arriba)</h4>
+        </div>
+
+        <div class="theme-grid">
+          <button
+            class="theme-card theme-zorro"
+            [class.active]="avatarConfig.tema === 'zorro'"
+            (click)="cambiarTemaAvatar('zorro')">
+            <span class="theme-dot" style="background: #F5791F;"></span>
+            <div class="theme-meta">
+              <strong>Zorrito Signy</strong>
+              <small>Mascota oficial plana</small>
+            </div>
+          </button>
+
+          <button
+            class="theme-card theme-toon"
+            [class.active]="avatarConfig.tema === 'persona'"
+            (click)="cambiarTemaAvatar('persona')">
+            <span class="theme-dot" style="background: #2CA6A4;"></span>
+            <div class="theme-meta">
+              <strong>Persona Sin Cara</strong>
+              <small>Humano minimalista plano</small>
+            </div>
+          </button>
+
+          <button
+            class="theme-card theme-cyber"
+            [class.active]="avatarConfig.tema === 'cyber'"
+            (click)="cambiarTemaAvatar('cyber')">
+            <span class="theme-dot" style="background: #1F345A;"></span>
+            <div class="theme-meta">
+              <strong>Alto Contraste</strong>
+              <small>Persona sin cara oscura</small>
+            </div>
+          </button>
+
+          <button
+            class="theme-card theme-bones"
+            [class.active]="avatarConfig.tema === 'huesos'"
+            (click)="cambiarTemaAvatar('huesos')">
+            <span class="theme-dot" style="background: #00F0FF;"></span>
+            <div class="theme-meta">
+              <strong>Maniquí + Rig</strong>
+              <small>Inspección cinemática IK</small>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Ajustes y Sliders del Avatar -->
+      <div class="avatar-panel-card">
+        <div class="panel-header">
+          <ion-icon name="options-outline"></ion-icon>
+          <h4>Proporciones y Cinemática</h4>
+        </div>
+
+        <!-- Slider: Tamaño de Manos -->
+        <div class="slider-row">
+          <div class="slider-label">
+            <span>Tamaño / Expresividad de Manos:</span>
+            <strong>{{ avatarConfig.grosorHueso | number:'1.1-1' }}x</strong>
+          </div>
+          <input
+            type="range"
+            min="0.7"
+            max="1.5"
+            step="0.05"
+            class="range-slider"
+            [(ngModel)]="avatarConfig.grosorHueso"
+            (ngModelChange)="actualizarAjustesAvatar()" />
+        </div>
+
+        <!-- Slider: Suavizado Lerp -->
+        <div class="slider-row">
+          <div class="slider-label">
+            <span>Suavizado de Movimiento (Lerp):</span>
+            <strong>{{ avatarConfig.suavizado * 100 | number:'1.0-0' }}%</strong>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="0.65"
+            step="0.05"
+            class="range-slider"
+            [(ngModel)]="avatarConfig.suavizado"
+            (ngModelChange)="actualizarAjustesAvatar()" />
+        </div>
+
+        <!-- Toggles de Componentes del Personaje -->
+        <div class="toggles-grid">
+          <label class="toggle-item" *ngIf="avatarConfig.tema === 'zorro'">
+            <input
+              type="checkbox"
+              [(ngModel)]="avatarConfig.mostrarMallaPalma"
+              (ngModelChange)="actualizarAjustesAvatar()" />
+            <span>Rostro del Zorrito</span>
+          </label>
+
+          <label class="toggle-item">
+            <input
+              type="checkbox"
+              [(ngModel)]="avatarConfig.mostrarAntebrazo"
+              (ngModelChange)="actualizarAjustesAvatar()" />
+            <span>Pañuelo / Accesorios</span>
+          </label>
+
+          <label class="toggle-item">
+            <input
+              type="checkbox"
+              [(ngModel)]="avatarConfig.mostrarAura"
+              (ngModelChange)="actualizarAjustesAvatar()" />
+            <span>Aura de Fondo</span>
+          </label>
+
+          <label class="toggle-item">
+            <input
+              type="checkbox"
+              [(ngModel)]="avatarConfig.mostrarEsqueletoGuia"
+              (ngModelChange)="actualizarAjustesAvatar()" />
+            <span>Ver Huesos Guía (IK)</span>
+          </label>
+
+          <label class="toggle-item" *ngIf="avatarFuente === 'camara'">
+            <input
+              type="checkbox"
+              [(ngModel)]="avatarMostrarVideoFondo" />
+            <span>Ver Video Real Detrás</span>
+          </label>
         </div>
       </div>
     </div>
