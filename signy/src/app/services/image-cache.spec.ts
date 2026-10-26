@@ -49,13 +49,13 @@ describe('ImageCacheService', () => {
       expect(fakeCache.add).not.toHaveBeenCalled();
     });
 
-    it('cuenta una URL null/vacía dentro de la lista como completada sin intentar descargarla', async () => {
+    it('ignora URLs null/vacías y repetidas: no las descarga ni las cuenta en el progreso', async () => {
       const progreso: Array<[number, number]> = [];
 
-      await service.precargarSubnivel(['https://cdn/a.gif', null as any], (c, t) => progreso.push([c, t]));
+      await service.precargarSubnivel(['https://cdn/a.gif', null as any, '', 'https://cdn/a.gif'], (c, t) => progreso.push([c, t]));
 
       expect(fakeCache.add).toHaveBeenCalledTimes(1);
-      expect(progreso[progreso.length - 1]).toEqual([2, 2]);
+      expect(progreso[progreso.length - 1]).toEqual([1, 1]);
     });
 
     it('si una URL falla, avisa el progreso igual y no interrumpe a las demás', async () => {

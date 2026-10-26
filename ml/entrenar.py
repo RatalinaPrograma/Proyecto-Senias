@@ -5,13 +5,15 @@
     python ml/entrenar.py --supabase --email admin@correo.cl  # entrena directo, sin menú
 
 1. Descarga las muestras directo de Supabase con una cuenta admin (no se leen archivos locales).
-2. Calcula las características (idénticas a las de la app) y aumenta los datos.
-3. Mide la precisión con datos de prueba separados del entrenamiento.
-4. Entrena el modelo final (Keras) con todo y lo exporta a ml/output/:
+2. Descarta las muestras 🔴 (las mismas que ml/revisar_dataset.py marca para volver a grabar).
+3. Calcula las características (idénticas a las de la app) y aumenta los datos.
+4. Mide la precisión con datos de prueba separados del entrenamiento y, con 3+ personas, también
+   con cada persona como si fuera un alumno nuevo (solo informa).
+5. Entrena el modelo final (Keras) con todo y lo exporta a ml/output/:
    model.tflite, labels.json y model_weights.json (BatchNorm fusionada, pesos float16).
    model_weights.json se copia a signy/src/assets/modelos/clasificador-senas.json, donde la app lo carga
    (solo si la exactitud en prueba llega al mínimo: ver EXACTITUD_MINIMA_APP).
-5. Escribe un reporte en ml/reportes/.
+6. Escribe un reporte en ml/reportes/.
 
 Para probar el pipeline sin datos reales: --demo-sintetico
 """
@@ -34,6 +36,7 @@ sys.path.insert(0, str(RAIZ))
 from rich.prompt import Prompt  # noqa: E402
 from rich.table import Table  # noqa: E402
 
+from signy_ml.calidad import separar_rojas  # noqa: E402
 from signy_ml.caracteristicas import ConfigCaracteristicas  # noqa: E402
 from signy_ml.consola import ConfirmarSiNo, aviso, consola, consola_utf8, error, menu, ok  # noqa: E402
 from signy_ml.dataset import Dataset, DatasetInvalido, leer_dataset  # noqa: E402
@@ -42,6 +45,7 @@ from signy_ml.modelo import OpcionesEntrenamiento, entrenar  # noqa: E402
 SALIDA_ML = RAIZ / "output"
 SALIDA_APP = RAIZ.parent / "signy" / "src" / "assets" / "modelos" / "clasificador-senas.json"
 MINIMO_RECOMENDADO = 10
+PERSONAS_RECOMENDADAS = 3
 EXACTITUD_MINIMA_APP = 0.7  # por debajo, el modelo no se copia a la app (salvo --forzar)
 
 
@@ -67,12 +71,16 @@ def escribir_reporte(ruta: Path, ds, metricas: dict, modelo: dict, destino: Path
         f"responde en el {_pct(metricas['coberturaUmbral'])} de los casos",
         f"- Movimientos que no son seña rechazados: {_pct(metricas.get('rechazoNinguna'))}",
         f"- Modelo: `{destino}` ({kb:.0f} KB)",
+    ]
+    lineas += _lineas_personas_nuevas(metricas.get("personasNuevas"), modelo["umbralSugerido"])
+    lineas += [
         "",
         "## Muestras por seña",
         "",
-        "| Seña | Muestras | Precisión | Sensibilidad |",
-        "|---|---|---|---|",
+        "| Seña | Muestras | Personas | Precisión | Sensibilidad |",
+        "|---|---|---|---|---|",
     ]
+    personas = ds.personas_por_sena()
     reporte = metricas.get("reporte", {})
     for sena_id, n in sorted(conteo.items(), key=lambda x: ds.nombre(x[0])):
         nombre = ds.nombre(sena_id)
@@ -83,7 +91,8 @@ def escribir_reporte(ruta: Path, ds, metricas: dict, modelo: dict, destino: Path
             precision, sensibilidad = _pct(r.get("precision")), _pct(r.get("recall"))
         else:
             precision = sensibilidad = "— (sin prueba)"
-        lineas.append(f"| {nombre} | {n}{aviso_n} | {precision} | {sensibilidad} |")
+        aviso_p = " ⚠️" if personas.get(sena_id, 0) < PERSONAS_RECOMENDADAS else ""
+        lineas.append(f"| {nombre} | {n}{aviso_n} | {personas.get(sena_id, 0)}{aviso_p} | {precision} | {sensibilidad} |")
 
     confusiones = []
     nombres, matriz = metricas.get("clasesConfusion", []), metricas.get("confusion", [])
@@ -97,6 +106,33 @@ def escribir_reporte(ruta: Path, ds, metricas: dict, modelo: dict, destino: Path
     ruta.write_text("\n".join(lineas) + "\n", encoding="utf-8")
 
 
+def _lineas_personas_nuevas(pn, umbral) -> list[str]:
+    """Líneas del reporte con la medición persona por persona (una sola línea si no se hizo)."""
+    if not pn:
+        return ["- Con personas nuevas: — (no se midió: hacen falta 3 o más personas grabando, o se usó --sin-personas)"]
+    lineas = [
+        f"- **Con personas nuevas** (cada persona se prueba con un modelo entrenado sin ella): "
+        f"exactitud **{_pct(pn['exactitud'])}**, aprobadas con el umbral {umbral}: **{_pct(pn['aprobadas'])}** "
+        f"({pn['muestras']} muestras; {pn['sinMedir']} sin medir porque esa seña la grabó solo esa persona)",
+        "",
+        "## Con personas nuevas",
+        "",
+        "| Persona | Muestras | Exactitud | Aprobadas |",
+        "|---|---|---|---|",
+    ]
+    lineas += [f"| {p} | {r['muestras']} | {_pct(r['exactitud'])} | {_pct(r['aprobadas'])} |" for p, r in pn["personas"].items()]
+    lineas += [
+        "",
+        "Qué pasaría con cada umbral (personas nuevas). \"Otra seña segura\": el modelo dijo otra seña con",
+        "esa seguridad; si justo era la seña pedida en la lección, la aprobaría mal.",
+        "",
+        "| Umbral | Señas bien hechas aprobadas | Otra seña segura |",
+        "|---|---|---|",
+    ]
+    lineas += [f"| {f['umbral']} | {_pct(f['aprobadas'])} | {_pct(f['otraSenaSegura'])} |" for f in pn["porUmbral"]]
+    return lineas
+
+
 def descargar(email: str, password: str) -> Dataset:
     """Dataset de la tabla muestras_sena (lanza ErrorSupabase o DatasetInvalido)."""
     from signy_ml.supabase_descarga import descargar_dataset, leer_config_app
@@ -107,21 +143,47 @@ def descargar(email: str, password: str) -> Dataset:
     return leer_dataset(datos)
 
 
+def sin_rojas(ds: Dataset, incluir_rojas: bool) -> Dataset:
+    """Quita las muestras 🔴 (salvo --incluir-rojas) y avisa cuántas por seña. No borra nada en Supabase."""
+    if incluir_rojas:
+        return ds
+    limpio, rojas = separar_rojas(ds)
+    if rojas:
+        por_sena: dict[int, int] = {}
+        for m, _ in rojas:
+            por_sena[m.sena_id] = por_sena.get(m.sena_id, 0) + 1
+        detalle = ", ".join(f"{ds.nombre(s)} {n}" for s, n in sorted(por_sena.items(), key=lambda x: ds.nombre(x[0])))
+        aviso(f"Se dejan fuera {len(rojas)} muestras 🔴 que conviene volver a grabar ({detalle}). "
+              "Revísalas con ml/revisar_dataset.py; para usarlas igual: --incluir-rojas.")
+    if len(limpio.conteo_por_sena()) < len(ds.conteo_por_sena()):
+        perdidas = sorted(ds.nombre(s) for s in set(ds.conteo_por_sena()) - set(limpio.conteo_por_sena()))
+        aviso(f"Sin muestras buenas, quedan fuera del modelo: {', '.join(perdidas)}.")
+    return limpio
+
+
 def mostrar_dataset(ds: Dataset) -> None:
     tabla = Table(title=f"{len(ds.conteo_por_sena())} señas · {len(ds.muestras)} muestras")
     tabla.add_column("Seña")
     tabla.add_column("Muestras", justify="right")
+    tabla.add_column("Personas", justify="right")
+    personas = ds.personas_por_sena()
     for sena_id, n in sorted(ds.conteo_por_sena().items(), key=lambda x: ds.nombre(x[0])):
-        tabla.add_row(ds.nombre(sena_id), f"[yellow]{n}[/]" if n < MINIMO_RECOMENDADO else str(n))
+        p = personas.get(sena_id, 0)
+        tabla.add_row(ds.nombre(sena_id), f"[yellow]{n}[/]" if n < MINIMO_RECOMENDADO else str(n),
+                      f"[yellow]{p}[/]" if p < PERSONAS_RECOMENDADAS else str(p))
     consola.print(tabla)
 
 
 def avisar_dataset(ds: Dataset) -> None:
     conteo = ds.conteo_por_sena()
-    consola.print(f"Dataset: {len(conteo)} señas, {len(ds.muestras)} muestras.")
+    consola.print(f"Dataset: {len(conteo)} señas, {len(ds.muestras)} muestras, {len(ds.participantes())} personas.")
     pocas = [ds.senas[s] for s, n in conteo.items() if n < MINIMO_RECOMENDADO]
     if pocas:
         aviso(f"Menos de {MINIMO_RECOMENDADO} muestras en: {', '.join(sorted(pocas))}. Graba más para mejorar la precisión.")
+    una = [ds.senas[s] for s, n in ds.personas_por_sena().items() if n == 1]
+    if una:
+        aviso(f"Grabadas por una sola persona: {', '.join(sorted(una))}. El modelo aprende cómo la hace esa persona; "
+              "con alumnos nuevos puede fallar más.")
     for palabra, ids in ds.palabras_repetidas().items():
         aviso(f"La palabra \"{palabra}\" está en {len(ids)} señas distintas (ids {', '.join(map(str, ids))}). "
               "El modelo las trata como señas diferentes y no las va a distinguir: graba esa palabra en una sola.")
@@ -132,7 +194,7 @@ def opciones(a: argparse.Namespace) -> OpcionesEntrenamiento:
         config=ConfigCaracteristicas(frames=a.frames, usar_z=not a.sin_z),
         capas_ocultas=tuple(int(x) for x in a.capas.split(",") if x.strip()),
         aumentos_por_muestra=a.aumentos, epocas=a.epocas, umbral_sugerido=a.umbral, semilla=a.semilla,
-        clase_ninguna=not a.sin_ninguna, precision_objetivo=a.precision,
+        clase_ninguna=not a.sin_ninguna, precision_objetivo=a.precision, por_persona=not a.sin_personas,
     )
 
 
@@ -157,6 +219,10 @@ def entrenar_y_guardar(ds: Dataset, op: OpcionesEntrenamiento, salida: Path, ins
     consola.print(f"Exactitud en prueba: [bold]{_exactitud(m)}[/]")
     consola.print(f"Umbral: {r.modelo['umbralSugerido']}{' (calculado)' if m['umbralCalculado'] else ' (por defecto: faltan datos de prueba)'}"
                   f" · rechaza el {_pct(m['rechazoNinguna'])} de los movimientos que no son seña")
+    if pn := m.get("personasNuevas"):
+        detalle = ", ".join(f"{p} {_pct(x['exactitud'])}" for p, x in pn["personas"].items())
+        consola.print(f"Con personas nuevas: exactitud [bold]{_pct(pn['exactitud'])}[/] · aprobadas con el umbral "
+                      f"{r.modelo['umbralSugerido']}: {_pct(pn['aprobadas'])} ({detalle}) — solo informa, ver el reporte")
 
     exactitud = m["exactitud"]
     bajo_el_minimo = exactitud is None or exactitud < EXACTITUD_MINIMA_APP
@@ -194,7 +260,7 @@ def entrenar_y_guardar(ds: Dataset, op: OpcionesEntrenamiento, salida: Path, ins
 
 def comparar(ds: Dataset, a: argparse.Namespace) -> None:
     """Mide varias configuraciones con las mismas rondas y semilla, para elegir con números."""
-    base = opciones(a)
+    base = replace(opciones(a), por_persona=False)  # la medición por persona multiplica el tiempo: aquí no
     variantes = [
         ("actual", base),
         ("8 frames", replace(base, config=ConfigCaracteristicas(frames=8, usar_z=base.config.usar_z))),
@@ -234,7 +300,7 @@ def menu_interactivo(a: argparse.Namespace) -> int:
             sesion["email"] = sesion["email"] or Prompt.ask("Correo de la cuenta admin")
             password = sesion.get("password") or os.environ.get("SIGNY_PASSWORD") or Prompt.ask("Contraseña", password=True)
             try:
-                sesion["ds"] = descargar(sesion["email"], password)
+                sesion["ds"] = sin_rojas(descargar(sesion["email"], password), a.incluir_rojas)
                 sesion["password"] = password
             except (ErrorSupabase, DatasetInvalido, OSError) as e:
                 sesion.pop("password", None)
@@ -286,6 +352,10 @@ def main(argv=None) -> int:
                    help="Precisión buscada al calcular el umbral de confianza (0.95)")
     p.add_argument("--umbral", type=float, default=0.6, help="Umbral de confianza si no hay datos de prueba para calcularlo (0.6)")
     p.add_argument("--sin-ninguna", action="store_true", help="No agregar la clase \"ninguna seña\"")
+    p.add_argument("--incluir-rojas", action="store_true",
+                   help="Entrenar también con las muestras 🔴 (por defecto se dejan fuera; ver ml/revisar_dataset.py)")
+    p.add_argument("--sin-personas", action="store_true",
+                   help="No medir persona por persona (más rápido; esa medición solo informa)")
     p.add_argument("--semilla", type=int, default=42)
     p.add_argument("--forzar", action="store_true",
                    help=f"Con --supabase: instalar en la app aunque la exactitud sea menor a {EXACTITUD_MINIMA_APP * 100:.0f} %%")
@@ -303,7 +373,7 @@ def main(argv=None) -> int:
         return 2
     password = os.environ.get("SIGNY_PASSWORD") or getpass.getpass(f"Contraseña de {a.email}: ")
     try:
-        ds = descargar(a.email, password)
+        ds = sin_rojas(descargar(a.email, password), a.incluir_rojas)
     except (ErrorSupabase, DatasetInvalido, OSError) as e:
         error(str(e))
         return 2

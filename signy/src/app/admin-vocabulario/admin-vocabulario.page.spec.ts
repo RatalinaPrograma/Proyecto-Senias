@@ -280,15 +280,15 @@ describe('AdminVocabularioPage', () => {
     it('onArchivoSeleccionado rechaza un tipo de archivo no permitido', () => {
       const evento = eventoConArchivo(archivo('application/pdf', 100));
       component.onArchivoSeleccionado(evento);
-      expect(component.errorForm).toContain('no está permitido');
+      expect(component.errorForm).toContain('no tiene un formato permitido');
       expect(component.archivoSeleccionado).toBeNull();
       expect(evento.target.value).toBe('');
     });
 
-    it('onArchivoSeleccionado rechaza un archivo de más de 20MB', () => {
-      const evento = eventoConArchivo(archivo('image/gif', 21 * 1024 * 1024));
+    it('onArchivoSeleccionado rechaza un archivo de más de 25MB', () => {
+      const evento = eventoConArchivo(archivo('image/gif', 26 * 1024 * 1024));
       component.onArchivoSeleccionado(evento);
-      expect(component.errorForm).toContain('20 MB');
+      expect(component.errorForm).toContain('25 MB');
     });
 
     it('onArchivoSeleccionado acepta un GIF dentro del límite', () => {
@@ -301,7 +301,7 @@ describe('AdminVocabularioPage', () => {
     it('rechaza guardar sin palabra', async () => {
       component.formSena = { subnivel_id: 10 };
       await component.guardarSena();
-      expect(component.errorForm).toContain('obligatoria');
+      expect(component.errorForm).toContain('obligatorios');
     });
 
     it('en modo "subir" exige un archivo si no hay video_url ya cargado', async () => {
@@ -335,7 +335,9 @@ describe('AdminVocabularioPage', () => {
       expect(supabaseSpy.crearSena).toHaveBeenCalledWith(jasmine.objectContaining({ video_url: 'https://cdn/chao.gif' }));
     });
 
-    it('borra el media anterior si al editar se cambió la URL', async () => {
+    // Desde el explorador del bucket, un archivo puede usarlo más de una seña y queda disponible para
+    // volver a asignarlo: cambiar o borrar una seña ya NO borra su archivo del bucket.
+    it('al editar con otra URL, deja el archivo anterior en el bucket', async () => {
       component.editarSena(sena1); // video_url original: https://cdn/hola.gif
       component.formSena.video_url = 'https://cdn/hola-nueva.gif';
       supabaseSpy.actualizarSena.and.resolveTo({ data: null, error: null } as any);
@@ -343,7 +345,8 @@ describe('AdminVocabularioPage', () => {
 
       await component.guardarSena();
 
-      expect(supabaseSpy.eliminarSenaMediaSiEsPropia).toHaveBeenCalledWith('https://cdn/hola.gif');
+      expect(supabaseSpy.actualizarSena).toHaveBeenCalled();
+      expect(supabaseSpy.eliminarSenaMediaSiEsPropia).not.toHaveBeenCalled();
     });
 
     it('NO borra el media anterior si la URL no cambió', async () => {
@@ -363,7 +366,7 @@ describe('AdminVocabularioPage', () => {
       expect(supabaseSpy.eliminarSena).not.toHaveBeenCalled();
     });
 
-    it('eliminarSena borra la fila y limpia el archivo asociado', async () => {
+    it('eliminarSena borra la fila y deja el archivo en el bucket (puede usarlo otra seña)', async () => {
       spyOn(window, 'confirm').and.returnValue(true);
       supabaseSpy.eliminarSena.and.resolveTo({ data: null, error: null } as any);
       prepararCargaExitosa();
@@ -371,7 +374,7 @@ describe('AdminVocabularioPage', () => {
       await component.eliminarSena(sena1);
 
       expect(supabaseSpy.eliminarSena).toHaveBeenCalledWith(100);
-      expect(supabaseSpy.eliminarSenaMediaSiEsPropia).toHaveBeenCalledWith('https://cdn/hola.gif');
+      expect(supabaseSpy.eliminarSenaMediaSiEsPropia).not.toHaveBeenCalled();
     });
 
     it('eliminarSena avisa cuántas muestras del dataset se van a borrar con la seña', async () => {

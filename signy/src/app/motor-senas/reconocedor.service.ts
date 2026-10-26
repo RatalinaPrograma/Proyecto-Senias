@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { Sena } from '../data/db-types';
 import { ClasificadorSenas, Prediccion } from './clasificador';
 import { aIsotropico } from './geometria';
+import { Retroalimentacion, medirIntento, retroalimentar } from './retroalimentacion';
 import { seguirManos } from './seguimiento';
 import { CapturaCruda } from './tipos';
 
@@ -73,5 +74,23 @@ export class ReconocedorSenasService {
     const vistas = framesConManos(captura, 1);
     const aprobado = vistas >= FRAMES_DETECCION;
     return { similitudPct: aprobado ? 80 : 20, aprobado, fuente: 'deteccion', espejo: false, sinManos: !aprobado };
+  }
+
+  /**
+   * Qué decirle al alumno sobre su intento (ver retroalimentacion.ts): en vez de
+   * "intenta de nuevo", qué cambiar para lograrlo la próxima vez.
+   */
+  async explicar(sena: Sena, captura: CapturaCruda, evaluacion: EvaluacionSena): Promise<Retroalimentacion> {
+    const clf = evaluacion.fuente === 'clasificador' ? await this.clasificador() : null;
+    return retroalimentar({
+      senaId: sena.id,
+      palabra: sena.palabra,
+      aprobado: evaluacion.aprobado,
+      sinModelo: evaluacion.fuente === 'deteccion',
+      medidas: evaluacion.sinManos ? null : medirIntento(captura),
+      perfil: clf?.perfil(sena.id),
+      mejores: evaluacion.clasificador?.mejores,
+      umbral: clf?.umbralSugerido,
+    });
   }
 }

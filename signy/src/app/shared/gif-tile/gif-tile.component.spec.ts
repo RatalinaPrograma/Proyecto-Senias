@@ -20,8 +20,9 @@ describe('GifTileComponent', () => {
   let cacheSpy: jasmine.SpyObj<ImageCacheService>;
 
   beforeEach(async () => {
-    cacheSpy = jasmine.createSpyObj('ImageCacheService', ['resolve']);
+    cacheSpy = jasmine.createSpyObj('ImageCacheService', ['resolve', 'getSincrono']);
     cacheSpy.resolve.and.callFake((url: string) => Promise.resolve(`blob:cached/${url}`));
+    cacheSpy.getSincrono.and.returnValue(null);
 
     await TestBed.configureTestingModule({
       imports: [HostDeTile],
@@ -94,6 +95,35 @@ describe('GifTileComponent', () => {
 
       expect(video.pause).toHaveBeenCalled();
       expect(video.currentTime).toBe(0);
+    });
+  });
+
+  describe('se ve la seña aunque no esté activa (no parece rota)', () => {
+    it('un video sin activar se reproduce un instante y queda pausado en el inicio', async () => {
+      const play = spyOn(HTMLMediaElement.prototype, 'play').and.resolveTo();
+      const pause = spyOn(HTMLMediaElement.prototype, 'pause');
+      host.url = 'https://cdn/sena.mp4';
+      host.activo = false;
+      fixture.detectChanges();
+      await fixture.whenStable();
+      await Promise.resolve();
+
+      expect(play).toHaveBeenCalled();
+      expect(pause).toHaveBeenCalled();
+      expect(elementoVideo().currentTime).toBe(0);
+    });
+
+    it('muestra el ícono ▶ mientras no está activa, y lo quita al tocarla', async () => {
+      host.url = 'https://cdn/sena.gif';
+      host.activo = false;
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(fixture.nativeElement.querySelector('.gif-tile-play')).not.toBeNull();
+
+      host.activo = true;
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(fixture.nativeElement.querySelector('.gif-tile-play')).toBeNull();
     });
   });
 

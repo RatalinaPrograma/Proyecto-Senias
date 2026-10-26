@@ -12,9 +12,11 @@ import numpy as np
 from .aumentacion import aumentar, espejar
 from .caracteristicas import ConfigCaracteristicas, caracteristicas, dimension_por_frame
 from .dataset import Dataset
+from .perfil import perfiles
 
 FORMATO = "signy-clasificador"
-VERSION = 1
+# 2: las características ignoran la mano que descansa abajo (mano_en_reposo).
+VERSION = 2
 # Clase "ninguna seña": ninguna seña real tiene id 0, así que la app nunca la aprueba como la seña pedida.
 NINGUNA = 0
 NOMBRE_NINGUNA = "(ninguna seña)"
@@ -34,6 +36,7 @@ class OpcionesEntrenamiento:
     fraccion_prueba: float = 0.25
     semilla: int = 42
     umbral_sugerido: float = 0.6      # si no hay datos para calcularlo
+    por_persona: bool = True          # además, medir con cada persona como si fuera un alumno nuevo (solo informa)
 
 
 @dataclass
@@ -256,11 +259,62 @@ def evaluar(ds: Dataset, op: OpcionesEntrenamiento) -> dict:
     return metricas
 
 
+UMBRALES_TABLA = (0.5, 0.6, 0.7, 0.8, 0.9, 0.95)
+
+
+def evaluar_por_persona(ds: Dataset, op: OpcionesEntrenamiento, umbral: float) -> Optional[dict]:
+    """Cada persona se prueba con un modelo entrenado SIN sus muestras: así se mide como un alumno nuevo.
+
+    Solo informa (no elige el modelo ni el umbral). Una seña que grabó únicamente esa persona no se
+    puede medir así: el modelo no tiene de quién aprenderla, y eso es falta de grabaciones, no un
+    error del modelo. Esas muestras se cuentan aparte ("sinMedir"). Con menos de 3 personas, None."""
+    personas = sorted(ds.participantes())
+    if len(personas) < 3:
+        return None
+    rng = np.random.default_rng(op.semilla + 2)
+    capturas = [m.captura for m in ds.muestras]
+    etiquetas = [m.sena_id for m in ds.muestras]
+    por_persona, reales, preds, confs, sin_medir = {}, [], [], [], 0
+    for persona in personas:
+        tr = [i for i, m in enumerate(ds.muestras) if m.participante != persona]
+        aprendibles = {etiquetas[i] for i in tr}
+        te = [i for i, m in enumerate(ds.muestras) if m.participante == persona and m.sena_id in aprendibles]
+        if len(aprendibles) < 2:
+            te = []  # las demás personas grabaron una sola seña: no hay con qué entrenar
+        sin_medir += sum(1 for m in ds.muestras if m.participante == persona) - len(te)
+        if not te:
+            continue
+        cap_tr, et_tr = _con_ninguna([capturas[i] for i in tr], [etiquetas[i] for i in tr], op, rng)
+        red, clases = _entrenar_red(cap_tr, et_tr, op, rng)
+        Xte, yte, _ = _vectores([capturas[i] for i in te], [etiquetas[i] for i in te], op, rng, False)
+        p, c = _predecir(red, clases, Xte)
+        if not len(yte):
+            continue
+        por_persona[persona] = {"muestras": int(len(yte)), "exactitud": float(np.mean(p == yte)),
+                                "aprobadas": float(np.mean((p == yte) & (c >= umbral)))}
+        reales.append(yte), preds.append(p), confs.append(c)
+    if not por_persona:
+        return None
+    real, pred, conf = np.concatenate(reales), np.concatenate(preds), np.concatenate(confs)
+    bien = pred == real
+    mal = ~bien & (pred != NINGUNA)
+    return {
+        "exactitud": float(np.mean(bien)),
+        "aprobadas": float(np.mean(bien & (conf >= umbral))),
+        "muestras": int(len(real)), "sinMedir": int(sin_medir), "personas": por_persona,
+        # Para elegir el umbral con datos de personas nuevas: con cada umbral, cuántas señas bien hechas
+        # se aprueban y cuántas veces el modelo dice otra seña con esa seguridad (si justo es la pedida, la aprueba mal).
+        "porUmbral": [{"umbral": t, "aprobadas": float(np.mean(bien & (conf >= t))),
+                       "otraSenaSegura": float(np.mean(mal & (conf >= t)))} for t in UMBRALES_TABLA],
+    }
+
+
 def entrenar(ds: Dataset, op: OpcionesEntrenamiento = OpcionesEntrenamiento(), solo_evaluar: bool = False) -> Resultado:
     """Mide con datos no vistos y entrena el modelo final con el 100 % de las muestras."""
     if len(ds.conteo_por_sena()) < 2:
         raise ValueError("Se necesitan muestras de al menos 2 señas distintas para entrenar un clasificador.")
     metricas = evaluar(ds, op)
+    metricas["personasNuevas"] = evaluar_por_persona(ds, op, metricas["umbral"]) if op.por_persona else None
     if solo_evaluar:
         return Resultado(None, metricas, None, [])
 
@@ -330,8 +384,14 @@ def exportar(red, clases: np.ndarray, ds: Dataset, op: OpcionesEntrenamiento, me
             for W, b, act in capas
         ],
         "umbralSugerido": metricas["umbral"],
-        "metricas": {k: metricas[k] for k in ("particion", "muestrasEntrenamiento", "muestrasPrueba", "exactitud", "exactitudSobreUmbral",
-                                              "coberturaUmbral", "rechazoNinguna", "umbralCalculado")},
+        # Cómo se hace cada seña según las muestras (velocidad, amplitud, manos, forma): la app lo usa
+        # para decirle al alumno qué corregir (motor-senas/retroalimentacion.ts).
+        "perfiles": perfiles(ds),
+        "metricas": {
+            **{k: metricas[k] for k in ("particion", "muestrasEntrenamiento", "muestrasPrueba", "exactitud", "exactitudSobreUmbral",
+                                        "coberturaUmbral", "rechazoNinguna", "umbralCalculado")},
+            "exactitudPersonasNuevas": (metricas.get("personasNuevas") or {}).get("exactitud"),
+        },
     }
 
 

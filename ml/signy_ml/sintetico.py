@@ -82,7 +82,10 @@ SENAS = {
 def generar_captura(nombre: str, rng: np.random.Generator, *, ancho=640, alto=480, fps=30.0,
                     duracion_ms=1200.0, pausa_antes_ms=300.0, pausa_despues_ms=300.0,
                     tamano=0.18, proporcion=1.0, zurda=False, dx=0.0, dy=0.0, giro=0.0,
-                    ruido=0.03, prob_perdida=0.0, prob_intercambio=0.0) -> dict:
+                    ruido=0.03, prob_perdida=0.0, prob_intercambio=0.0, mano_reposo=False, inicio_abajo=False) -> dict:
+    """Con mano_reposo=True agrega la otra mano quieta a la altura de la cadera (toma de la cintura hacia arriba).
+    Con inicio_abajo=True la mano que hace la seña parte abajo (descansando), sube durante la pausa inicial
+    y vuelve a bajar en la pausa final, como pasa al grabar de verdad (solo señas de una mano)."""
     _, definicion = SENAS[nombre]
     aspecto = ancho / alto
     total = pausa_antes_ms + duracion_ms + pausa_despues_ms
@@ -91,7 +94,19 @@ def generar_captura(nombre: str, rng: np.random.Generator, *, ancho=640, alto=48
     while t <= total:
         u = min(1.0, max(0.0, (t - pausa_antes_ms) / duracion_ms))
         manos = []
-        for pose, x, y, g in definicion(u):
+        partes = definicion(u)
+        if inicio_abajo and len(partes) == 1:
+            # Fracción "arriba" (0 = descansando en la cadera, 1 = en la seña): sube en la pausa inicial y baja en la final.
+            if t < pausa_antes_ms:
+                arriba = t / pausa_antes_ms if pausa_antes_ms else 1.0
+            elif t > pausa_antes_ms + duracion_ms:
+                arriba = 1.0 - (t - pausa_antes_ms - duracion_ms) / pausa_despues_ms if pausa_despues_ms else 1.0
+            else:
+                arriba = 1.0
+            pose, x, y, g = partes[0]
+            # Al subir, los dedos giran hacia AFUERA (no barren hacia la otra mano, como pasa en la realidad).
+            partes = [(pose, x + (_CX - 0.2 - x) * (1 - arriba), y + (0.93 - y) * (1 - arriba), g - math.pi * (1 - arriba))]
+        for pose, x, y, g in partes:
             local = mano_local(pose, proporcion)
             ang = g + giro
             c, s = math.cos(ang), math.sin(ang)
@@ -100,6 +115,18 @@ def generar_captura(nombre: str, rng: np.random.Generator, *, ancho=640, alto=48
             iso[:, 1] = y + dy + (local[:, 0] * s + local[:, 1] * c) * tamano
             iso[:, 2] = local[:, 2] * tamano
             iso += rng.normal(0.0, ruido * tamano, iso.shape) * np.array([1, 1, 2])
+            if zurda:
+                iso[:, 0] = aspecto - iso[:, 0]
+            iso[:, 2] -= iso[0, 2]
+            manos.append(iso / np.array([aspecto, 1.0, aspecto]))
+        if mano_reposo:
+            local = mano_local(POSES["palma"], proporcion)
+            c, s = math.cos(math.pi + giro), math.sin(math.pi + giro)
+            iso = np.empty_like(local)
+            iso[:, 0] = _CX + 0.22 + aspecto / 2 - 0.5 + dx + (local[:, 0] * c - local[:, 1] * s) * tamano
+            iso[:, 1] = 0.93 + dy + (local[:, 0] * s + local[:, 1] * c) * tamano
+            iso[:, 2] = local[:, 2] * tamano
+            iso += rng.normal(0.0, 0.01 * tamano, iso.shape)
             if zurda:
                 iso[:, 0] = aspecto - iso[:, 0]
             iso[:, 2] -= iso[0, 2]
@@ -134,7 +161,7 @@ def dataset_sintetico(senas: list[str], participantes: int, repeticiones: int, s
                     prob_perdida=0.05, prob_intercambio=0.1, **persona,
                 )
                 muestras.append({
-                    "id": len(muestras) + 1, "senaId": ids[nombre],
+                    "id": len(muestras) + 1, "senaId": ids[nombre], "participante": f"p{p + 1}",
                     "tipo": SENAS[nombre][0], "manosRequeridas": 2 if nombre in ("SEPARAR", "JUNTAR") else 1,
                     "captura": compactar(captura),
                 })

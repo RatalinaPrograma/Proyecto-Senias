@@ -24,6 +24,7 @@ export class CachedSrcDirective implements OnChanges, OnDestroy {
         video.setAttribute('poster', POSTER_TRANSPARENTE);
       }
       video.preload = 'auto';
+      video.muted = true; // el atributo `muted` puesto por Angular no siempre llega a la propiedad (autoplay)
       video.addEventListener('loadeddata', this.alCargar);
       video.addEventListener('playing', this.alCargar);
     } else {
@@ -32,19 +33,23 @@ export class CachedSrcDirective implements OnChanges, OnDestroy {
   }
 
   async ngOnChanges() {
-    if (!this.appCachedSrc) return;
+    const pedida = this.appCachedSrc;
+    if (!pedida) return;
     const elem = this.el.nativeElement;
     elem.classList.remove('media-lista');
 
     // 1. Si ya está en memoria (precargado al iniciar la lección), se asigna de forma síncrona (0 ms)
-    const sincrono = this.cache.getSincrono(this.appCachedSrc);
+    const sincrono = this.cache.getSincrono(pedida);
     if (sincrono) {
       this.asignarSrc(elem, sincrono);
       return;
     }
 
-    // 2. Si aún no estaba en memoria, se resuelve desde Cache Storage o red
-    const resuelta = await this.cache.resolve(this.appCachedSrc);
+    // 2. Si aún no estaba en memoria, se resuelve desde Cache Storage o red. Si mientras tanto
+    // la URL cambió (p. ej. el quiz pasó a la siguiente pregunta), esta respuesta ya no
+    // corresponde: sin esto, un video lento podía terminar mostrándose en la pregunta siguiente.
+    const resuelta = await this.cache.resolve(pedida);
+    if (pedida !== this.appCachedSrc) return;
     this.asignarSrc(elem, resuelta);
   }
 

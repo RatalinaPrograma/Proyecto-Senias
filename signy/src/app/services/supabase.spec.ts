@@ -144,7 +144,7 @@ describe('SupabaseService', () => {
   describe('amigos (follows)', () => {
     it('seguir() rechaza sin sesión activa', async () => {
       const { service, db } = crearServicio();
-      db.auth.getUser.and.resolveTo({ data: { user: null }, error: null });
+      db.auth.getSession.and.resolveTo({ data: { session: null }, error: null });
 
       const resultado: any = await service.seguir('otro-user');
 
@@ -153,7 +153,7 @@ describe('SupabaseService', () => {
 
     it('seguir() inserta la relación con mi propio ID como follower', async () => {
       const { service, db } = crearServicio();
-      db.auth.getUser.and.resolveTo({ data: { user: { id: 'user-1' } }, error: null });
+      db.auth.getSession.and.resolveTo({ data: { session: { user: { id: 'user-1' } } }, error: null });
       db.cuando('follows', ok(null));
 
       await service.seguir('otro-user');
@@ -163,7 +163,7 @@ describe('SupabaseService', () => {
 
     it('loSigo() es false si no hay sesión activa', async () => {
       const { service, db } = crearServicio();
-      db.auth.getUser.and.resolveTo({ data: { user: null }, error: null });
+      db.auth.getSession.and.resolveTo({ data: { session: null }, error: null });
 
       expect(await service.loSigo('otro-user')).toBeFalse();
     });

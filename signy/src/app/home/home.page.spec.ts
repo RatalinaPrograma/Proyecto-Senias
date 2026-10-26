@@ -27,7 +27,7 @@ describe('HomePage', () => {
   }];
 
   beforeEach(async () => {
-    supabaseSpy = jasmine.createSpyObj('SupabaseService', ['getUser', 'getProfile', 'signOut']);
+    supabaseSpy = jasmine.createSpyObj('SupabaseService', ['getUsuarioLocal', 'getProfile', 'signOut']);
     contenidoSpy = jasmine.createSpyObj('ContenidoService', ['obtenerMapaDeAprendizaje', 'getMisStats', 'fechaHoy', 'minutosParaProximaVida']);
     notificationsSpy = jasmine.createSpyObj('NotificationsService', ['sincronizar', 'avisarEventoRacha', 'cancelarTodo']);
     routerSpy = jasmine.createSpyObj('Router', ['navigate']);
@@ -61,7 +61,7 @@ describe('HomePage', () => {
 
   describe('cargarTodo', () => {
     it('no hace nada si no hay usuario logueado', async () => {
-      supabaseSpy.getUser.and.resolveTo({ data: { user: null }, error: null } as any);
+      supabaseSpy.getUsuarioLocal.and.resolveTo({ user: null, error: null } as any);
 
       await component.cargarTodo();
 
@@ -70,7 +70,7 @@ describe('HomePage', () => {
     });
 
     it('carga el mapa, las stats y el perfil, y calcula los totales', async () => {
-      supabaseSpy.getUser.and.resolveTo({ data: { user: { id: 'user-1' } }, error: null } as any);
+      supabaseSpy.getUsuarioLocal.and.resolveTo({ user: { id: 'user-1' }, error: null } as any);
       contenidoSpy.obtenerMapaDeAprendizaje.and.resolveTo(mapaDePrueba);
       contenidoSpy.getMisStats.and.resolveTo(statsDePrueba({ racha_actual: 4, ultima_fecha_practica: '2026-09-08' }));
       supabaseSpy.getProfile.and.resolveTo({ data: perfilDePrueba({ avatar_url: 'foto.png', es_admin: true }), error: null });
@@ -86,7 +86,7 @@ describe('HomePage', () => {
     });
 
     it('muestra un mensaje de error si algo falla al cargar', async () => {
-      supabaseSpy.getUser.and.rejectWith(new Error('sin conexión'));
+      supabaseSpy.getUsuarioLocal.and.rejectWith(new Error('sin conexión'));
 
       await component.cargarTodo();
 
@@ -95,7 +95,7 @@ describe('HomePage', () => {
     });
 
     it('avisa con una notificación si getMisStats detectó un evento de racha', async () => {
-      supabaseSpy.getUser.and.resolveTo({ data: { user: { id: 'user-1' } }, error: null } as any);
+      supabaseSpy.getUsuarioLocal.and.resolveTo({ user: { id: 'user-1' }, error: null } as any);
       contenidoSpy.obtenerMapaDeAprendizaje.and.resolveTo(mapaDePrueba);
       contenidoSpy.getMisStats.and.resolveTo(statsDePrueba({
         racha_actual: 5, eventoRacha: { tipo: 'congelado', diasCubiertos: 1, congeladoresRestantes: 1 },
@@ -112,7 +112,7 @@ describe('HomePage', () => {
 
   describe('ionViewWillEnter (throttle)', () => {
     it('recarga si todavía no hay niveles cargados', async () => {
-      supabaseSpy.getUser.and.resolveTo({ data: { user: { id: 'user-1' } }, error: null } as any);
+      supabaseSpy.getUsuarioLocal.and.resolveTo({ user: { id: 'user-1' }, error: null } as any);
       contenidoSpy.obtenerMapaDeAprendizaje.and.resolveTo(mapaDePrueba);
       contenidoSpy.getMisStats.and.resolveTo(statsDePrueba());
       supabaseSpy.getProfile.and.resolveTo({ data: null, error: null });
@@ -125,7 +125,7 @@ describe('HomePage', () => {
     it('NO recarga si volvió a entrar antes de 2 segundos', async () => {
       jasmine.clock().install();
       jasmine.clock().mockDate(new Date());
-      supabaseSpy.getUser.and.resolveTo({ data: { user: { id: 'user-1' } }, error: null } as any);
+      supabaseSpy.getUsuarioLocal.and.resolveTo({ user: { id: 'user-1' }, error: null } as any);
       contenidoSpy.obtenerMapaDeAprendizaje.and.resolveTo(mapaDePrueba);
       contenidoSpy.getMisStats.and.resolveTo(statsDePrueba());
       supabaseSpy.getProfile.and.resolveTo({ data: null, error: null });
@@ -140,7 +140,7 @@ describe('HomePage', () => {
     it('SÍ recarga si pasaron más de 2 segundos desde la última carga', async () => {
       jasmine.clock().install();
       jasmine.clock().mockDate(new Date());
-      supabaseSpy.getUser.and.resolveTo({ data: { user: { id: 'user-1' } }, error: null } as any);
+      supabaseSpy.getUsuarioLocal.and.resolveTo({ user: { id: 'user-1' }, error: null } as any);
       contenidoSpy.obtenerMapaDeAprendizaje.and.resolveTo(mapaDePrueba);
       contenidoSpy.getMisStats.and.resolveTo(statsDePrueba());
       supabaseSpy.getProfile.and.resolveTo({ data: null, error: null });

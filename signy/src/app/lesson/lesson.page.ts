@@ -14,16 +14,21 @@ import { RachaCalendarComponent, DiaRachaVista } from '../shared/racha-calendar/
 import { ImageCacheService } from '../services/image-cache';
 import { BotonAtrasService } from '../services/boton-atras';
 import { addIcons } from 'ionicons';
-import { close, heart, checkmarkCircle, closeCircle, camera, videocam, volumeHigh, snowOutline, trophy, sparklesOutline } from 'ionicons/icons';
+import { close, heart, checkmarkCircle, closeCircle, camera, videocam, volumeHigh, snowOutline, trophy, sparklesOutline, sparkles, checkmarkSharp, closeSharp, volumeMediumOutline, arrowForward } from 'ionicons/icons';
 import type { HandLandmarker } from '@mediapipe/tasks-vision';
 import {
   ControlFramesVideo,
   GrabadorCaptura,
   MediaPipeManosService,
   ReconocedorSenasService,
+  Retroalimentacion,
 } from '../motor-senas';
 
-addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, 'close-circle': closeCircle, camera, videocam, 'volume-high': volumeHigh, 'snow-outline': snowOutline, trophy, 'sparkles-outline': sparklesOutline });
+addIcons({
+  close, heart, 'checkmark-circle': checkmarkCircle, 'close-circle': closeCircle, camera, videocam, 'volume-high': volumeHigh,
+  'snow-outline': snowOutline, trophy, 'sparkles-outline': sparklesOutline, sparkles, 'checkmark-sharp': checkmarkSharp,
+  'close-sharp': closeSharp, 'volume-medium-outline': volumeMediumOutline, 'arrow-forward': arrowForward,
+});
 
 type Fase = 'cargando' | 'flash' | 'match' | 'quiz' | 'record' | 'complete' | 'nivel' | 'racha' | 'sinvidas' | 'error';
 
@@ -34,7 +39,6 @@ interface Par { palabra: string; senaId: number; seed: number; videoUrl: string 
 interface Pregunta { palabra: string; senaId: number; opciones: string[]; seed: number; videoUrl: string | null; }
 
 const MENSAJES_OK = ['¡Mano correcta!', '¡Excelente forma!', '¡Así se hace!'];
-const MENSAJES_MAL = ['Ajusta el pulgar', 'Centra tu mano en el óvalo', 'Prueba con un movimiento más marcado'];
 
 /** Mensaje corto y variable para la pantalla de "lección superada" — antes
  * era un texto fijo, ahora rota para que no se sienta repetitivo lección
@@ -184,6 +188,13 @@ export class LessonPage implements OnInit, OnDestroy {
   camMsg = '';
   /** Qué motor decidió el resultado (para el texto bajo el puntaje). */
   camFuente: 'clasificador' | 'deteccion' = 'deteccion';
+  /** Qué cambiar para lograr la seña (pistas concretas, ver motor-senas/retroalimentacion.ts). */
+  camRetro: Retroalimentacion | null = null;
+  /** En vivo, durante la cuenta regresiva y la grabación: si se ve la mano (null = aún no se sabe). */
+  camManoVisible: boolean | null = null;
+  /** Mostrar otra vez el video de la seña en la pantalla de resultado, para comparar antes de reintentar. */
+  camVerVideo = false;
+  private framesSeguidosManos = 0;
   private stream: MediaStream | null = null;
   private rafId = 0;
   private intervaloCuenta: ReturnType<typeof setInterval> | null = null;
@@ -370,6 +381,11 @@ export class LessonPage implements OnInit, OnDestroy {
       [copia[i], copia[j]] = [copia[j], copia[i]];
     }
     return copia;
+  }
+
+  /** Hay señas con video en el emparejar: se avisa que se ven en movimiento al tocarlas. */
+  get hayTilesConVideo(): boolean {
+    return this.manos.some((m) => !!m.videoUrl);
   }
 
   // Sin esto, cada cambio de ronda recrea (y redecodifica el GIF de) los 4 tiles.
@@ -645,7 +661,10 @@ export class LessonPage implements OnInit, OnDestroy {
       }
 
       this.camStage = 'countdown';
+      this.camManoVisible = null;
+      this.framesSeguidosManos = 0;
       this.contarRegresiva();
+      this.vigilarManos();
     } catch {
       this.camStage = 'denied';
     }
@@ -662,6 +681,39 @@ export class LessonPage implements OnInit, OnDestroy {
         this.grabar();
       }
     }, 800);
+  }
+
+  /**
+   * Durante la cuenta regresiva revisa (sin grabar) si se ve la mano, para avisar
+   * ANTES de que empiece la grabación ("no veo tu mano").
+   */
+  private vigilarManos() {
+    this.ngZone.runOutsideAngular(() => {
+      const loop = () => {
+        if (this.camStage !== 'countdown') return;
+        const video = this.videoRef?.nativeElement;
+        const ahora = performance.now();
+        if (video && video.videoWidth > 0 && this.handLandmarker && this.controlFrames.esFrameNuevo(video, ahora)) {
+          try {
+            const results = this.handLandmarker.detectForVideo(video, this.controlFrames.marcaDeTiempo(ahora));
+            this.actualizarIndicadorManos(!!results?.landmarks?.length);
+          } catch {
+            // un frame que MediaPipe no pudo procesar no cambia el indicador
+          }
+        }
+        this.rafId = requestAnimationFrame(loop);
+      };
+      this.rafId = requestAnimationFrame(loop);
+    });
+  }
+
+  /** Cambia el indicador "te veo / no te veo" solo cuando el estado se mantiene unos frames (sin parpadeo). */
+  private actualizarIndicadorManos(hayManos: boolean) {
+    this.framesSeguidosManos = hayManos ? Math.max(1, this.framesSeguidosManos + 1) : Math.min(-1, this.framesSeguidosManos - 1);
+    const estable = Math.abs(this.framesSeguidosManos) >= 3;
+    if (estable && this.camManoVisible !== hayManos) {
+      this.ngZone.run(() => (this.camManoVisible = hayManos));
+    }
   }
 
   private detenerCuentaRegresiva() {
@@ -689,6 +741,7 @@ export class LessonPage implements OnInit, OnDestroy {
             try {
               const results = this.handLandmarker.detectForVideo(video, marca);
               this.grabador.agregar(results, marca, video.videoWidth, video.videoHeight);
+              this.actualizarIndicadorManos(!!results?.landmarks?.length);
             } catch (e) {
               console.warn('MediaPipe no pudo procesar el frame:', e);
             }
@@ -712,12 +765,22 @@ export class LessonPage implements OnInit, OnDestroy {
   private async terminarGrabacion() {
     this.detenerCamara();
 
-    const resultado = await this.reconocedor.evaluar(this.senaCamara, this.grabador.captura());
+    const captura = this.grabador.captura();
+    const resultado = await this.reconocedor.evaluar(this.senaCamara, captura);
     this.camScore = resultado.similitudPct;
     this.camPassed = resultado.aprobado;
     this.camFuente = resultado.fuente;
+    this.camVerVideo = false;
 
-    if (resultado.sinManos) {
+    // Pistas concretas de qué cambiar (velocidad, manos, forma, encuadre…). Si algo falla al
+    // armarlas, queda el mensaje general: nunca bloquea el resultado.
+    this.camRetro = await this.reconocedor.explicar(this.senaCamara, captura, resultado).catch((e) => {
+      console.warn('No se pudo armar la retroalimentación:', e);
+      return null;
+    });
+    if (this.camRetro) {
+      this.camMsg = this.camRetro.titulo;
+    } else if (resultado.sinManos) {
       this.camMsg = 'No logramos ver bien tus manos. Ponte frente a la cámara con buena luz y vuelve a intentarlo.';
     } else if (resultado.fuente === 'deteccion') {
       this.camMsg = '¡Buena práctica de manos! (Seña en proceso de calibración)';
@@ -759,6 +822,7 @@ export class LessonPage implements OnInit, OnDestroy {
   reintentarCamara() {
     this.camStage = 'idle';
     this.camScore = 0;
+    this.camVerVideo = false;
   }
 
   saltarCamara() {

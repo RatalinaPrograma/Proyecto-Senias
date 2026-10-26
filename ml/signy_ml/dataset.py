@@ -4,13 +4,16 @@ Formato (`signy-dataset`, versión 1):
 {
   "formato": "signy-dataset", "version": 1, "exportado": "<fecha ISO>",
   "senas":    [{"id": 12, "palabra": "hola", ...}],
-  "muestras": [{"id": 1, "senaId": 12,
+  "muestras": [{"id": 1, "senaId": 12, "participante": "p1",
                 "tipo": "dinamica", "manosRequeridas": 1,
                 "captura": {"ancho": 640, "alto": 480,
                             "frames": [{"t": 0, "m": [[x0,y0,z0, ... x20,y20,z20]], "l": ["Right"]}]}}]
 }
 `m` son las manos del frame en coordenadas normalizadas de imagen (tal
 cual las entrega MediaPipe) y `l` su lateralidad (opcional).
+`participante` identifica a la persona que hizo la seña (anónima: p1, p2, …),
+según el campo "Persona" del entrenador o, si quedó vacío, la cuenta que grabó.
+Solo se usa para medir con personas que el modelo no vio: el modelo final se entrena con todas.
 """
 from __future__ import annotations
 
@@ -29,6 +32,9 @@ class Muestra:
     id: int
     sena_id: int
     captura: dict  # forma "expandida": manos como np.ndarray (21, 3)
+    participante: str = "desconocido"
+    tipo: str = "dinamica"
+    manos_requeridas: int = 1
 
 
 @dataclass
@@ -38,6 +44,16 @@ class Dataset:
 
     def conteo_por_sena(self) -> Counter:
         return Counter(m.sena_id for m in self.muestras)
+
+    def participantes(self) -> set[str]:
+        return {m.participante for m in self.muestras}
+
+    def personas_por_sena(self) -> dict[int, int]:
+        """Cuántas personas distintas grabaron cada seña."""
+        personas: dict[int, set[str]] = {}
+        for m in self.muestras:
+            personas.setdefault(m.sena_id, set()).add(m.participante)
+        return {sena_id: len(p) for sena_id, p in personas.items()}
 
     def palabras_repetidas(self) -> dict[str, list[int]]:
         """Palabras que aparecen en más de una seña con muestras (p. ej. "hola" en dos subniveles)."""
@@ -80,6 +96,8 @@ def leer_dataset(datos: dict) -> Dataset:
             raise DatasetInvalido(f"La muestra {m.get('id')} apunta a la seña {sena_id}, que no está en 'senas'.")
         ds.muestras.append(Muestra(
             id=int(m["id"]), sena_id=sena_id, captura=expandir_captura(m["captura"]),
+            participante=str(m.get("participante") or "desconocido"),
+            tipo=str(m.get("tipo") or "dinamica"), manos_requeridas=int(m.get("manosRequeridas") or 1),
         ))
     if not ds.muestras:
         raise DatasetInvalido("El dataset no tiene muestras.")

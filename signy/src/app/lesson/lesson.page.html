@@ -109,7 +109,7 @@
             <span *ngIf="matchCompleto">🎉</span>
           </div>
           <div class="guide-message">
-            <span *ngIf="!selMano && !selPalabra && !matchCompleto">Toca una seña y luego su palabra para unirlas</span>
+            <span *ngIf="!selMano && !selPalabra && !matchCompleto">{{ hayTilesConVideo ? 'Toca una seña para verla en movimiento y luego su palabra' : 'Toca una seña y luego su palabra para unirlas' }}</span>
             <span *ngIf="selMano && !selPalabra && !matchMal">¡Bien! Ahora toca la palabra que le corresponde</span>
             <span *ngIf="!selMano && selPalabra && !matchMal">¡Bien! Ahora toca el video de la seña</span>
             <span *ngIf="selMano && selPalabra && !matchMal">Comprobando pareja…</span>
@@ -239,7 +239,7 @@
     <div class="phase-body" *ngIf="fase === 'record'">
       <p class="eyebrow">PRÁCTICA CON CÁMARA</p>
 
-      <div class="cam-frame">
+      <div class="cam-frame" [class.resultado]="camStage === 'result'">
         <div class="cam-idle" *ngIf="camStage === 'idle'">
           <app-sena-icon [seed]="7" [size]="70" [color]="nivel.color || '#F2701A'" [dark]="nivel.color_oscuro || '#C6560E'"></app-sena-icon>
           <h3>Haz la seña de:</h3>
@@ -247,6 +247,7 @@
           <span class="cam-ai-tag" *ngIf="camConModelo">
             <ion-icon name="sparkles-outline"></ion-icon> Evaluada con Modelo IA Experto
           </span>
+          <p class="cam-sub cam-consejo">Ponte de frente, con buena luz, a una distancia en que se vean tus manos y tu cara. Puedes usar toda la imagen. Al terminar la cuenta tienes casi 3 segundos.</p>
           <ion-button class="btn-fox" (click)="iniciarCamara()">
             <ion-icon name="camera" slot="start"></ion-icon> Activar cámara
           </ion-button>
@@ -264,18 +265,31 @@
 
         <div class="cam-video-wrap" [class.hidden]="camStage !== 'countdown' && camStage !== 'recording'">
           <video #video muted playsinline class="cam-video"></video>
-          <div class="cam-oval" [class.recording]="camStage === 'recording'"></div>
+          <div class="cam-marco" [class.recording]="camStage === 'recording'"></div>
           <div class="cam-overlay" *ngIf="camStage === 'countdown'">
             <span>{{ camCount }}</span>
           </div>
           <div class="cam-rec-badge" *ngIf="camStage === 'recording'">
             <span class="dot"></span> Evaluando con IA
           </div>
+          <div class="cam-mano-chip" *ngIf="camManoVisible !== null" [class.ok]="camManoVisible" aria-live="polite">
+            {{ camManoVisible ? '✋ Te veo' : 'No veo tu mano: ponte frente a la cámara' }}
+          </div>
         </div>
 
         <div class="cam-idle" *ngIf="camStage === 'result'">
           <span class="cam-emoji">{{ camPassed ? '✅' : '🤔' }}</span>
           <h3>{{ camMsg }}</h3>
+          <ul class="cam-pistas" *ngIf="camRetro?.pistas?.length">
+            <li *ngFor="let pista of camRetro!.pistas">{{ pista.texto }}</li>
+          </ul>
+          <ng-container *ngIf="!camPassed && senaCamara.video_url">
+            <button class="skip-link" *ngIf="!camVerVideo" (click)="camVerVideo = true">Ver la seña otra vez</button>
+            <div class="media-shell cam-video-repaso" *ngIf="camVerVideo">
+              <video *ngIf="esVideoMp4(senaCamara.video_url)" [appCachedSrc]="senaCamara.video_url" preload="auto" class="real-media" autoplay loop muted playsinline webkit-playsinline></video>
+              <img *ngIf="!esVideoMp4(senaCamara.video_url)" [appCachedSrc]="senaCamara.video_url" [alt]="senaCamara.palabra" class="real-media" decoding="async" />
+            </div>
+          </ng-container>
           <p class="cam-sub" [ngSwitch]="camFuente">
             <ng-container *ngSwitchCase="'clasificador'">Seguridad del reconocimiento:</ng-container>
             <ng-container *ngSwitchDefault>Manos detectadas:</ng-container>

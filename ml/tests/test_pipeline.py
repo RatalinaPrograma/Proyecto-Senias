@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -27,7 +28,7 @@ CONFIG = ConfigCaracteristicas(frames=10, usar_z=True)
 def _ds(nombres, participantes=3, repeticiones=3, semilla=0) -> Dataset:
     crudo = dataset_sintetico(nombres, participantes, repeticiones, semilla)
     ds = Dataset(senas={int(s["id"]): s["palabra"] for s in crudo["senas"]})
-    ds.muestras = [Muestra(m["id"], m["senaId"], expandir_captura(m["captura"])) for m in crudo["muestras"]]
+    ds.muestras = [Muestra(m["id"], m["senaId"], expandir_captura(m["captura"]), m["participante"]) for m in crudo["muestras"]]
     return ds
 
 
@@ -73,6 +74,179 @@ class TestCaracteristicas(unittest.TestCase):
         dos = caracteristicas(generar_captura("SEPARAR", self.rng), CONFIG)
         self.assertTrue(np.all(una[d - 1::d] == 0))
         self.assertTrue(np.all(dos[d - 1::d] == 1))
+
+
+class TestManoEnReposo(unittest.TestCase):
+    """La otra mano descansando abajo (toma de la cintura hacia arriba) no debe cambiar el vector."""
+
+    def test_mano_de_una_sena_igual_con_o_sin_la_otra_mano_abajo(self):
+        for nombre in ["HOLA", "GRACIAS", "L"]:
+            sin = caracteristicas(generar_captura(nombre, np.random.default_rng(3), ruido=0), CONFIG)
+            con = caracteristicas(generar_captura(nombre, np.random.default_rng(3), ruido=0, mano_reposo=True), CONFIG)
+            np.testing.assert_allclose(con, sin, atol=1e-9, err_msg=nombre)
+
+    def test_zurdo_con_la_otra_mano_abajo_igual_que_zurdo_sin_ella(self):
+        sin = caracteristicas(generar_captura("HOLA", np.random.default_rng(3), ruido=0, zurda=True), CONFIG)
+        con = caracteristicas(generar_captura("HOLA", np.random.default_rng(3), ruido=0, zurda=True, mano_reposo=True), CONFIG)
+        np.testing.assert_allclose(con, sin, atol=1e-9)
+
+    def test_como_se_graba_de_verdad_parte_abajo_sube_y_vuelve(self):
+        # Las dos manos parten abajo; una sube a hacer la seña y vuelve: la que se queda abajo no cuenta.
+        for nombre in ["HOLA", "GRACIAS", "L"]:
+            kw = dict(ruido=0, pausa_antes_ms=400.0, pausa_despues_ms=400.0, inicio_abajo=True)
+            sin = caracteristicas(generar_captura(nombre, np.random.default_rng(4), **kw), CONFIG)
+            con = caracteristicas(generar_captura(nombre, np.random.default_rng(4), mano_reposo=True, **kw), CONFIG)
+            np.testing.assert_allclose(con, sin, atol=1e-9, err_msg=nombre)
+
+    def test_mano_base_tocada_varias_veces_se_conserva(self):
+        # El índice baja a tocar la palma de la otra mano (quieta): es una seña de dos manos.
+        from signy_ml.sintetico import POSES, mano_local
+        rng = np.random.default_rng(2)
+        indice, palma = mano_local(POSES["indice"]), mano_local(POSES["palma"])
+        indice[:, 1] = -indice[:, 1]  # dedo apuntando hacia abajo
+        frames = []
+        for i in range(60):
+            y = 0.30 + 0.17 * abs(math.sin(i / 59 * math.pi * 2))
+            frames.append({"t": i * 33.0, "manos": [indice * 0.15 + np.array([0.50, y, 0.0]),
+                                                     palma * 0.15 + np.array([0.50, 0.62, 0.0]) + rng.normal(0, 0.002, (21, 3))]})
+        vec = caracteristicas({"ancho": 1, "alto": 1, "frames": frames}, CONFIG)
+        d = dimension_por_frame(CONFIG)
+        self.assertTrue(np.all(vec[d - 1::d] == 1))
+
+    def test_mano_base_quieta_de_una_sena_de_dos_manos_no_se_descarta(self):
+        # Una mano quieta (base) y la otra baja a tocarla: la base está cerca, no "lejos abajo".
+        from signy_ml.sintetico import POSES, mano_local
+        rng = np.random.default_rng(1)
+        base, activa = mano_local(POSES["palma"]), mano_local(POSES["indice"])
+        frames = []
+        for i in range(40):
+            y = 0.40 + 0.16 * math.sin(i / 39 * math.pi)
+            m1 = activa * 0.18 + np.array([0.52, y, 0.0])
+            m2 = base * 0.18 + np.array([0.53, 0.62, 0.0]) + rng.normal(0, 0.001, (21, 3))
+            frames.append({"t": i * 33.0, "manos": [m1, m2]})
+        vec = caracteristicas({"ancho": 1, "alto": 1, "frames": frames}, CONFIG)
+        d = dimension_por_frame(CONFIG)
+        self.assertTrue(np.all(vec[d - 1::d] == 1))
+
+    def test_sena_de_dos_manos_que_se_mueven_no_cambia(self):
+        d = dimension_por_frame(CONFIG)
+        vec = caracteristicas(generar_captura("SEPARAR", np.random.default_rng(2)), CONFIG)
+        self.assertTrue(np.all(vec[d - 1::d] == 1))
+
+
+class TestCalidad(unittest.TestCase):
+    """Revisión de cada grabación (ml/revisar_dataset.py)."""
+
+    def _avisos(self, r):
+        return " ".join(t for nivel, t in r["avisos"] if nivel != "info")
+
+    def test_grabacion_buena_sale_verde_e_informa_la_mano_de_abajo(self):
+        from signy_ml.calidad import evaluar_muestra
+        r = evaluar_muestra(generar_captura("GRACIAS", np.random.default_rng(1), pausa_despues_ms=600, mano_reposo=True), "dinamica", 1)
+        self.assertEqual(r["nivel"], "verde", r["avisos"])
+        self.assertTrue(r["otraManoAbajo"])
+
+    def test_detecta_sena_cortada_al_final(self):
+        from signy_ml.calidad import evaluar_muestra
+        cap = generar_captura("GRACIAS", np.random.default_rng(2), duracion_ms=1500, pausa_antes_ms=100, pausa_despues_ms=0)
+        cap["frames"] = [f for f in cap["frames"] if f["t"] <= 900]
+        self.assertIn("cortada", self._avisos(evaluar_muestra(cap, "dinamica", 1)))
+
+    def test_detecta_mano_perdida_por_movimiento_rapido(self):
+        from signy_ml.calidad import evaluar_muestra
+        cap = generar_captura("GRACIAS", np.random.default_rng(3), pausa_despues_ms=600)
+        for f in cap["frames"]:
+            if 400 <= f["t"] <= 1200:
+                f["manos"] = []
+        r = evaluar_muestra(cap, "dinamica", 1)
+        self.assertEqual(r["nivel"], "rojo")
+        self.assertIn("Se perdió la mano", self._avisos(r))
+
+    def test_subir_y_bajar_desde_la_cintura_no_es_un_problema(self):
+        # Como en las grabaciones reales: la mano parte en la cintura, sube, hace la seña y vuelve a bajar.
+        from signy_ml.calidad import evaluar_muestra
+        cap = generar_captura("HOLA", np.random.default_rng(7), pausa_antes_ms=500, pausa_despues_ms=600,
+                              inicio_abajo=True, mano_reposo=True)
+        self.assertEqual(evaluar_muestra(cap, "dinamica", 1)["nivel"], "verde")
+        # Perderla un momento mientras sube (borrosa) solo se informa.
+        for f in cap["frames"]:
+            if 100 <= f["t"] <= 500 and f["manos"]:
+                f["manos"] = f["manos"][1:]
+        r = evaluar_muestra(cap, "dinamica", 1)
+        self.assertEqual(r["nivel"], "verde", r["avisos"])
+        self.assertIn("al subirla o bajarla", " ".join(t for _, t in r["avisos"]))
+
+    def test_saltos_solo_entre_frames_seguidos(self):
+        # Reaparecer en otro lugar después de perderse no es un "salto brusco".
+        from signy_ml.calidad import evaluar_muestra
+        cap = generar_captura("HOLA", np.random.default_rng(8), pausa_antes_ms=500, pausa_despues_ms=600, inicio_abajo=True)
+        for f in cap["frames"]:
+            if 150 <= f["t"] <= 400:  # se pierde mientras sube: reaparece bastante más arriba
+                f["manos"] = []
+        self.assertEqual(evaluar_muestra(cap, "dinamica", 1)["saltos"], 0)
+
+    def test_sena_de_dos_manos_con_una_sola_visible(self):
+        from signy_ml.calidad import evaluar_muestra
+        r = evaluar_muestra(generar_captura("HOLA", np.random.default_rng(4)), "dinamica", 2)
+        self.assertEqual(r["nivel"], "rojo")
+
+    def test_poco_movimiento_en_sena_dinamica(self):
+        from signy_ml.calidad import evaluar_muestra
+        self.assertIn("Casi no hay movimiento", self._avisos(evaluar_muestra(generar_captura("L", np.random.default_rng(5)), "dinamica", 1)))
+
+    def test_separar_rojas_deja_fuera_solo_las_que_hay_que_volver_a_grabar(self):
+        from signy_ml.calidad import separar_rojas
+        buena = generar_captura("GRACIAS", np.random.default_rng(1), pausa_despues_ms=600)
+        perdida = generar_captura("GRACIAS", np.random.default_rng(3), pausa_despues_ms=600)
+        for f in perdida["frames"]:
+            if 400 <= f["t"] <= 1200:
+                f["manos"] = []
+        ds = Dataset(senas={1: "gracias"}, muestras=[Muestra(1, 1, buena), Muestra(2, 1, perdida),
+                                                    Muestra(3, 1, buena, manos_requeridas=2)])
+        limpio, rojas = separar_rojas(ds)
+        self.assertEqual([m.id for m in limpio.muestras], [1])
+        self.assertEqual(sorted(m.id for m, _ in rojas), [2, 3])
+
+    def test_cambio_de_forma_de_la_mano_cuenta_como_movimiento(self):
+        from signy_ml.calidad import evaluar_muestra
+        r = evaluar_muestra(generar_captura("LLAMAR", np.random.default_rng(6), pausa_despues_ms=600), "dinamica", 1)
+        self.assertEqual(r["nivel"], "verde", r["avisos"])
+
+
+class TestPerfil(unittest.TestCase):
+    """Medidas para la retroalimentación al alumno (espejo de motor-senas/retroalimentacion.ts)."""
+
+    def test_mas_rapido_dura_menos_con_el_mismo_recorrido(self):
+        from signy_ml.perfil import medir
+        rapida = medir(generar_captura("HOLA", np.random.default_rng(1), duracion_ms=500, pausa_antes_ms=300, pausa_despues_ms=500))
+        lenta = medir(generar_captura("HOLA", np.random.default_rng(1), duracion_ms=1600, pausa_antes_ms=300, pausa_despues_ms=500))
+        self.assertLess(rapida["duracionMs"], 0.5 * lenta["duracionMs"])
+        self.assertGreater(rapida["recorrido"], 0.6 * lenta["recorrido"])  # el suavizado achata un poco lo rápido, no tanto
+
+    def test_sena_quieta_y_sena_de_dos_manos(self):
+        from signy_ml.perfil import medir
+        quieta = medir(generar_captura("L", np.random.default_rng(2), pausa_antes_ms=300, pausa_despues_ms=300, ruido=0.01))
+        self.assertLess(quieta["recorrido"], 0.3)
+        self.assertIsNone(quieta["duracionMs"])
+        dos = medir(generar_captura("SEPARAR", np.random.default_rng(3)))
+        self.assertGreater(dos["dosManos"], 0.9)
+        self.assertGreater(dos["distanciaManos"], 1)
+        self.assertIsNone(medir({"ancho": 640, "alto": 480, "frames": [{"t": 0, "manos": []}]}))
+
+    def test_forma_de_la_mano_distingue_palma_de_puno(self):
+        from signy_ml.perfil import medir
+        palma = medir(generar_captura("HOLA", np.random.default_rng(4)))["extension"]
+        puno = medir(generar_captura("SI", np.random.default_rng(4)))["extension"]
+        self.assertTrue(all(a > b + 0.5 for a, b in zip(palma[1:], puno[1:])))
+
+    def test_el_modelo_exportado_trae_el_perfil_de_cada_sena(self):
+        ds = _ds(["HOLA", "SEPARAR"], participantes=1, repeticiones=3)
+        modelo = entrenar(ds, OpcionesEntrenamiento(config=CONFIG, capas_ocultas=(8,), aumentos_por_muestra=1, epocas=2)).modelo
+        perfiles = modelo["perfiles"]
+        self.assertEqual(set(perfiles), {"1", "2"})  # sin la clase "ninguna seña"
+        self.assertEqual(perfiles["1"]["n"], 3)
+        self.assertEqual(perfiles["2"]["dosManos"][0], 1.0)
+        self.assertEqual(len(perfiles["1"]["extension"]), 5)
 
 
 class TestAumentacion(unittest.TestCase):
@@ -127,6 +301,12 @@ class TestAumentacion(unittest.TestCase):
 
 
 class TestDataset(unittest.TestCase):
+    def test_lee_persona_tipo_y_manos(self):
+        ds = leer_dataset(dataset_sintetico(["HOLA", "SEPARAR"], 2, 1))
+        self.assertEqual(ds.participantes(), {"p1", "p2"})
+        self.assertEqual({(ds.senas[m.sena_id], m.manos_requeridas) for m in ds.muestras}, {("hola", 1), ("separar", 2)})
+        self.assertEqual(ds.personas_por_sena(), {1: 2, 2: 2})
+
     def test_carga_dataset_valido(self):
         ds = leer_dataset(dataset_sintetico(["HOLA", "SI"], 2, 2))
         self.assertEqual(len(ds.muestras), 8)
@@ -159,6 +339,23 @@ class TestEntrenamiento(unittest.TestCase):
             cap = generar_captura(nombre, rng, tamano=0.2, zurda=True, ancho=480, alto=640)
             p = probabilidades(modelo, caracteristicas(cap, CONFIG))
             self.assertEqual(modelo["clases"][int(np.argmax(p))]["senaId"], ids[nombre.lower()], nombre)
+
+    def test_mide_con_cada_persona_como_alumno_nuevo(self):
+        from signy_ml.modelo import evaluar_por_persona
+        ds = _ds(["HOLA", "SI", "L"], participantes=3, repeticiones=2)
+        # Una seña que grabó solo p3: con p3 fuera no hay de quién aprenderla, así que no se mide.
+        ds.senas[9] = "solo-p3"
+        ds.muestras.append(Muestra(999, 9, generar_captura("GRACIAS", np.random.default_rng(9)), "p3"))
+        op = OpcionesEntrenamiento(config=CONFIG, capas_ocultas=(16,), aumentos_por_muestra=2, epocas=20)
+        pn = evaluar_por_persona(ds, op, umbral=0.6)
+        self.assertEqual(set(pn["personas"]), {"p1", "p2", "p3"})
+        self.assertEqual(pn["sinMedir"], 1)
+        self.assertEqual(pn["muestras"], 3 * 3 * 2)
+        self.assertGreaterEqual(pn["exactitud"], 0.8)
+        self.assertLessEqual(pn["aprobadas"], pn["exactitud"])
+        aprobadas = [f["aprobadas"] for f in pn["porUmbral"]]
+        self.assertEqual(aprobadas, sorted(aprobadas, reverse=True))  # umbral más alto, menos aprobadas
+        self.assertIsNone(evaluar_por_persona(_ds(["HOLA", "SI"], participantes=2, repeticiones=2), op, 0.6))
 
     def test_formato_exportado(self):
         modelo = entrenar(_ds(["HOLA", "L"], 2, 3), OpcionesEntrenamiento(config=CONFIG, capas_ocultas=(8,), aumentos_por_muestra=1)).modelo
@@ -224,11 +421,12 @@ def _ds_compuesta(participantes=4, repeticiones=3, semilla=0) -> Dataset:
     for p in range(participantes):
         persona = dict(tamano=float(rng.uniform(0.15, 0.22)), proporcion=float(rng.uniform(0.95, 1.05)))
         for _ in range(repeticiones):
-            ds.muestras.append(Muestra(len(ds.muestras) + 1, 1, _captura_compuesta(rng, **persona)))
+            quien = f"p{p + 1}"
+            ds.muestras.append(Muestra(len(ds.muestras) + 1, 1, _captura_compuesta(rng, **persona), quien))
             ds.muestras.append(Muestra(len(ds.muestras) + 1, 2,
-                                       generar_captura("HOLA", rng, duracion_ms=1200, pausa_antes_ms=200, pausa_despues_ms=200, **persona)))
+                                       generar_captura("HOLA", rng, duracion_ms=1200, pausa_antes_ms=200, pausa_despues_ms=200, **persona), quien))
             ds.muestras.append(Muestra(len(ds.muestras) + 1, 3,
-                                       generar_captura("SEPARAR", rng, duracion_ms=1200, pausa_antes_ms=200, pausa_despues_ms=200, **persona)))
+                                       generar_captura("SEPARAR", rng, duracion_ms=1200, pausa_antes_ms=200, pausa_despues_ms=200, **persona), quien))
     return ds
 
 
@@ -292,8 +490,9 @@ class TestReporte(unittest.TestCase):
         cli.escribir_reporte(ruta, ds, metricas, {"umbralSugerido": 0.6}, Path("m.json"), 1)
         texto = ruta.read_text(encoding="utf-8")
         self.assertIn("Muestras de prueba: 2 de 4", texto)
-        self.assertIn("| si | 2 ⚠️ pocas | — (sin prueba) | — (sin prueba) |", texto)
-        self.assertIn("| hola | 2 ⚠️ pocas | 100.0 % | 100.0 % |", texto)
+        self.assertIn("| si | 2 ⚠️ pocas | 1 ⚠️ | — (sin prueba) | — (sin prueba) |", texto)
+        self.assertIn("| hola | 2 ⚠️ pocas | 1 ⚠️ | 100.0 % | 100.0 % |", texto)
+        self.assertIn("Con personas nuevas: — (no se midió", texto)
 
     def test_palabra_repetida_en_dos_senas_avisa_y_se_distingue_en_el_reporte(self):
         crudo = dataset_sintetico(["HOLA", "SI", "L"], 2, 2)

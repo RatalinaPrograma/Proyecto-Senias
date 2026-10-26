@@ -642,6 +642,12 @@
   justify-content: center;
 }
 
+// En el resultado el contenido (pistas + video de repaso) manda: sin proporción fija, para no recortarlo.
+.cam-frame.resultado {
+  aspect-ratio: auto;
+  min-height: 320px;
+}
+
 .cam-idle {
   display: flex;
   flex-direction: column;
@@ -738,17 +744,19 @@
   z-index: 2;
 }
 
-.cam-oval {
+// Marco de TODA la imagen (no un óvalo): la cámara analiza el cuadro completo, así que la seña
+// puede hacerse en cualquier parte (cerca de la cara, en el pecho, con movimientos amplios).
+.cam-marco {
   position: absolute;
-  inset: 30px;
-  border-radius: 50%;
-  border: 3px dashed rgba(255, 255, 255, 0.7);
-  margin: auto;
-  width: 62%;
-  height: 42%;
+  inset: 10px;
+  border-radius: 16px;
+  border: 2px dashed rgba(255, 255, 255, 0.45);
   box-sizing: border-box;
+  pointer-events: none;
 
-  &.recording { border-color: var(--signy-error); }
+  &.recording {
+    border: 3px solid var(--signy-error);
+  }
 }
 
 .cam-overlay {
@@ -1336,6 +1344,70 @@
   }
 }
 
+.cam-consejo {
+  max-width: 290px;
+  margin: 10px 0 14px;
+  line-height: 1.45;
+}
+
+// Indicador en vivo: ¿se ve la mano? (cuenta regresiva y grabación)
+.cam-mano-chip {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1.5px solid var(--signy-fox);
+  color: #fff;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 12.5px;
+  white-space: nowrap;
+  z-index: 3;
+
+  &.ok { border-color: var(--signy-success); }
+}
+
+// Pistas concretas de qué cambiar para el siguiente intento.
+.cam-pistas {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  width: 100%;
+  max-width: 330px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+
+  li {
+    position: relative;
+    padding: 9px 12px 9px 30px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    font-family: 'Manrope', sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--signy-cream);
+
+    &::before {
+      content: '→';
+      position: absolute;
+      left: 11px;
+      top: 9px;
+      color: var(--signy-fox);
+      font-weight: 800;
+    }
+  }
+}
+
+.cam-video-repaso {
+  margin-top: 10px;
+  width: 120px;
+  height: 120px;
+}
 
 /* ---------- Videos grandes ocupando casi todo su contenedor ---------- */
 .flash-card {

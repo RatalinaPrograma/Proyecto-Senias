@@ -541,6 +541,46 @@ describe('LessonPage', () => {
       expect(component.camFuente).toBe('clasificador');
     });
 
+    it('si no se aprueba, muestra pistas concretas de qué cambiar (no un "intenta de nuevo")', async () => {
+      evaluar.and.resolveTo(resultado({ sinManos: false, aprobado: false, fuente: 'clasificador', similitudPct: 30 }));
+      spyOn(TestBed.inject(ReconocedorSenasService), 'explicar').and.resolveTo({
+        titulo: 'Casi: se pareció más a «chao»',
+        pistas: [{ codigo: 'rapido', texto: 'Lo hiciste muy rápido: hazla más pausada.' }],
+      });
+      component.fase = 'record';
+      await (component as any).terminarGrabacion();
+      fixture.detectChanges();
+
+      expect(component.camMsg).toBe('Casi: se pareció más a «chao»');
+      const pistas = Array.from(fixture.nativeElement.querySelectorAll('.cam-pistas li')).map((li: any) => li.textContent.trim());
+      expect(pistas).toEqual(['Lo hiciste muy rápido: hazla más pausada.']);
+    });
+
+    it('si armar las pistas falla, igual muestra un resultado con el mensaje general', async () => {
+      evaluar.and.resolveTo(resultado({ aprobado: false, fuente: 'clasificador' }));
+      spyOn(TestBed.inject(ReconocedorSenasService), 'explicar').and.rejectWith(new Error('modelo raro'));
+      await (component as any).terminarGrabacion();
+      expect(component.camStage).toBe('result');
+      expect(component.camRetro).toBeNull();
+      expect(component.camMsg).toContain('no coincidió');
+    });
+
+    it('el indicador en vivo cambia solo cuando el estado se mantiene unos frames (sin parpadeo)', () => {
+      const actualizar = (v: boolean) => (component as any).actualizarIndicadorManos(v);
+      actualizar(true);
+      actualizar(true);
+      expect(component.camManoVisible).toBeNull();
+      actualizar(true);
+      expect(component.camManoVisible).toBeTrue();
+      actualizar(false);
+      actualizar(true); // un frame suelto no lo cambia
+      expect(component.camManoVisible).toBeTrue();
+      actualizar(false);
+      actualizar(false);
+      actualizar(false);
+      expect(component.camManoVisible).toBeFalse();
+    });
+
     it('si falla el registro del intento (sin red), igual muestra el resultado', async () => {
       evaluar.and.resolveTo(resultado({ aprobado: true, similitudPct: 80 }));
       contenidoSpy.registrarIntento.and.rejectWith(new Error('sin red'));
