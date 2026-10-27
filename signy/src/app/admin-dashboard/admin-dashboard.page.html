@@ -1,0 +1,464 @@
+<ion-content [fullscreen]="true" class="dash-content">
+  <!-- Topbar -->
+  <header class="dash-topbar">
+    <button class="btn-back" (click)="volver()" aria-label="Volver">
+      <ion-icon name="arrow-back"></ion-icon>
+    </button>
+    <div class="dash-brand">
+      <h1 class="brand-title">
+        <ion-icon name="stats-chart-outline" class="brand-icon"></ion-icon>
+        <span>Dashboard</span>
+      </h1>
+      <p class="brand-subtitle">Cuánta gente usa Signy y cómo le va</p>
+    </div>
+    <nav class="dash-nav" aria-label="Panel de admin">
+      <button class="btn-link" (click)="irAVocabulario()">
+        <ion-icon name="layers-outline"></ion-icon>
+        <span>Vocabulario</span>
+      </button>
+      <button class="btn-link" (click)="irAAIStudio()">
+        <ion-icon name="hardware-chip-outline"></ion-icon>
+        <span>AI Studio</span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="dash-cuerpo">
+    <!-- Filtros: un período para todo el dashboard -->
+    <div class="filtros" role="toolbar" aria-label="Filtros del dashboard">
+      <div class="segmentado" role="radiogroup" aria-label="Período">
+        <button
+          *ngFor="let p of periodos"
+          type="button"
+          role="radio"
+          [attr.aria-checked]="dias === p.dias"
+          [class.activo]="dias === p.dias"
+          [disabled]="cargando"
+          (click)="cambiarPeriodo(p.dias)">
+          {{ p.texto }}
+        </button>
+      </div>
+
+      <label class="interruptor" title="Deja fuera las cuentas de admin para que nuestras pruebas no inflen los números">
+        <input type="checkbox" [ngModel]="excluirAdmins" (ngModelChange)="cambiarExcluirAdmins($event)" [disabled]="cargando" />
+        <span class="pista" aria-hidden="true"></span>
+        <span>Sin cuentas del equipo</span>
+      </label>
+
+      <span class="espaciador"></span>
+
+      <span class="actualizado" *ngIf="actualizado && kpis">
+        {{ textoPeriodo }} · actualizado {{ actualizado | date: 'HH:mm' }}
+      </span>
+      <button class="btn-icono" type="button" (click)="cargar()" [disabled]="cargando || actualizando" aria-label="Actualizar datos" title="Actualizar">
+        <ion-icon name="refresh-outline" [class.girando]="actualizando"></ion-icon>
+      </button>
+      <button class="btn-secundario" type="button" (click)="copiarResumen()" [disabled]="!kpis">
+        <ion-icon name="copy-outline"></ion-icon>
+        <span>Copiar resumen</span>
+      </button>
+      <button class="btn-secundario" type="button" (click)="descargarCsv()" [disabled]="!kpis" title="Datos diarios del período para Excel">
+        <ion-icon name="download-outline"></ion-icon>
+        <span>CSV</span>
+      </button>
+    </div>
+
+    <!-- Primera carga -->
+    <div class="esqueleto" *ngIf="cargando" aria-busy="true" aria-label="Cargando KPIs">
+      <div class="esqueleto-tarjetas">
+        <div class="bloque" *ngFor="let _ of [1, 2, 3, 4, 5, 6, 7, 8]"></div>
+      </div>
+      <div class="bloque grande"></div>
+    </div>
+
+    <!-- Error sin datos que mostrar -->
+    <div class="estado error" *ngIf="!cargando && error && !kpis" role="alert">
+      <ion-icon name="alert-circle-outline"></ion-icon>
+      <p>{{ error }}</p>
+      <button class="btn-primario" type="button" (click)="cargar()">Reintentar</button>
+    </div>
+
+    <!-- Error al actualizar: se siguen viendo los datos anteriores -->
+    <div class="aviso-error" *ngIf="error && kpis" role="alert">
+      <ion-icon name="alert-circle-outline"></ion-icon>
+      <span>{{ error }}</span>
+      <button type="button" (click)="cargar()">Reintentar</button>
+    </div>
+
+    <div class="contenido" *ngIf="kpis as k" [class.recargando]="actualizando" [attr.aria-busy]="actualizando">
+      <!-- ============ Indicadores principales ============ -->
+      <section class="tarjetas" aria-label="Indicadores principales">
+        <article class="tarjeta" *ngFor="let t of tarjetas; trackBy: trackPorId" [class.destacada]="t.destacada">
+          <h3 [title]="t.ayuda">{{ t.titulo }}</h3>
+          <p class="valor">{{ t.valor }}</p>
+          <p class="detalle">{{ t.detalle }}</p>
+          <div
+            class="medidor"
+            *ngIf="t.medidor !== undefined"
+            role="meter"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            [attr.aria-valuenow]="t.medidor ?? 0"
+            [attr.aria-label]="t.titulo">
+            <i [style.width.%]="t.medidor ?? 0"></i>
+          </div>
+          <app-sparkline *ngIf="t.serie?.length" [valores]="t.serie!"></app-sparkline>
+          <p class="variacion" *ngIf="t.variacion as v" [ngClass]="v.tono">
+            <span class="flecha" aria-hidden="true">{{ v.flecha }}</span>
+            <strong>{{ v.texto }}</strong>
+            <span class="comparacion">{{ textoComparacion }}</span>
+          </p>
+        </article>
+      </section>
+
+      <!-- ============ Lo más importante (frases automáticas) ============ -->
+      <section class="panel destacados" *ngIf="frases.length" aria-labelledby="t-destacados">
+        <h2 id="t-destacados"><ion-icon name="bulb-outline"></ion-icon> Lo más importante</h2>
+        <ul>
+          <li *ngFor="let f of frases">{{ f }}</li>
+        </ul>
+      </section>
+
+      <!-- ============ Actividad diaria ============ -->
+      <section class="panel" aria-labelledby="t-actividad">
+        <div class="panel-cabecera">
+          <div>
+            <h2 id="t-actividad">Actividad diaria</h2>
+            <p class="sub">{{ nombreMetrica }} por día · {{ textoPeriodo }}</p>
+          </div>
+          <div class="controles">
+            <div class="segmentado chico" role="radiogroup" aria-label="Métrica del gráfico">
+              <button
+                *ngFor="let m of metricas"
+                type="button"
+                role="radio"
+                [attr.aria-checked]="metrica === m.id"
+                [class.activo]="metrica === m.id"
+                (click)="cambiarMetrica(m.id)">
+                {{ m.texto }}
+              </button>
+            </div>
+            <button class="btn-icono con-texto" type="button" (click)="verTabla = !verTabla" [attr.aria-pressed]="verTabla">
+              <ion-icon [name]="verTabla ? 'stats-chart-outline' : 'list-outline'"></ion-icon>
+              <span>{{ verTabla ? 'Ver gráfico' : 'Ver tabla' }}</span>
+            </button>
+          </div>
+        </div>
+
+        <app-grafico-linea *ngIf="!verTabla" [datos]="puntosSerie" [nombre]="nombreMetrica" [alto]="260"></app-grafico-linea>
+
+        <div class="tabla-scroll alta" *ngIf="verTabla">
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th scope="col">Día</th>
+                <th scope="col" class="num">Activos</th>
+                <th scope="col" class="num">Nuevos</th>
+                <th scope="col" class="num">Lecciones</th>
+                <th scope="col" class="num">Ejercicios</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let d of filasTabla">
+                <th scope="row">{{ fechaConDia(d.dia) }}</th>
+                <td class="num">{{ numero(d.activos) }}</td>
+                <td class="num">{{ numero(d.nuevos) }}</td>
+                <td class="num">{{ numero(d.lecciones) }}</td>
+                <td class="num">{{ numero(d.ejercicios) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <dl class="resumen-serie">
+          <div *ngFor="let r of resumenSerie">
+            <dt>{{ r.etiqueta }}</dt>
+            <dd>{{ r.valor }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- ============ Embudo + progreso por nivel ============ -->
+      <div class="fila-2">
+        <section class="panel" aria-labelledby="t-embudo">
+          <div class="panel-cabecera">
+            <div>
+              <h2 id="t-embudo">Embudo de aprendizaje</h2>
+              <p class="sub">Hasta dónde llegan los {{ numero(registradosPeriodo) }} que se registraron en el período</p>
+            </div>
+          </div>
+          <ng-container *ngIf="registradosPeriodo; else sinRegistros">
+            <app-barras [items]="embudo" [anchoEtiqueta]="170" titulo="Embudo de aprendizaje"></app-barras>
+            <p class="nota" *ngIf="caidaEmbudo as c">
+              <span class="marca-destacada" aria-hidden="true"></span>
+              Resaltada: «{{ c.etapa }}», donde más personas se quedan en el camino ({{ numero(c.perdidos) }}).
+            </p>
+          </ng-container>
+        </section>
+
+        <section class="panel" aria-labelledby="t-niveles">
+          <div class="panel-cabecera">
+            <div>
+              <h2 id="t-niveles">Progreso por nivel</h2>
+              <p class="sub">Cuántos de los registrados en el período terminaron cada lección</p>
+            </div>
+          </div>
+          <ng-container *ngIf="registradosPeriodo; else sinRegistros">
+            <div class="nivel" *ngFor="let n of niveles; trackBy: trackPorId">
+              <div class="nivel-cabecera">
+                <span class="nivel-punto" [style.background]="n.color || 'var(--signy-muted)'" aria-hidden="true"></span>
+                <h3>Nivel {{ n.numero }} · {{ n.nombre }}</h3>
+                <span class="nivel-total">{{ numero(n.completaron) }} lo terminaron · {{ porcentaje(n.pct) }}</span>
+              </div>
+              <app-barras
+                *ngIf="n.subniveles.length; else sinLecciones"
+                [items]="n.subniveles"
+                [max]="registradosPeriodo"
+                [anchoEtiqueta]="150"
+                [titulo]="'Lecciones del nivel ' + n.numero"></app-barras>
+              <ng-template #sinLecciones><p class="vacio">Este nivel todavía no tiene lecciones.</p></ng-template>
+            </div>
+          </ng-container>
+        </section>
+      </div>
+
+      <!-- ============ Retención + rachas ============ -->
+      <div class="fila-2 ancha-izq">
+        <section class="panel" aria-labelledby="t-retencion">
+          <div class="panel-cabecera">
+            <div>
+              <h2 id="t-retencion">¿Vuelven a practicar?</h2>
+              <p class="sub">Retención de los usuarios nuevos</p>
+            </div>
+          </div>
+          <div class="mini-tarjetas">
+            <div class="mini" *ngFor="let r of retencion; trackBy: trackPorId" [title]="r.ayuda">
+              <span class="mini-titulo">{{ r.titulo }}</span>
+              <strong>{{ r.valor }}</strong>
+              <span class="mini-detalle">{{ r.detalle }}</span>
+            </div>
+          </div>
+          <h3 class="subtitulo">Por semana de registro</h3>
+          <app-mapa-calor
+            *ngIf="cohortesFilas.length; else sinRegistros"
+            [filas]="cohortesFilas"
+            [columnas]="cohortesColumnas"
+            [valores]="cohortesValores"
+            formato="pct"
+            [conTexto]="true"
+            [anchoEtiquetas]="88"
+            [describir]="describirCohorte"
+            titulo="Retención por semana de registro"
+            ayuda="Cada fila es la semana en que se registraron (y cuántos fueron). S0 es esa misma semana; S1, la siguiente…"></app-mapa-calor>
+        </section>
+
+        <section class="panel" aria-labelledby="t-rachas">
+          <div class="panel-cabecera">
+            <div>
+              <h2 id="t-rachas"><ion-icon name="flame" class="icono-fuego"></ion-icon> Rachas</h2>
+              <p class="sub">Días seguidos practicando, hoy</p>
+            </div>
+          </div>
+          <app-barras [items]="rachas" [anchoEtiqueta]="96" titulo="Usuarios por largo de racha"></app-barras>
+          <dl class="resumen-serie">
+            <div>
+              <dt>Racha más larga</dt>
+              <dd>{{ numero(k.resumen.racha_maxima) }} días</dd>
+            </div>
+            <div>
+              <dt>Logros ganados</dt>
+              <dd>{{ numero(k.resumen.logros_periodo) }}</dd>
+            </div>
+            <div>
+              <dt>Seguimientos entre usuarios</dt>
+              <dd>{{ numero(k.resumen.seguimientos) }}</dd>
+            </div>
+          </dl>
+        </section>
+      </div>
+
+      <!-- ============ Hábitos ============ -->
+      <section class="panel" aria-labelledby="t-habitos">
+        <div class="panel-cabecera">
+          <div>
+            <h2 id="t-habitos">¿Cuándo practican?</h2>
+            <p class="sub">
+              Ejercicios por día de la semana y hora (Chile)<ng-container *ngIf="pico"> · el peak es el <strong>{{ pico }}</strong></ng-container>
+            </p>
+          </div>
+        </div>
+        <div class="tabla-scroll">
+          <app-mapa-calor
+            class="mapa-habitos"
+            [filas]="habitosFilas"
+            [columnas]="habitosColumnas"
+            [valores]="habitosValores"
+            formato="conteo"
+            [saltoColumnas]="3"
+            [anchoEtiquetas]="40"
+            [describir]="describirHabito"
+            titulo="Ejercicios por día y hora"></app-mapa-calor>
+        </div>
+      </section>
+
+      <!-- ============ Señas ============ -->
+      <section class="panel" aria-labelledby="t-senas">
+        <div class="panel-cabecera">
+          <div>
+            <h2 id="t-senas">Señas</h2>
+            <p class="sub">Cómo les va con cada seña en el período · toca un título para ordenar</p>
+          </div>
+          <label class="buscador">
+            <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+            <input type="search" placeholder="Buscar seña" aria-label="Buscar seña" [(ngModel)]="busquedaSena" (ngModelChange)="filtrarSenas()" />
+          </label>
+        </div>
+        <div class="tabla-scroll">
+          <table class="tabla tabla-senas">
+            <thead>
+              <tr>
+                <th scope="col" [attr.aria-sort]="ordenAria('palabra')">
+                  <button type="button" (click)="ordenarSenas('palabra')">
+                    Seña <span class="orden" *ngIf="ordenSenas === 'palabra'">{{ ordenAsc ? '▲' : '▼' }}</span>
+                  </button>
+                </th>
+                <th scope="col" class="col-nivel">Nivel</th>
+                <th scope="col" [attr.aria-sort]="ordenAria('quiz')">
+                  <button type="button" (click)="ordenarSenas('quiz')">
+                    Aciertos quiz <span class="orden" *ngIf="ordenSenas === 'quiz'">{{ ordenAsc ? '▲' : '▼' }}</span>
+                  </button>
+                </th>
+                <th scope="col" [attr.aria-sort]="ordenAria('camara')">
+                  <button type="button" (click)="ordenarSenas('camara')">
+                    Aprobadas cámara <span class="orden" *ngIf="ordenSenas === 'camara'">{{ ordenAsc ? '▲' : '▼' }}</span>
+                  </button>
+                </th>
+                <th scope="col" class="num" [attr.aria-sort]="ordenAria('intentos')">
+                  <button type="button" (click)="ordenarSenas('intentos')">
+                    Intentos <span class="orden" *ngIf="ordenSenas === 'intentos'">{{ ordenAsc ? '▲' : '▼' }}</span>
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let s of senasVisibles; trackBy: trackPorId">
+                <th scope="row" class="palabra">{{ s.palabra }}</th>
+                <td class="col-nivel">{{ s.nivel ?? '—' }}</td>
+                <td>
+                  <div class="celda-medidor" [class.pocos]="s.quizN < MIN_INTENTOS_CONFIABLE">
+                    <span class="pct">{{ s.quizN ? porcentaje(s.quizPct) : '—' }}</span>
+                    <span class="medidor" aria-hidden="true"><i [style.width.%]="s.quizPct ?? 0"></i></span>
+                    <span class="n">{{ numero(s.quizN) }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="celda-medidor" [class.pocos]="s.camN < MIN_INTENTOS_CONFIABLE">
+                    <span class="pct">{{ s.camN ? porcentaje(s.camPct) : '—' }}</span>
+                    <span class="medidor" aria-hidden="true"><i [style.width.%]="s.camPct ?? 0"></i></span>
+                    <span class="n">{{ numero(s.camN) }}</span>
+                  </div>
+                </td>
+                <td class="num">{{ numero(s.intentos) }}</td>
+              </tr>
+              <tr *ngIf="!senasVisibles.length">
+                <td colspan="5" class="vacio">{{ senas.length ? 'No hay señas con ese nombre.' : 'Todavía no hay señas.' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="nota">El número chico es la cantidad de intentos. Con menos de {{ MIN_INTENTOS_CONFIABLE }} el porcentaje aparece tenue: todavía son pocos datos.</p>
+      </section>
+
+      <!-- ============ Top + contenido, dataset y modelo ============ -->
+      <div class="fila-2">
+        <section class="panel" aria-labelledby="t-top">
+          <div class="panel-cabecera">
+            <div>
+              <h2 id="t-top"><ion-icon name="trophy-outline" class="icono-trofeo"></ion-icon> Top 10 por experiencia</h2>
+              <p class="sub">Desde el inicio</p>
+            </div>
+          </div>
+          <div class="tabla-scroll" *ngIf="k.top.length; else sinUsuarios">
+            <table class="tabla tabla-top">
+              <thead>
+                <tr>
+                  <th scope="col" class="num">#</th>
+                  <th scope="col">Usuario</th>
+                  <th scope="col" class="num">XP</th>
+                  <th scope="col" class="num">Racha</th>
+                  <th scope="col" class="num col-lecciones">Lecciones</th>
+                  <th scope="col" class="col-ultima">Última vez</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let u of k.top; let i = index">
+                  <td class="num puesto">{{ i + 1 }}</td>
+                  <th scope="row" class="nombre">{{ u.nombre }}</th>
+                  <td class="num"><strong>{{ numero(u.xp) }}</strong></td>
+                  <td class="num" [title]="'Récord: ' + u.max_racha + ' días'">{{ numero(u.racha) }}</td>
+                  <td class="num col-lecciones">{{ numero(u.lecciones) }}</td>
+                  <td class="col-ultima">{{ u.ultima_actividad === k.hoy ? 'hoy' : fechaCorta(u.ultima_actividad) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="t-contenido">
+          <div class="panel-cabecera">
+            <div>
+              <h2 id="t-contenido">Contenido, dataset y modelo</h2>
+              <p class="sub">Lo que tiene la app para enseñar y reconocer</p>
+            </div>
+          </div>
+          <div class="fichas">
+            <div class="ficha">
+              <h3>Contenido</h3>
+              <dl>
+                <div><dt>Niveles</dt><dd>{{ numero(k.contenido.niveles) }}</dd></div>
+                <div><dt>Lecciones con contenido</dt><dd>{{ numero(k.contenido.subniveles_con_contenido) }} de {{ numero(k.contenido.subniveles) }}</dd></div>
+                <div><dt>Señas con video</dt><dd>{{ numero(k.contenido.senas_con_video) }} de {{ numero(k.contenido.senas) }}</dd></div>
+              </dl>
+            </div>
+            <div class="ficha">
+              <h3>Dataset de la IA</h3>
+              <dl>
+                <div><dt>Muestras grabadas</dt><dd>{{ numero(k.dataset.muestras) }}</dd></div>
+                <div><dt>Nuevas en el período</dt><dd>{{ numero(k.dataset.muestras_periodo) }}</dd></div>
+                <div><dt>Señas con muestras</dt><dd>{{ numero(k.dataset.senas) }}</dd></div>
+                <div><dt>Personas distintas</dt><dd>{{ numero(k.dataset.personas) }}</dd></div>
+              </dl>
+            </div>
+            <div class="ficha" *ngIf="modelo as m">
+              <h3>Modelo en la app</h3>
+              <dl>
+                <div><dt>Exactitud en la prueba</dt><dd>{{ m.exactitud === null ? '—' : porcentaje(m.exactitud * 100) }}</dd></div>
+                <div><dt>Con personas nuevas</dt><dd>{{ m.personasNuevas === null ? '—' : porcentaje(m.personasNuevas * 100) }}</dd></div>
+                <div><dt>Seguridad para aprobar</dt><dd>{{ porcentaje(m.umbral * 100) }}</dd></div>
+                <div><dt>Señas que reconoce</dt><dd>{{ numero(m.senas) }}</dd></div>
+                <div *ngIf="m.creado"><dt>Entrenado</dt><dd>{{ fechaCorta(m.creado) }}</dd></div>
+              </dl>
+              <p class="nota" *ngIf="m.personasNuevas !== null && m.personasNuevas < 0.6">
+                Reconoce mucho mejor a quienes grabaron que a gente nueva: grabar más personas por seña es lo que más lo mejora.
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <p class="pie">
+        Datos calculados en Supabase con hora de Chile{{ k.excluye_admins ? ', sin contar las cuentas del equipo' : '' }}.
+        Período: {{ textoPeriodo }} ({{ numero(k.dias) }} días).
+      </p>
+    </div>
+  </main>
+
+  <div class="aviso" *ngIf="aviso" role="status">{{ aviso }}</div>
+
+  <ng-template #sinRegistros>
+    <p class="vacio">Nadie se registró en este período. Prueba con un período más largo.</p>
+  </ng-template>
+  <ng-template #sinUsuarios>
+    <p class="vacio">Todavía no hay usuarios.</p>
+  </ng-template>
+</ion-content>

@@ -30,6 +30,7 @@ import {
   checkmarkCircle,
   searchOutline,
   filmOutline,
+  statsChartOutline,
 } from 'ionicons/icons';
 
 addIcons({
@@ -53,6 +54,7 @@ addIcons({
   'checkmark-circle': checkmarkCircle,
   'search-outline': searchOutline,
   'film-outline': filmOutline,
+  'stats-chart-outline': statsChartOutline,
 });
 
 const TIPOS_MEDIA_PERMITIDOS = ['image/gif', 'image/webp', 'image/png', 'image/jpeg', 'video/mp4', 'video/webm', 'video/quicktime'];
@@ -141,6 +143,10 @@ export class AdminVocabularioPage implements OnInit {
 
   irAAIStudio() {
     this.router.navigate(['/admin/ai-studio']);
+  }
+
+  irADashboard() {
+    this.router.navigate(['/admin/dashboard']);
   }
 
   async ngOnInit() {

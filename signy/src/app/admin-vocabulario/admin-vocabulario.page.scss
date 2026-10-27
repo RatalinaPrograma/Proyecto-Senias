@@ -656,6 +656,46 @@
   }
 }
 
+// ---------- Acceso al dashboard de KPIs ----------
+.dashboard-nav-btn {
+  margin-left: auto;
+  background: rgba(242, 112, 26, 0.14);
+  border: 1px solid rgba(242, 112, 26, 0.45);
+  color: var(--signy-fox-light);
+  border-radius: 12px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Baloo 2', sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:active {
+    transform: scale(0.94);
+    background: rgba(242, 112, 26, 0.24);
+  }
+
+  ion-icon {
+    font-size: 16px;
+  }
+
+  // Ya empuja los botones a la derecha: AI Studio queda pegado a su lado.
+  + .ai-studio-nav-btn {
+    margin-left: 0;
+  }
+
+  // En pantallas angostas, solo el ícono (el título sigue en aria-label).
+  @media (max-width: 420px) {
+    padding: 7px 9px;
+    span {
+      display: none;
+    }
+  }
+}
+
 // ---------- Accesos directos a Signy AI Studio ----------
 .ai-studio-nav-btn {
   margin-left: auto;

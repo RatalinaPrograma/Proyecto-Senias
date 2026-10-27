@@ -1,0 +1,108 @@
+import { Kpis } from '../kpis';
+
+/** KPIs de ejemplo (forma real de `admin_kpis`) para las pruebas: 7 días, del 20 al 26 de octubre. */
+export function kpisEjemplo(): Kpis {
+  return {
+    generado: '2026-10-26T21:41:26+00:00',
+    hoy: '2026-10-26',
+    desde: '2026-10-20',
+    dias: 7,
+    excluye_admins: true,
+    resumen: {
+      usuarios_total: 120,
+      usuarios_nuevos: 10,
+      usuarios_nuevos_prev: 8,
+      activos_hoy: 18,
+      activos_7d: 70,
+      activos_30d: 98,
+      activos_periodo: 70,
+      activos_periodo_prev: 50,
+      lecciones_total: 420,
+      lecciones_periodo: 40,
+      lecciones_periodo_prev: 50,
+      nivel1_completado: 56,
+      xp_total: 29400,
+      con_racha: 37,
+      racha_promedio: 1.3,
+      racha_maxima: 6,
+      logros_periodo: 12,
+      seguimientos: 298,
+      quiz: { intentos: 200, correctos: 160 },
+      quiz_prev: { intentos: 100, correctos: 70 },
+      camara: { intentos: 50, aprobados: 30, personas: 20 },
+      camara_prev: { intentos: 40, aprobados: 26 },
+    },
+    serie: [
+      { dia: '2026-10-20', nuevos: 1, activos: 10, lecciones: 5, ejercicios: 30 },
+      { dia: '2026-10-21', nuevos: 2, activos: 12, lecciones: 6, ejercicios: 35 },
+      { dia: '2026-10-22', nuevos: 0, activos: 9, lecciones: 4, ejercicios: 28 },
+      { dia: '2026-10-23', nuevos: 3, activos: 20, lecciones: 9, ejercicios: 60 },
+      { dia: '2026-10-24', nuevos: 1, activos: 8, lecciones: 3, ejercicios: 20 },
+      { dia: '2026-10-25', nuevos: 1, activos: 11, lecciones: 5, ejercicios: 37 },
+      { dia: '2026-10-26', nuevos: 2, activos: 18, lecciones: 8, ejercicios: 40 },
+    ],
+    embudo: [
+      { etapa: 'Se registraron', usuarios: 10 },
+      { etapa: 'Hicieron su primer ejercicio', usuarios: 9 },
+      { etapa: 'Completaron 1 lección', usuarios: 8 },
+      { etapa: 'Completaron 3 lecciones', usuarios: 3 },
+      { etapa: 'Terminaron el nivel 1', usuarios: 2 },
+      { etapa: 'Terminaron el nivel 2', usuarios: 0 },
+    ],
+    niveles: [
+      {
+        id: 1,
+        numero: 1,
+        nombre: 'Saludos y cortesía',
+        color: '#F2701A',
+        completaron: 2,
+        subniveles: [
+          { id: 11, numero: 1, nombre: 'Hola y chao', con_contenido: true, completaron: 8 },
+          { id: 12, numero: 2, nombre: 'Gracias', con_contenido: true, completaron: 3 },
+        ],
+      },
+      {
+        id: 2,
+        numero: 2,
+        nombre: 'Emergencias',
+        color: null,
+        completaron: 0,
+        subniveles: [{ id: 21, numero: 1, nombre: 'Ayuda', con_contenido: false, completaron: 0 }],
+      },
+    ],
+    retencion: {
+      cohortes: [
+        { semana: '2026-10-12', usuarios: 6, semanas: [100, 50, 33.3, null, null, null, null, null] },
+        { semana: '2026-10-19', usuarios: 4, semanas: [100, 25, null, null, null, null, null, null] },
+      ],
+      d1: { elegibles: 9, volvieron: 3 },
+      d7: { elegibles: 4, volvieron: 2 },
+      d30: { elegibles: 0, volvieron: 0 },
+    },
+    habitos: [
+      { dow: 5, hora: 19, n: 131 },
+      { dow: 1, hora: 8, n: 29 },
+      { dow: 5, hora: 13, n: 70 },
+    ],
+    senas: [
+      { id: 1, palabra: 'Hola', nivel: 1, quiz_intentos: 80, quiz_correctos: 72, cam_intentos: 20, cam_aprobados: 16 },
+      { id: 2, palabra: 'Día', nivel: 1, quiz_intentos: 60, quiz_correctos: 30, cam_intentos: 10, cam_aprobados: 3 },
+      { id: 3, palabra: 'Gracias', nivel: 1, quiz_intentos: 58, quiz_correctos: 52, cam_intentos: 18, cam_aprobados: 11 },
+      { id: 4, palabra: 'Ayuda', nivel: 2, quiz_intentos: 2, quiz_correctos: 2, cam_intentos: 0, cam_aprobados: 0 },
+    ],
+    rachas: [
+      { rango: 'Sin racha', usuarios: 83 },
+      { rango: '1–2 días', usuarios: 35 },
+      { rango: '3–6 días', usuarios: 2 },
+      { rango: '7–13 días', usuarios: 0 },
+      { rango: '14–29 días', usuarios: 0 },
+      { rango: '30+ días', usuarios: 0 },
+    ],
+    top: [
+      { nombre: 'Agustín Pérez', xp: 490, racha: 1, max_racha: 3, lecciones: 7, ultima_actividad: '2026-10-26' },
+      { nombre: 'Camila Rojas', xp: 450, racha: 0, max_racha: 4, lecciones: 6, ultima_actividad: '2026-10-21' },
+    ],
+    dataset: { muestras: 169, muestras_periodo: 40, senas: 12, personas: 4 },
+    contenido: { niveles: 3, subniveles: 8, subniveles_con_contenido: 7, senas: 13, senas_con_video: 12 },
+  };
+}

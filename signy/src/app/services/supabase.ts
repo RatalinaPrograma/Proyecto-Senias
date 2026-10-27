@@ -280,6 +280,16 @@ export class SupabaseService {
     return { error };
   }
 
+  // ==================== DASHBOARD DE KPIs (solo admin) ====================
+  /**
+   * Todos los KPIs del dashboard ya agregados en el servidor (función
+   * `admin_kpis`, supabase/migrations/20261027120000_dashboard_kpis.sql).
+   * `dias` = 0 es "desde el inicio". La función rechaza a quien no es admin.
+   */
+  async adminKpis(dias: number, excluirAdmins: boolean) {
+    return this.supabase.rpc('admin_kpis', { p_dias: dias, p_excluir_admins: excluirAdmins });
+  }
+
   // ==================== ADMINISTRACIÓN DE VOCABULARIO ====================
   async esAdmin(userId: string): Promise<boolean> {
     const { data } = await this.getProfile(userId);

@@ -16,7 +16,11 @@
         <ion-icon [name]="exportando ? 'refresh-outline' : 'download-outline'" [class.spin]="exportando"></ion-icon>
         <span>{{ exportando ? (progresoExportacion || 'Exportando…') : 'Dataset (' + totalMuestras + ')' }}</span>
       </button>
-      <button class="btn-link" (click)="irAVocabulario()">
+      <button class="btn-link solo-icono-movil" (click)="irADashboard()" title="KPIs: cuánta gente usa Signy" aria-label="Dashboard">
+        <ion-icon name="stats-chart-outline"></ion-icon>
+        <span>Dashboard</span>
+      </button>
+      <button class="btn-link solo-icono-movil" (click)="irAVocabulario()" aria-label="Vocabulario">
         <ion-icon name="layers-outline"></ion-icon>
         <span>Vocabulario</span>
       </button>

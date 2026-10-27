@@ -36,6 +36,7 @@ import {
   pawOutline,
   optionsOutline,
   happyOutline,
+  statsChartOutline,
 } from 'ionicons/icons';
 import type { HandLandmarker } from '@mediapipe/tasks-vision';
 import { Capacitor } from '@capacitor/core';
@@ -85,6 +86,7 @@ addIcons({
   'paw-outline': pawOutline,
   'options-outline': optionsOutline,
   'happy-outline': happyOutline,
+  'stats-chart-outline': statsChartOutline,
 });
 
 const ESTILO_LAB = { linea: '#2CA6A4', punta: '#F2701A', nudillo: '#ffffff', borde: '#0A1526', brillo: '#F2701A' };
@@ -805,5 +807,9 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
 
   irAVocabulario() {
     this.router.navigate(['/admin/vocabulario']);
+  }
+
+  irADashboard() {
+    this.router.navigate(['/admin/dashboard']);
   }
 }

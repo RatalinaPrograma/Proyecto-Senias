@@ -15,6 +15,10 @@
         <span class="crumb current">{{ subnivelActivo.nombre }}</span>
       </ng-container>
     </div>
+    <button class="dashboard-nav-btn" (click)="irADashboard()" title="KPIs: cuánta gente usa Signy" aria-label="Dashboard">
+      <ion-icon name="stats-chart-outline"></ion-icon>
+      <span>Dashboard</span>
+    </button>
     <button class="ai-studio-nav-btn" (click)="irAAIStudio()" title="Abrir Signy AI Studio">
       <ion-icon name="hardware-chip-outline"></ion-icon>
       <span>AI Studio</span>

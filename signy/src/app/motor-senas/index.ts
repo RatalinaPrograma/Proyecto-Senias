@@ -16,5 +16,7 @@ export * from './retroalimentacion';
 export { MediaPipeManosService, URL_WASM_MEDIAPIPE, URL_MODELO_MANOS, VERSION_TASKS_VISION } from './mediapipe-manos.service';
 export { ReconocedorSenasService, RUTA_MODELO_CLASIFICADOR } from './reconocedor.service';
 export type { EvaluacionSena, FuenteEvaluacion } from './reconocedor.service';
-export * from './avatar-renderer';
+// Avatar 3D: solo la configuración (sin three.js). El renderizador se importa aparte, con import(), desde
+// './avatar/renderizador-3d' para que three.js no se descargue en el resto de la app.
+export * from './avatar/config';
 

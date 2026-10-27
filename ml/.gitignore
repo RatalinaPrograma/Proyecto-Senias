@@ -2,3 +2,6 @@ reportes/
 __pycache__/
 *.pyc
 .venv/
+
+# Vistas de revisión y .glb/.blend de ml/avatar/blender_cabeza.py (se regeneran).
+avatar/salida/

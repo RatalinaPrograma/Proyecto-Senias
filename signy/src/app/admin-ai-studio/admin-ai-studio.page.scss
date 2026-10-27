@@ -81,6 +81,22 @@
   &:disabled { opacity: 0.6; cursor: not-allowed; }
 }
 
+.studio-top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* En el celular, Dashboard y Vocabulario quedan solo con su ícono para que quepan en la barra. */
+@media (max-width: 520px) {
+  .btn-link.solo-icono-movil {
+    padding: 7px 9px;
+    font-size: 1rem;
+    span { display: none; }
+  }
+}
+
 /* ---------- Métricas ---------- */
 .metrics-grid {
   display: grid;

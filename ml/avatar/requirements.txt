@@ -1,0 +1,7 @@
+# Para hornear la cara del zorrito (proyectar.py, calibracion.py).
+numpy>=1.24
+opencv-python-headless>=4.8
+pillow>=10
+# Opcional, solo para blender_cabeza.py (vistas de revisión y .glb/.blend). Pide la versión de
+# Python que use esa versión de Blender (bpy 5.x: Python 3.13).
+# bpy>=4.2

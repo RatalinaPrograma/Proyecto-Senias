@@ -58,6 +58,12 @@ export const routes: Routes = [
     loadComponent: () => import('./admin-vocabulario/admin-vocabulario.page').then(m => m.AdminVocabularioPage)
   },
   {
+    path: 'admin/dashboard',
+    canActivate: [adminGuard],
+    data: { preload: false },
+    loadComponent: () => import('./admin-dashboard/admin-dashboard.page').then(m => m.AdminDashboardPage)
+  },
+  {
     path: 'admin/ai-studio',
     canActivate: [adminGuard],
     data: { preload: false },
