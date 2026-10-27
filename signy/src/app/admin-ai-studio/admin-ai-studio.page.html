@@ -9,7 +9,7 @@
         <ion-icon name="hardware-chip-outline" class="brand-icon"></ion-icon>
         <span>Signy AI Studio</span>
       </div>
-      <p class="brand-subtitle">Entrenamiento, laboratorio y Avatar 2D</p>
+      <p class="brand-subtitle">Entrenamiento, laboratorio y Avatar 3D</p>
     </div>
     <div class="studio-top-actions">
       <button class="btn-link" (click)="exportarDataset()" [disabled]="exportando" title="Descargar las muestras para entrenar el modelo (ml/entrenar.py)">
@@ -86,7 +86,7 @@
         [class.active]="vistaModo === 'avatar'"
         (click)="cambiarVista('avatar')">
         <ion-icon name="paw-outline"></ion-icon>
-        <span>Avatar 2D</span>
+        <span>Avatar 3D</span>
       </button>
     </div>
 
@@ -259,7 +259,7 @@
       </div>
     </div>
 
-    <!-- ================= VISTA: AVATAR 2D PLANO (CINTURA HACIA ARRIBA) ================= -->
+    <!-- ================= VISTA: AVATAR 3D (CINTURA HACIA ARRIBA) ================= -->
     <div class="avatar-section" *ngIf="vistaModo === 'avatar'">
       <!-- Banner Estratégico -->
       <div class="avatar-vision-card">
@@ -268,8 +268,8 @@
             <ion-icon name="paw-outline"></ion-icon>
           </div>
           <div>
-            <h3>Signy 2D Character Avatar (Cintura a Cabeza)</h3>
-            <p>Personaje plano articulado por Cinemática Inversa (IK) sobre los landmarks de las manos.</p>
+            <h3>Avatar 3D de Signy (cintura a cabeza)</h3>
+            <p>Personaje 3D que mueve brazos y dedos con cinemática inversa (IK) a partir de los landmarks de las manos.</p>
           </div>
         </div>
       </div>
@@ -334,7 +334,7 @@
         </div>
       </div>
 
-      <!-- Visor del Avatar 2D -->
+      <!-- Visor del Avatar 3D -->
       <div class="avatar-viewport-container">
         <!-- Video opcional de fondo -->
         <video
@@ -347,8 +347,13 @@
           muted>
         </video>
 
-        <!-- Canvas Principal del Avatar 2D -->
+        <!-- Canvas Principal del Avatar 3D (WebGL) -->
         <canvas #avatarCanvas class="avatar-canvas"></canvas>
+
+        <div class="avatar-estado" *ngIf="avatarCargando3D || avatarError">
+          <ion-spinner name="crescent" *ngIf="avatarCargando3D"></ion-spinner>
+          <span>{{ avatarError || 'Cargando avatar 3D…' }}</span>
+        </div>
 
         <!-- HUD de métricas sobre el canvas -->
         <div class="avatar-hud">
@@ -361,51 +366,19 @@
       <div class="avatar-panel-card">
         <div class="panel-header">
           <ion-icon name="color-palette-outline"></ion-icon>
-          <h4>Personaje 2D (Cintura hacia Arriba)</h4>
+          <h4>Personaje 3D (cintura hacia arriba)</h4>
         </div>
 
         <div class="theme-grid">
           <button
-            class="theme-card theme-zorro"
-            [class.active]="avatarConfig.tema === 'zorro'"
-            (click)="cambiarTemaAvatar('zorro')">
-            <span class="theme-dot" style="background: #F5791F;"></span>
+            *ngFor="let t of temasAvatar"
+            class="theme-card"
+            [class.active]="avatarConfig.tema === t.tema"
+            (click)="cambiarTemaAvatar(t.tema)">
+            <span class="theme-dot" [style.background]="t.color"></span>
             <div class="theme-meta">
-              <strong>Zorrito Signy</strong>
-              <small>Mascota oficial plana</small>
-            </div>
-          </button>
-
-          <button
-            class="theme-card theme-toon"
-            [class.active]="avatarConfig.tema === 'persona'"
-            (click)="cambiarTemaAvatar('persona')">
-            <span class="theme-dot" style="background: #2CA6A4;"></span>
-            <div class="theme-meta">
-              <strong>Persona Sin Cara</strong>
-              <small>Humano minimalista plano</small>
-            </div>
-          </button>
-
-          <button
-            class="theme-card theme-cyber"
-            [class.active]="avatarConfig.tema === 'cyber'"
-            (click)="cambiarTemaAvatar('cyber')">
-            <span class="theme-dot" style="background: #1F345A;"></span>
-            <div class="theme-meta">
-              <strong>Alto Contraste</strong>
-              <small>Persona sin cara oscura</small>
-            </div>
-          </button>
-
-          <button
-            class="theme-card theme-bones"
-            [class.active]="avatarConfig.tema === 'huesos'"
-            (click)="cambiarTemaAvatar('huesos')">
-            <span class="theme-dot" style="background: #00F0FF;"></span>
-            <div class="theme-meta">
-              <strong>Maniquí + Rig</strong>
-              <small>Inspección cinemática IK</small>
+              <strong>{{ t.nombre }}</strong>
+              <small>{{ t.descripcion }}</small>
             </div>
           </button>
         </div>
@@ -421,23 +394,23 @@
         <!-- Slider: Tamaño de Manos -->
         <div class="slider-row">
           <div class="slider-label">
-            <span>Tamaño / Expresividad de Manos:</span>
-            <strong>{{ avatarConfig.grosorHueso | number:'1.1-1' }}x</strong>
+            <span>Tamaño de las manos:</span>
+            <strong>{{ avatarConfig.tamanoManos | number:'1.1-2' }}x</strong>
           </div>
           <input
             type="range"
-            min="0.7"
-            max="1.5"
+            min="0.8"
+            max="1.4"
             step="0.05"
             class="range-slider"
-            [(ngModel)]="avatarConfig.grosorHueso"
+            [(ngModel)]="avatarConfig.tamanoManos"
             (ngModelChange)="actualizarAjustesAvatar()" />
         </div>
 
         <!-- Slider: Suavizado Lerp -->
         <div class="slider-row">
           <div class="slider-label">
-            <span>Suavizado de Movimiento (Lerp):</span>
+            <span>Suavizado del movimiento:</span>
             <strong>{{ avatarConfig.suavizado * 100 | number:'1.0-0' }}%</strong>
           </div>
           <input
@@ -452,18 +425,18 @@
 
         <!-- Toggles de Componentes del Personaje -->
         <div class="toggles-grid">
-          <label class="toggle-item" *ngIf="avatarConfig.tema === 'zorro'">
+          <label class="toggle-item" *ngIf="avatarConfig.tema !== 'huesos'">
             <input
               type="checkbox"
-              [(ngModel)]="avatarConfig.mostrarMallaPalma"
+              [(ngModel)]="avatarConfig.mostrarRostro"
               (ngModelChange)="actualizarAjustesAvatar()" />
-            <span>Rostro del Zorrito</span>
+            <span>Rostro (ojos y boca)</span>
           </label>
 
-          <label class="toggle-item">
+          <label class="toggle-item" *ngIf="avatarConfig.tema !== 'huesos'">
             <input
               type="checkbox"
-              [(ngModel)]="avatarConfig.mostrarAntebrazo"
+              [(ngModel)]="avatarConfig.mostrarAccesorios"
               (ngModelChange)="actualizarAjustesAvatar()" />
             <span>Pañuelo / Accesorios</span>
           </label>
@@ -482,6 +455,14 @@
               [(ngModel)]="avatarConfig.mostrarEsqueletoGuia"
               (ngModelChange)="actualizarAjustesAvatar()" />
             <span>Ver Huesos Guía (IK)</span>
+          </label>
+
+          <label class="toggle-item" title="Sin pelaje ni sombras: más fluido en celulares lentos">
+            <input
+              type="checkbox"
+              [ngModel]="avatarConfig.calidad === 'alta'"
+              (ngModelChange)="cambiarCalidadAvatar($event)" />
+            <span>Calidad alta (pelaje y sombras)</span>
           </label>
 
           <label class="toggle-item" *ngIf="avatarFuente === 'camara'">

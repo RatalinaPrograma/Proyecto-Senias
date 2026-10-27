@@ -51,15 +51,18 @@ import {
   MediaPipeManosService,
   Prediccion,
   ReconocedorSenasService,
-  RenderizadorAvatar2D,
   TemaAvatar,
   ConfiguracionAvatar,
   CONFIG_AVATAR_PREDETERMINADA,
+  TEMAS_AVATAR,
+  Lateralidad,
   construirDatasetExportable,
   dibujarManos,
   sincronizarTamanoCanvas,
 } from '../motor-senas';
 import { expandirCaptura } from '../motor-senas/dataset';
+// Solo el tipo: el renderizador (y three.js) se descarga con import() al abrir la pestaña Avatar.
+import type { RenderizadorAvatar3D } from '../motor-senas/avatar/renderizador-3d';
 import { generarCaptura } from '../motor-senas/testing/manos-sinteticas';
 
 addIcons({
@@ -89,6 +92,14 @@ addIcons({
   'stats-chart-outline': statsChartOutline,
 });
 
+/** Lo que recibe el avatar en cada cuadro: las manos y cómo interpretarlas. */
+interface CuadroAvatar {
+  manos: { x: number; y: number; z?: number }[][];
+  lateralidad?: Lateralidad[];
+  espejado?: boolean;
+  aspecto?: number;
+}
+
 const ESTILO_LAB = { linea: '#2CA6A4', punta: '#F2701A', nudillo: '#ffffff', borde: '#0A1526', brillo: '#F2701A' };
 /** El reconocimiento en vivo se recalcula ~5 veces por segundo, no en cada frame. */
 const INTERVALO_EVALUACION_LAB_MS = 200;
@@ -112,7 +123,7 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   @ViewChild('labVideo', { static: false }) labVideoRef?: ElementRef<HTMLVideoElement>;
   @ViewChild('labCanvas', { static: false }) labCanvasRef?: ElementRef<HTMLCanvasElement>;
 
-  // Avatar 2D View
+  // Avatar 3D
   @ViewChild('avatarCanvas', { static: false }) avatarCanvasRef?: ElementRef<HTMLCanvasElement>;
   @ViewChild('avatarVideo', { static: false }) avatarVideoRef?: ElementRef<HTMLVideoElement>;
 
@@ -172,9 +183,14 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   exportando = false;
   progresoExportacion = '';
 
-  // ================= MÓDULO AVATAR 2D PLANO (CINTURA HACIA ARRIBA) =================
-  readonly renderizadorAvatar = new RenderizadorAvatar2D();
+  // ================= MÓDULO AVATAR 3D (CINTURA HACIA ARRIBA) =================
+  readonly temasAvatar = TEMAS_AVATAR;
+  private renderizadorAvatar: RenderizadorAvatar3D | null = null;
   avatarConfig: ConfiguracionAvatar = { ...CONFIG_AVATAR_PREDETERMINADA };
+  /** Cargando three.js y el personaje (la primera vez que se abre la pestaña). */
+  avatarCargando3D = false;
+  /** Si el dispositivo no puede mostrar 3D (sin WebGL). */
+  avatarError = '';
   avatarFuente: 'camara' | 'dataset' | 'sintetica' = 'sintetica';
   avatarSinteticaActual: 'hola' | 'si' | 'l' | 'separar' = 'hola';
   avatarSenaIdSeleccionada: number | null = null;
@@ -208,6 +224,7 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.detenerLaboratorioReconocimiento();
     this.detenerAvatar();
+    this.liberarAvatar3D();
   }
 
   private async cargarClasificadorConocidos() {
@@ -221,6 +238,8 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     }
     if (this.vistaModo === 'avatar' && modo !== 'avatar') {
       this.detenerAvatar();
+      // El canvas desaparece con la pestaña: se libera la memoria de la GPU.
+      this.liberarAvatar3D();
     }
 
     this.vistaModo = modo;
@@ -494,9 +513,10 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     });
   }
 
-  // ================= MÓDULO AVATAR 2D PLANO (CINTURA HACIA ARRIBA) =================
+  // ================= MÓDULO AVATAR 3D (CINTURA HACIA ARRIBA) =================
   async iniciarModuloAvatar() {
-    this.renderizadorAvatar.actualizarConfig(this.avatarConfig);
+    if (!(await this.prepararAvatar3D())) return;
+    this.renderizadorAvatar?.reiniciar();
     this.avatarInicioPlayback = performance.now();
     this.avatarFramesRenderizados = 0;
     this.avatarUltimoCalculoFPS = performance.now();
@@ -527,16 +547,48 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
       this.avatarStream.getTracks().forEach((t) => t.stop());
       this.avatarStream = null;
     }
-    this.renderizadorAvatar.reiniciar();
+    this.renderizadorAvatar?.reiniciar();
+  }
+
+  /** Crea el renderizador 3D sobre el canvas de la pestaña (descarga three.js solo la primera vez). */
+  private async prepararAvatar3D(): Promise<boolean> {
+    if (this.renderizadorAvatar) return true;
+    const canvas = this.avatarCanvasRef?.nativeElement;
+    if (!canvas) return false;
+    this.avatarCargando3D = true;
+    this.avatarError = '';
+    try {
+      const { RenderizadorAvatar3D } = await import('../motor-senas/avatar/renderizador-3d');
+      // Si el usuario cambió de pestaña mientras se descargaba, no se crea.
+      if (this.vistaModo !== 'avatar' || this.avatarCanvasRef?.nativeElement !== canvas) return false;
+      this.renderizadorAvatar = new RenderizadorAvatar3D(canvas, this.avatarConfig);
+      return true;
+    } catch (e: any) {
+      console.warn('Avatar 3D no disponible:', e);
+      this.avatarError = 'Este dispositivo no puede mostrar el avatar 3D (no tiene WebGL).';
+      return false;
+    } finally {
+      this.avatarCargando3D = false;
+    }
+  }
+
+  private liberarAvatar3D() {
+    this.renderizadorAvatar?.liberar();
+    this.renderizadorAvatar = null;
   }
 
   cambiarTemaAvatar(nuevoTema: TemaAvatar) {
     this.avatarConfig.tema = nuevoTema;
-    this.renderizadorAvatar.actualizarConfig({ tema: nuevoTema });
+    this.renderizadorAvatar?.actualizarConfig({ tema: nuevoTema });
   }
 
   actualizarAjustesAvatar() {
-    this.renderizadorAvatar.actualizarConfig(this.avatarConfig);
+    this.renderizadorAvatar?.actualizarConfig(this.avatarConfig);
+  }
+
+  cambiarCalidadAvatar(alta: boolean) {
+    this.avatarConfig.calidad = alta ? 'alta' : 'media';
+    this.actualizarAjustesAvatar();
   }
 
   async cambiarFuenteAvatar(fuente: 'camara' | 'dataset' | 'sintetica') {
@@ -644,34 +696,29 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
           this.avatarUltimoCalculoFPS = ahora;
         }
 
-        if (canvas) {
-          const ancho = canvas.clientWidth || 400;
-          const alto = canvas.clientHeight || 400;
-          sincronizarTamanoCanvas(canvas, ancho, alto);
+        if (canvas && this.renderizadorAvatar) {
+          let cuadro: CuadroAvatar = { manos: [] };
 
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.clearRect(0, 0, ancho, alto);
-
-            let manosARenderizar: { x: number; y: number; z?: number }[][] = [];
-
-            if (this.avatarFuente === 'camara') {
-              const video = this.avatarVideoRef?.nativeElement;
-              if (video && this.labHandLandmarker && video.videoWidth > 0 && !video.paused) {
-                const results = this.labHandLandmarker.detectForVideo(video, ahora);
-                // Espejar X en cámara frontal para que el personaje actúe como espejo frente al usuario
-                manosARenderizar = (results?.landmarks || []).map((mano) =>
-                  mano.map((p) => ({ x: 1 - p.x, y: p.y, z: p.z }))
-                );
-              }
-            } else if (this.avatarFuente === 'dataset' && this.avatarMuestraCaptura) {
-              manosARenderizar = this.obtenerFrameMuestra(this.avatarMuestraCaptura, ahora);
-            } else if (this.avatarFuente === 'sintetica') {
-              manosARenderizar = this.obtenerFrameSintetico(this.avatarSinteticaActual, ahora);
+          if (this.avatarFuente === 'camara') {
+            const video = this.avatarVideoRef?.nativeElement;
+            if (video && this.labHandLandmarker && video.videoWidth > 0 && !video.paused) {
+              const results = this.labHandLandmarker.detectForVideo(video, ahora);
+              // Espejar X en cámara frontal para que el personaje actúe como espejo frente al usuario
+              cuadro = {
+                manos: (results?.landmarks || []).map((mano) => mano.map((p) => ({ x: 1 - p.x, y: p.y, z: p.z }))),
+                lateralidad: (results?.handedness || []).map((h) => (h[0]?.categoryName as Lateralidad) ?? null),
+                espejado: true,
+                aspecto: video.videoWidth / video.videoHeight,
+              };
             }
-
-            this.renderizadorAvatar.renderizar(ctx, ancho, alto, manosARenderizar);
+          } else if (this.avatarFuente === 'dataset' && this.avatarMuestraCaptura) {
+            cuadro = this.obtenerFrameMuestra(this.avatarMuestraCaptura, ahora);
+          } else if (this.avatarFuente === 'sintetica') {
+            cuadro = this.obtenerFrameSintetico(this.avatarSinteticaActual, ahora);
           }
+
+          const { manos, ...opciones } = cuadro;
+          this.renderizadorAvatar.renderizar(manos, { ...opciones, ahora });
         }
 
         this.avatarRafId = requestAnimationFrame(render);
@@ -682,18 +729,25 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
   }
 
   /** Interpola cíclicamente los cuadros grabados de la muestra seleccionada a 60 FPS */
-  private obtenerFrameMuestra(captura: CapturaCruda, ahora: number): { x: number; y: number; z?: number }[][] {
+  private obtenerFrameMuestra(captura: CapturaCruda, ahora: number): CuadroAvatar {
+    const aspecto = captura.ancho > 0 && captura.alto > 0 ? captura.ancho / captura.alto : undefined;
+    const cuadro = (manos: { x: number; y: number; z?: number }[][], lateralidad?: Lateralidad[]): CuadroAvatar => ({
+      manos,
+      lateralidad,
+      aspecto,
+    });
     // Filtrar cuadros que tengan al menos una mano para evitar parpadeos vacíos al inicio/fin de la grabación
     const framesConManos = captura.frames.filter((f) => f.manos && f.manos.length > 0);
     const frames = framesConManos.length > 0 ? framesConManos : captura.frames;
-    if (!frames.length) return [];
+    if (!frames.length) return { manos: [] };
 
     const tInicio = frames[0].t || 0;
     const duracionTotal = Math.max(200, (frames[frames.length - 1].t || 1000) - tInicio);
     const tiempoRelativo = ((ahora - this.avatarInicioPlayback) % (duracionTotal + 550)) + tInicio;
 
     if (tiempoRelativo > tInicio + duracionTotal) {
-      return (frames[frames.length - 1].manos || []) as any;
+      const ultimo = frames[frames.length - 1];
+      return cuadro(ultimo.manos || [], ultimo.lateralidad);
     }
 
     let idxA = 0;
@@ -708,7 +762,7 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     // Si ambos cuadros consecutivos tienen el mismo número de manos, interpolar linealmente entre ellos
     if (frameA !== frameB && frameB.t > frameA.t && frameA.manos.length === frameB.manos.length) {
       const f = Math.max(0, Math.min(1, (tiempoRelativo - frameA.t) / (frameB.t - frameA.t)));
-      return frameA.manos.map((manoA, idxMano) => {
+      return cuadro(frameA.manos.map((manoA, idxMano) => {
         const manoB = frameB.manos[idxMano];
         if (!manoB || manoB.length !== manoA.length) return manoA;
         return manoA.map((pA, i) => ({
@@ -716,17 +770,24 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
           y: pA.y + (manoB[i].y - pA.y) * f,
           z: (pA.z ?? 0) + ((manoB[i].z ?? 0) - (pA.z ?? 0)) * f,
         }));
-      });
+      }), frameA.lateralidad);
     }
 
-    return (frameA.manos || []) as any;
+    return cuadro(frameA.manos || [], frameA.lateralidad);
   }
 
   /** Genera animación cíclica a partir del modelo cinemático sintético */
-  private obtenerFrameSintetico(tipo: 'hola' | 'si' | 'l' | 'separar', ahora: number): { x: number; y: number; z?: number }[][] {
-    const captura = generarCaptura(tipo.toUpperCase() as any, { semilla: 7 });
+  private obtenerFrameSintetico(tipo: 'hola' | 'si' | 'l' | 'separar', ahora: number): CuadroAvatar {
+    // Se genera una vez por gesto (no en cada cuadro).
+    let captura = this.capturasSinteticas.get(tipo);
+    if (!captura) {
+      captura = generarCaptura(tipo.toUpperCase() as any, { semilla: 7 });
+      this.capturasSinteticas.set(tipo, captura);
+    }
     return this.obtenerFrameMuestra(captura, ahora);
   }
+
+  private readonly capturasSinteticas = new Map<string, CapturaCruda>();
 
   // ================= Calibrar / Entrenar Seña =================
   async calibrarSena(sena: Sena) {
