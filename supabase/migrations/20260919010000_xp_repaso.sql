@@ -107,7 +107,7 @@ BEGIN
     ELSE
       -- 30% de lo ganado en ESTE intento (sigue premiando que te haya ido
       -- bien), con su propio tope más bajo que el de primera vez.
-      v_xp_final := LEAST(GREATEST(ROUND(COALESCE(p_xp_ganado, 0) * 0.3), 0), 50);
+      v_xp_final := 0;
       v_nueva_recompensa := v_hoy;
     END IF;
   ELSE

@@ -22,6 +22,7 @@ from .caracteristicas import (
     seguir_manos,
     tamano_mano,
 )
+from .dataset import Dataset, Muestra
 
 # Umbrales (los de "rojo" marcan una muestra que conviene volver a grabar).
 COBERTURA_AMARILLO = 0.7
@@ -165,19 +166,14 @@ def evaluar_muestra(captura: dict, tipo: str, manos_requeridas: int) -> dict:
     return res
 
 
-def evaluar_referencia(referencia: Optional[dict]) -> dict:
-    """Revisión del modelo de referencia de una seña (senas.landmarks_referencia)."""
-    if not referencia:
-        return {"nivel": "gris", "avisos": [("info", "Sin referencia guardada.")]}
-    avisos: list[tuple[str, str]] = []
-    version = referencia.get("version", 1)
-    frames = referencia.get("frames") or []
-    if version < 3:
-        avisos.append(("amarillo", f"Referencia en formato antiguo (v{version}): conviene volver a grabarla."))
-    if referencia.get("tipo") == "dinamica" and len(frames) < 8:
-        avisos.append(("amarillo", f"Referencia muy corta ({len(frames)} frames): puede estar incompleta."))
-    if not frames:
-        avisos.append(("rojo", "La referencia no tiene frames."))
-    niveles = {nivel for nivel, _ in avisos}
-    nivel = "rojo" if "rojo" in niveles else "amarillo" if "amarillo" in niveles else "verde"
-    return {"nivel": nivel, "avisos": avisos, "frames": len(frames), "version": version}
+def separar_rojas(ds: Dataset) -> tuple[Dataset, list[tuple[Muestra, dict]]]:
+    """(dataset sin las muestras 🔴, [(muestra descartada, su evaluación)]).
+
+    Son las mismas que ml/revisar_dataset.py marca para volver a grabar (la mano casi no se vio,
+    se perdió en plena seña, seña de 2 manos donde se vio 1…): entrenar con ellas le enseña al
+    modelo movimientos que no son la seña. No se borra nada en Supabase."""
+    buenas, rojas = [], []
+    for m in ds.muestras:
+        ev = evaluar_muestra(m.captura, m.tipo, m.manos_requeridas)
+        (rojas if ev["nivel"] == "rojo" else buenas).append((m, ev))
+    return Dataset(senas=ds.senas, muestras=[m for m, _ in buenas]), rojas

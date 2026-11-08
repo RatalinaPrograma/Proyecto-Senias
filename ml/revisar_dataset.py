@@ -3,14 +3,13 @@
 
     python ml/revisar_dataset.py --supabase --email admin@correo.cl
 
-Descarga las muestras y las referencias de Supabase y genera una página
+Descarga las muestras de Supabase y genera una página
 (ml/reportes/revision-AAAAMMDD-HHMMSS.html) que se abre en el navegador, con:
   - cada grabación animada como esqueleto de las manos, para ver si la seña
     quedó completa (lo que no se puede revisar al grabar),
   - avisos automáticos: mano perdida (movimiento muy rápido o borroso),
     seña posiblemente cortada al final, poco movimiento, mano faltante,
-  - quién la grabó y cuándo, para ubicar las que conviene repetir,
-  - la referencia de cada seña ("Usar como referencia") animada.
+  - quién la grabó y cuándo, para ubicar las que conviene repetir.
 
 Nada se borra ni se cambia en Supabase: este script solo hace consultas de lectura.
 """
@@ -28,7 +27,7 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent
 sys.path.insert(0, str(RAIZ))
 
-from signy_ml.calidad import evaluar_muestra, evaluar_referencia  # noqa: E402
+from signy_ml.calidad import evaluar_muestra  # noqa: E402
 from signy_ml.caracteristicas import PRESENCIA_MINIMA, a_isotropico, mano_en_reposo, resumir_pistas, seguir_manos  # noqa: E402
 from signy_ml.consola import consola_utf8  # noqa: E402
 from signy_ml.dataset import DatasetInvalido, expandir_captura  # noqa: E402
@@ -58,24 +57,13 @@ def _animacion(captura: dict) -> dict:
     return {"ancho": captura["ancho"], "alto": captura["alto"], "reposo": reposo, "frames": frames}
 
 
-def _referencia_animacion(ref: dict) -> list:
-    """Frames de la referencia (ya normalizados): lista de manos con 21 puntos (x, y)."""
-    salida = []
-    for plano in ref.get("frames") or []:
-        manos = []
-        for i in range(0, len(plano) - 62, 63):
-            manos.append([[round(plano[i + j * 3], 4), round(plano[i + j * 3 + 1], 4)] for j in range(21)])
-        salida.append(manos)
-    return salida
-
-
 def armar_revision(datos: dict) -> dict:
     perfiles = {p["id"]: p for p in datos.get("perfiles", [])}
     senas = {s["id"]: s for s in datos.get("senas", [])}
     grupos: dict[int, dict] = {}
     for m in sorted(datos.get("muestras", []), key=lambda x: x["id"]):
         sena = senas.get(m["sena_id"], {"id": m["sena_id"], "palabra": f"seña #{m['sena_id']}"})
-        g = grupos.setdefault(m["sena_id"], {"id": m["sena_id"], "palabra": sena["palabra"], "muestras": [], "referencia": None})
+        g = grupos.setdefault(m["sena_id"], {"id": m["sena_id"], "palabra": sena["palabra"], "muestras": []})
         try:
             captura = expandir_captura(m["captura"])
         except (DatasetInvalido, KeyError, TypeError, ValueError):
@@ -91,25 +79,8 @@ def armar_revision(datos: dict) -> dict:
             "duracionMs": calidad["duracionMs"], "cobertura": calidad["cobertura"], "huecoMaxMs": calidad["huecoMaxMs"],
             "anim": _animacion(captura),
         })
-    for sena_id, g in grupos.items():
-        ref = (senas.get(sena_id) or {}).get("landmarks_referencia")
-        if isinstance(ref, str):
-            try:
-                ref = json.loads(ref)
-            except ValueError:
-                ref = None
-        rev = evaluar_referencia(ref)
-        g["referencia"] = {"nivel": rev["nivel"], "avisos": [list(a) for a in rev["avisos"]],
-                           "tipo": (ref or {}).get("tipo"), "frames": _referencia_animacion(ref) if ref else []}
+    for g in grupos.values():
         g["personas"] = len({x["persona"] for x in g["muestras"]})
-    # Señas con referencia pero todavía sin muestras también se listan (para revisar su referencia).
-    for sena_id, s in senas.items():
-        if sena_id not in grupos and s.get("landmarks_referencia"):
-            ref = s["landmarks_referencia"] if not isinstance(s["landmarks_referencia"], str) else json.loads(s["landmarks_referencia"])
-            rev = evaluar_referencia(ref)
-            grupos[sena_id] = {"id": sena_id, "palabra": s["palabra"], "muestras": [], "personas": 0,
-                               "referencia": {"nivel": rev["nivel"], "avisos": [list(a) for a in rev["avisos"]],
-                                              "tipo": ref.get("tipo"), "frames": _referencia_animacion(ref)}}
     return {"generado": f"{datetime.now():%d-%m-%Y %H:%M}",
             "senas": sorted(grupos.values(), key=lambda g: g["palabra"].lower())}
 
@@ -150,7 +121,7 @@ def main(argv=None) -> int:
         password = os.environ.get("SIGNY_PASSWORD") or getpass.getpass(f"Contraseña de {a.email}: ")
         try:
             url, clave = leer_config_app(RAIZ.parent)
-            print("Descargando muestras y referencias (solo lectura)…")
+            print("Descargando muestras (solo lectura)…")
             datos = descargar_para_revision(url, clave, a.email, password, lambda n: print(f"  {n} muestras", end="\r"))
         except (ErrorSupabase, OSError) as e:
             print(f"✖ {e}", file=sys.stderr)
@@ -165,8 +136,8 @@ def main(argv=None) -> int:
             print(f"✖ No se pudo leer {a.datos}: {e}", file=sys.stderr)
             return 2
 
-    if not datos.get("muestras") and not any(s.get("landmarks_referencia") for s in datos.get("senas", [])):
-        print("No hay muestras ni referencias para revisar.")
+    if not datos.get("muestras"):
+        print("No hay muestras para revisar.")
         return 0
     revision = armar_revision(datos)
     destino = a.salida or (RAIZ / "reportes" / f"revision-{datetime.now():%Y%m%d-%H%M%S}.html")
@@ -204,7 +175,6 @@ PLANTILLA = r"""<!doctype html>
   .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:12px; margin-top:12px; }
   .card { background:var(--card); border-radius:14px; padding:10px; border-top:4px solid var(--verde); }
   .card.amarillo { border-top-color:var(--amarillo); } .card.rojo { border-top-color:var(--rojo); }
-  .card.ref { border-top-color:var(--fox); } .card.gris { border-top-color:var(--line); }
   canvas { width:100%; background:#0d1b30; border-radius:10px; display:block; cursor:pointer; }
   .meta { font-size:13px; color:var(--muted); margin-top:6px; }
   .meta b { color:var(--cream); }
@@ -292,26 +262,6 @@ function lienzoMuestra(anim) {
   animaciones.push({ c, cuadro });
   return c;
 }
-function lienzoReferencia(frames) {
-  const c = el('canvas', { width: 460, height: 460 });
-  const ctx = c.getContext('2d');
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const f of frames) for (const m of f) for (const [x, y] of m) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
-  const lado = Math.max(maxX - minX, maxY - minY) || 1, cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-  const st = { pausa: false, inicio: performance.now() };
-  c.addEventListener('click', () => { st.pausa = !st.pausa; if (!st.pausa) st.inicio = performance.now() - (st.t || 0); });
-  const dur = Math.max(1, frames.length * 50);
-  function cuadro(ahora) {
-    if (!st.pausa) st.t = (ahora - st.inicio) % (dur + 600);
-    const k = Math.min(frames.length - 1, Math.floor(Math.min(st.t, dur) / 50));
-    ctx.clearRect(0, 0, c.width, c.height);
-    const aPx = (p) => [((espejo ? -(p[0] - cx) : p[0] - cx) / lado * 0.85 + 0.5) * c.width, ((p[1] - cy) / lado * 0.85 + 0.5) * c.height];
-    for (const m of frames[k]) dibujarMano(ctx, m, aPx, '#F2701A');
-  }
-  animaciones.push({ c, cuadro });
-  return c;
-}
-
 const muestras = DATOS.senas.flatMap((g) => g.muestras);
 const cuenta = (n) => muestras.filter((m) => m.nivel === n).length;
 const personas = new Set(muestras.map((m) => m.persona));
@@ -325,13 +275,6 @@ for (const g of DATOS.senas) {
   const sec = el('section', { class: 'sena', 'data-palabra': g.palabra.toLowerCase() });
   sec.append(el('h2', {}, g.palabra, el('small', {}, `#${g.id} · ${g.muestras.length} muestra(s) · ${g.personas} persona(s)`)));
   const grid = el('div', { class: 'grid' });
-  if (g.referencia) {
-    const r = g.referencia;
-    const card = el('div', { class: 'card ' + (r.frames.length ? 'ref' : 'gris'), 'data-nivel': r.nivel === 'verde' || r.nivel === 'gris' ? 'verde' : r.nivel });
-    if (r.frames.length) card.append(lienzoReferencia(r.frames));
-    card.append(el('div', { class: 'meta' }, el('b', {}, 'Referencia'), ` · ${TIPO[r.tipo] || ''} · ${r.frames.length} frame(s) (centrada, sin la posición en la imagen)`), listaAvisos(r.avisos));
-    grid.append(card);
-  }
   for (const m of g.muestras) {
     const card = el('div', { class: 'card ' + m.nivel, 'data-nivel': m.nivel, id: 'm' + m.id });
     if (m.anim) card.append(lienzoMuestra(m.anim));

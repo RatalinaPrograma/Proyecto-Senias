@@ -1,9 +1,10 @@
-import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, ElementRef, HostListener, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AlertController, IonicModule } from '@ionic/angular';
 import { ActivatedRoute, Router } from '@angular/router';
 import { SupabaseService } from '../services/supabase';
 import { ContenidoService } from '../services/contenido';
+import { PreferenciasVideoService } from '../services/preferencias-video';
 import { TtsService } from '../services/tts';
 import { Nivel, Subnivel, Sena, RachaHistorialDia } from '../data/db-types';
 import { SenaIconComponent } from '../shared/sena-icon/sena-icon.component';
@@ -14,18 +15,22 @@ import { RachaCalendarComponent, DiaRachaVista } from '../shared/racha-calendar/
 import { ImageCacheService } from '../services/image-cache';
 import { BotonAtrasService } from '../services/boton-atras';
 import { addIcons } from 'ionicons';
-import { close, heart, checkmarkCircle, closeCircle, camera, videocam, volumeHigh, snowOutline, trophy, sparklesOutline } from 'ionicons/icons';
+import { close, heart, checkmarkCircle, closeCircle, camera, videocam, volumeHigh, snowOutline, trophy, sparklesOutline, sparkles, checkmarkSharp, closeSharp, volumeMediumOutline, arrowForward } from 'ionicons/icons';
 import type { HandLandmarker } from '@mediapipe/tasks-vision';
 import {
   ControlFramesVideo,
   GrabadorCaptura,
   MediaPipeManosService,
   ReconocedorSenasService,
-  dibujarManos,
-  modeloDeSena,
+  Retroalimentacion,
+  UMBRAL_APROBACION,
 } from '../motor-senas';
 
-addIcons({ close, heart, 'checkmark-circle': checkmarkCircle, 'close-circle': closeCircle, camera, videocam, 'volume-high': volumeHigh, 'snow-outline': snowOutline, trophy, 'sparkles-outline': sparklesOutline });
+addIcons({
+  close, heart, 'checkmark-circle': checkmarkCircle, 'close-circle': closeCircle, camera, videocam, 'volume-high': volumeHigh,
+  'snow-outline': snowOutline, trophy, 'sparkles-outline': sparklesOutline, sparkles, 'checkmark-sharp': checkmarkSharp,
+  'close-sharp': closeSharp, 'volume-medium-outline': volumeMediumOutline, 'arrow-forward': arrowForward,
+});
 
 type Fase = 'cargando' | 'flash' | 'match' | 'quiz' | 'record' | 'complete' | 'nivel' | 'racha' | 'sinvidas' | 'error';
 
@@ -36,7 +41,6 @@ interface Par { palabra: string; senaId: number; seed: number; videoUrl: string 
 interface Pregunta { palabra: string; senaId: number; opciones: string[]; seed: number; videoUrl: string | null; }
 
 const MENSAJES_OK = ['¡Mano correcta!', '¡Excelente forma!', '¡Así se hace!'];
-const MENSAJES_MAL = ['Ajusta el pulgar', 'Centra tu mano en el óvalo', 'Prueba con un movimiento más marcado'];
 
 /** Mensaje corto y variable para la pantalla de "lección superada" — antes
  * era un texto fijo, ahora rota para que no se sienta repetitivo lección
@@ -78,7 +82,6 @@ const MENSAJES_RACHA = [
 })
 export class LessonPage implements OnInit, OnDestroy {
   @ViewChild('video') videoRef?: ElementRef<HTMLVideoElement>;
-  @ViewChild('canvas') canvasRef?: ElementRef<HTMLCanvasElement>;
 
   /** Referencia al helper compartido para poder llamarlo desde el template. */
   esVideoMp4 = esVideoMp4;
@@ -102,6 +105,7 @@ export class LessonPage implements OnInit, OnDestroy {
 
   vidas = 5;
   xpGanado = 0;
+  esRepasoSubnivel = false;
 
   // ---- flashcards ----
   flashIndex = 0;
@@ -185,17 +189,39 @@ export class LessonPage implements OnInit, OnDestroy {
   camPassed = false;
   camMsg = '';
   /** Qué motor decidió el resultado (para el texto bajo el puntaje). */
-  camFuente: 'referencia' | 'clasificador' | 'deteccion' = 'deteccion';
+  camFuente: 'clasificador' | 'deteccion' = 'deteccion';
+  /** Qué cambiar para lograr la seña (pistas concretas, ver motor-senas/retroalimentacion.ts). */
+  camRetro: Retroalimentacion | null = null;
+  /** Seguridad mínima (en %) con que se aprueba la seña, para mostrarla al alumno. */
+  readonly pctAprobacion = Math.round(UMBRAL_APROBACION * 100);
+
+  get camEmoji(): string {
+    if (!this.camPassed) return '🤔';
+    switch (this.camRetro?.nivel) {
+      case 'perfecta': return '🏆';
+      case 'excelente': return '🌟';
+      default: return '✅';
+    }
+  }
+  /** En vivo, durante la cuenta regresiva y la grabación: si se ve la mano (null = aún no se sabe). */
+  camManoVisible: boolean | null = null;
+  /** Mostrar otra vez el video de la seña en la pantalla de resultado, para comparar antes de reintentar. */
+  camVerVideo = false;
+  private framesSeguidosManos = 0;
   private stream: MediaStream | null = null;
   private rafId = 0;
   private intervaloCuenta: ReturnType<typeof setInterval> | null = null;
   private handLandmarker: HandLandmarker | null = null;
-  private readonly controlFrames = new ControlFramesVideo();
+  private readonly controlFrames = new ControlFramesVideo(45); // ~22 FPS máx para no saturar CPU/GPU
   private readonly grabador = new GrabadorCaptura();
   private destruida = false;
+  private readonly ngZone = inject(NgZone);
 
   // ---- salir de la lección (botón atrás del teléfono y la X) ----
   private readonly alertCtrl = inject(AlertController);
+  private readonly preferenciasVideo = inject(PreferenciasVideoService);
+  /** Emparejar: todas las señas en movimiento a la vez (Ajustes → Rendimiento). */
+  animarTodas = true;
   private readonly atras = inject(BotonAtrasService).paraPantalla(() => this.alPresionarAtras());
   private alertaSalida: HTMLIonAlertElement | null = null;
   /** Mientras se guarda el progreso final no se puede salir a medias. */
@@ -218,6 +244,7 @@ export class LessonPage implements OnInit, OnDestroy {
       // una lección), así que si el usuario ya vio este subnivel antes la
       // precarga de abajo no vuelve a gastar datos: solo lee de disco.
       this.cargaProgreso = 5;
+      void this.preferenciasVideo.animarTodas().then((v) => (this.animarTodas = v));
 
       const subnivelId = Number(this.route.snapshot.paramMap.get('subnivelId'));
 
@@ -248,8 +275,8 @@ export class LessonPage implements OnInit, OnDestroy {
 
       this.nivel = nivel;
       this.senas = senas;
-      // ponytail: tope de 6 repasos al azar para que el emparejar no se haga eterno en niveles avanzados
-      this.repaso = this.mezclar([...repaso]).slice(0, 6);
+      // Tope de 6 repasos al azar para que el emparejar no se haga eterno en niveles avanzados
+      this.repaso = this.mezclar(repaso).slice(0, 6);
       if (nivel.numero_nivel === 1 && subnivel.numero_subnivel === 1) {
         this.senuelos = await this.contenidoService.getSenasSenuelo(subnivel);
       }
@@ -363,8 +390,19 @@ export class LessonPage implements OnInit, OnDestroy {
     if (document.hidden) this.pausarCamara();
   }
 
-  private mezclar<T>(arr: T[]): T[] {
-    return arr.sort(() => 0.5 - Math.random());
+  /** Mezcla uniforme en O(N) con el algoritmo de Fisher-Yates. */
+  private mezclar<T>(arr: readonly T[]): T[] {
+    const copia = [...arr];
+    for (let i = copia.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copia[i], copia[j]] = [copia[j], copia[i]];
+    }
+    return copia;
+  }
+
+  /** Hay señas con video en el emparejar: se avisa que se ven en movimiento al tocarlas. */
+  get hayTilesConVideo(): boolean {
+    return this.manos.some((m) => !!m.videoUrl);
   }
 
   // Sin esto, cada cambio de ronda recrea (y redecodifica el GIF de) los 4 tiles.
@@ -460,7 +498,7 @@ export class LessonPage implements OnInit, OnDestroy {
   }
 
   private armarRondas(pares: Par[]): Par[][] {
-    const mezclados = this.mezclar([...pares]);
+    const mezclados = this.mezclar(pares);
     const rondas: Par[][] = [];
     for (let i = 0; i < mezclados.length; i += this.TAMANO_RONDA) {
       rondas.push(mezclados.slice(i, i + this.TAMANO_RONDA));
@@ -473,7 +511,7 @@ export class LessonPage implements OnInit, OnDestroy {
     const grupo = this.rondas[indice];
 
     this.manos = this.mezclar([...grupo, ...this.senuelosDeRonda()]);
-    this.palabrasMezcladas = this.mezclar([...grupo]);
+    this.palabrasMezcladas = this.mezclar(grupo);
     this.emparejados = [];
     this.selMano = null;
     this.selPalabra = null;
@@ -482,7 +520,7 @@ export class LessonPage implements OnInit, OnDestroy {
 
   /** Manos extra sin palabra: ninguna palabra las empareja, así que tocarlas siempre da error. */
   private senuelosDeRonda(): Par[] {
-    return this.mezclar([...this.senuelos]).slice(0, 3).map((s, i) => ({
+    return this.mezclar(this.senuelos).slice(0, 3).map((s, i) => ({
       palabra: `__senuelo_${s.id}`,
       senaId: s.id,
       seed: 999 + i,
@@ -496,6 +534,9 @@ export class LessonPage implements OnInit, OnDestroy {
       this.cargarRonda(this.rondaActual + 1);
     } else {
       this.fase = 'quiz';
+      // Pre-calienta MediaPipe y el clasificador en segundo plano mientras el usuario responde el quiz
+      void this.inicializarMediaPipe();
+      void this.actualizarCamConModelo();
     }
   }
 
@@ -518,7 +559,7 @@ export class LessonPage implements OnInit, OnDestroy {
       if (!this.modoRepaso) {
         // Solo se pierde vida en la ronda principal. En repaso ya perdiste
         // la vida la primera vez; aquí solo estás reforzando.
-        this.vidas = await this.contenidoService.descontarVida(this.userId);
+        this.vidas = await this.contenidoService.descontarVida(this.userId, this.vidas);
 
         // Se guarda para volver a preguntarla al final, evitando duplicados.
         if (!this.preguntasFalladas.some(p => p.senaId === this.preguntaActual.senaId)) {
@@ -562,6 +603,7 @@ export class LessonPage implements OnInit, OnDestroy {
       }
 
       this.fase = 'record';
+      void this.actualizarCamConModelo();
       return;
     }
 
@@ -575,12 +617,16 @@ export class LessonPage implements OnInit, OnDestroy {
     return this.senas[this.senas.length - 1];
   }
 
-  /** La seña tiene modelo de referencia utilizable (para la etiqueta "Evaluada con IA"). */
-  get camConModelo(): boolean {
-    return !!modeloDeSena(this.senaCamara);
+  /** El clasificador entrenado ya conoce esta seña (para la etiqueta "Evaluada con IA"). */
+  camConModelo = false;
+
+  private async actualizarCamConModelo() {
+    const clf = await this.reconocedor.clasificador();
+    this.camConModelo = !!clf?.conoce(this.senaCamara.id);
   }
 
   private async inicializarMediaPipe() {
+    if (this.handLandmarker) return;
     try {
       this.handLandmarker = await this.mediaPipe.obtener();
     } catch (e) {
@@ -599,7 +645,12 @@ export class LessonPage implements OnInit, OnDestroy {
       let stream: MediaStream | null = null;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          video: {
+            facingMode: 'user',
+            width: { ideal: 480, max: 640 },
+            height: { ideal: 360, max: 480 },
+            frameRate: { ideal: 24, max: 30 },
+          },
           audio: false,
         });
       } catch {
@@ -627,7 +678,10 @@ export class LessonPage implements OnInit, OnDestroy {
       }
 
       this.camStage = 'countdown';
+      this.camManoVisible = null;
+      this.framesSeguidosManos = 0;
       this.contarRegresiva();
+      this.vigilarManos();
     } catch {
       this.camStage = 'denied';
     }
@@ -646,6 +700,39 @@ export class LessonPage implements OnInit, OnDestroy {
     }, 800);
   }
 
+  /**
+   * Durante la cuenta regresiva revisa (sin grabar) si se ve la mano, para avisar
+   * ANTES de que empiece la grabación ("no veo tu mano").
+   */
+  private vigilarManos() {
+    this.ngZone.runOutsideAngular(() => {
+      const loop = () => {
+        if (this.camStage !== 'countdown') return;
+        const video = this.videoRef?.nativeElement;
+        const ahora = performance.now();
+        if (video && video.videoWidth > 0 && this.handLandmarker && this.controlFrames.esFrameNuevo(video, ahora)) {
+          try {
+            const results = this.handLandmarker.detectForVideo(video, this.controlFrames.marcaDeTiempo(ahora));
+            this.actualizarIndicadorManos(!!results?.landmarks?.length);
+          } catch {
+            // un frame que MediaPipe no pudo procesar no cambia el indicador
+          }
+        }
+        this.rafId = requestAnimationFrame(loop);
+      };
+      this.rafId = requestAnimationFrame(loop);
+    });
+  }
+
+  /** Cambia el indicador "te veo / no te veo" solo cuando el estado se mantiene unos frames (sin parpadeo). */
+  private actualizarIndicadorManos(hayManos: boolean) {
+    this.framesSeguidosManos = hayManos ? Math.max(1, this.framesSeguidosManos + 1) : Math.min(-1, this.framesSeguidosManos - 1);
+    const estable = Math.abs(this.framesSeguidosManos) >= 3;
+    if (estable && this.camManoVisible !== hayManos) {
+      this.ngZone.run(() => (this.camManoVisible = hayManos));
+    }
+  }
+
   private detenerCuentaRegresiva() {
     if (this.intervaloCuenta) {
       clearInterval(this.intervaloCuenta);
@@ -659,65 +746,65 @@ export class LessonPage implements OnInit, OnDestroy {
     const inicio = performance.now();
     const duracion = 2800; // ~2,8 s: alcanza para la seña con algo de margen antes y después
 
-    const loop = () => {
-      const video = this.videoRef?.nativeElement;
-      const canvas = this.canvasRef?.nativeElement;
+    // Corre fuera de NgZone para evitar que requestAnimationFrame dispare Change Detection 60-120 veces/seg
+    this.ngZone.runOutsideAngular(() => {
+      const loop = () => {
+        const video = this.videoRef?.nativeElement;
+        const ahora = performance.now();
 
-      // Solo se procesa cuando la cámara entregó un frame nuevo (ver ControlFramesVideo).
-      if (video && canvas && this.camStage === 'recording' && video.videoWidth > 0 && this.controlFrames.esFrameNuevo(video)) {
-        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-        }
-        const ctx = canvas.getContext('2d');
-        ctx?.clearRect(0, 0, canvas.width, canvas.height);
-
-        if (this.handLandmarker) {
-          const marca = this.controlFrames.marcaDeTiempo();
-          try {
-            const results = this.handLandmarker.detectForVideo(video, marca);
-            this.grabador.agregar(results, marca, video.videoWidth, video.videoHeight);
-            if (ctx && results?.landmarks?.length) dibujarManos(ctx, canvas.width, canvas.height, results.landmarks);
-          } catch (e) {
-            console.warn('MediaPipe no pudo procesar el frame:', e);
+        if (video && this.camStage === 'recording' && video.videoWidth > 0 && this.controlFrames.esFrameNuevo(video, ahora)) {
+          if (this.handLandmarker) {
+            const marca = this.controlFrames.marcaDeTiempo(ahora);
+            try {
+              const results = this.handLandmarker.detectForVideo(video, marca);
+              this.grabador.agregar(results, marca, video.videoWidth, video.videoHeight);
+              this.actualizarIndicadorManos(!!results?.landmarks?.length);
+            } catch (e) {
+              console.warn('MediaPipe no pudo procesar el frame:', e);
+            }
           }
         }
-      }
 
-      if (this.camStage !== 'recording') return;
-      if (performance.now() - inicio < duracion) {
-        this.rafId = requestAnimationFrame(loop);
-      } else {
-        this.terminarGrabacion();
-      }
-    };
+        if (this.camStage !== 'recording') return;
+        if (ahora - inicio < duracion) {
+          this.rafId = requestAnimationFrame(loop);
+        } else {
+          this.ngZone.run(() => {
+            void this.terminarGrabacion();
+          });
+        }
+      };
 
-    this.rafId = requestAnimationFrame(loop);
+      this.rafId = requestAnimationFrame(loop);
+    });
   }
 
   private async terminarGrabacion() {
     this.detenerCamara();
 
-    const canvas = this.canvasRef?.nativeElement;
-    canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
-
-    const resultado = await this.reconocedor.evaluar(this.senaCamara, this.grabador.captura());
+    const captura = this.grabador.captura();
+    const resultado = await this.reconocedor.evaluar(this.senaCamara, captura);
     this.camScore = resultado.similitudPct;
     this.camPassed = resultado.aprobado;
     this.camFuente = resultado.fuente;
+    this.camVerVideo = false;
 
-    if (resultado.sinManos) {
+    // Pistas concretas de qué cambiar (velocidad, manos, forma, encuadre…). Si algo falla al
+    // armarlas, queda el mensaje general: nunca bloquea el resultado.
+    this.camRetro = await this.reconocedor.explicar(this.senaCamara, captura, resultado).catch((e) => {
+      console.warn('No se pudo armar la retroalimentación:', e);
+      return null;
+    });
+    if (this.camRetro) {
+      this.camMsg = this.camRetro.titulo;
+    } else if (resultado.sinManos) {
       this.camMsg = 'No logramos ver bien tus manos. Ponte frente a la cámara con buena luz y vuelve a intentarlo.';
     } else if (resultado.fuente === 'deteccion') {
       this.camMsg = '¡Buena práctica de manos! (Seña en proceso de calibración)';
     } else if (this.camPassed) {
-      this.camMsg = resultado.referencia && modeloDeSena(this.senaCamara)?.tipo === 'estatica'
-        ? '¡Excelente postura! Coincide con el modelo experto.'
-        : '¡Excelente! Seña reconocida.';
+      this.camMsg = '¡Excelente! Seña reconocida.';
     } else {
-      this.camMsg = modeloDeSena(this.senaCamara)?.tipo === 'estatica'
-        ? 'Casi, la postura de tus dedos varió un poco. ¡Inténtalo de nuevo!'
-        : 'El movimiento no coincidió del todo. Mira el video de nuevo y vuelve a intentarlo.';
+      this.camMsg = 'El intento no coincidió del todo. Mira el video de nuevo y vuelve a intentarlo.';
     }
 
     this.camStage = 'result';
@@ -735,8 +822,6 @@ export class LessonPage implements OnInit, OnDestroy {
     if (this.camStage === 'countdown' || this.camStage === 'recording') {
       this.detenerCamara();
       this.grabador.reiniciar();
-      const canvas = this.canvasRef?.nativeElement;
-      canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
       this.camStage = 'idle';
     }
   }
@@ -754,6 +839,7 @@ export class LessonPage implements OnInit, OnDestroy {
   reintentarCamara() {
     this.camStage = 'idle';
     this.camScore = 0;
+    this.camVerVideo = false;
   }
 
   saltarCamara() {
@@ -769,9 +855,15 @@ export class LessonPage implements OnInit, OnDestroy {
     this.finalizando = true;
     this.xpGanado = xpFinal;
     try {
-      await this.contenidoService.marcarSubnivelCompletado(this.userId, this.subnivel.id, xpFinal);
-      const statsFinal = await this.contenidoService.actualizarStatsTrasLeccion(this.userId);
-      const { nivelRecienCompletado } = await this.contenidoService.avanzarNivelSiCorresponde(this.userId, this.nivel.id);
+      const resMarcado = await this.contenidoService.marcarSubnivelCompletado(this.userId, this.subnivel.id, xpFinal);
+      const xpOtorgado = resMarcado?.xpOtorgado ?? xpFinal;
+      const esRepaso = resMarcado?.esRepaso ?? false;
+      this.xpGanado = xpOtorgado;
+      this.esRepasoSubnivel = esRepaso;
+      const [statsFinal, { nivelRecienCompletado }] = await Promise.all([
+        this.contenidoService.actualizarStatsTrasLeccion(this.userId),
+        this.contenidoService.avanzarNivelSiCorresponde(this.userId, this.nivel.id),
+      ]);
 
       if (nivelRecienCompletado) {
         this.mensajeNivel = MENSAJES_NIVEL[Math.floor(Math.random() * MENSAJES_NIVEL.length)];

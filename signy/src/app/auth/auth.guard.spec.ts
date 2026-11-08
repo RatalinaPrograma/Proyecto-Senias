@@ -14,7 +14,9 @@ describe('Guards de autenticación y rutas', () => {
 
   beforeEach(() => {
     supabaseSpy = jasmine.createSpyObj('SupabaseService', ['getUsuarioLocal', 'esAdmin']);
-    contenidoSpy = jasmine.createSpyObj('ContenidoService', ['obtenerMapaDeAprendizaje']);
+    contenidoSpy = jasmine.createSpyObj('ContenidoService', ['obtenerMapaDeAprendizaje', 'obtenerMapaCacheadoOActual']);
+    // El guard reutiliza el mapa cacheado de Home; sin caché, es el mismo mapa de aprendizaje.
+    contenidoSpy.obtenerMapaCacheadoOActual.and.callFake((id: string) => contenidoSpy.obtenerMapaDeAprendizaje(id));
     routerSpy = jasmine.createSpyObj('Router', ['navigate']);
 
     TestBed.configureTestingModule({

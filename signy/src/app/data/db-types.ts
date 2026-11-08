@@ -37,7 +37,6 @@ export interface Sena {
    * significado a personas cuya primera lengua es LSCh y no el español.
    * Nunca reemplaza al video real de la seña. */
   icono: string | null;
-  landmarks_referencia: unknown | null;
   created_at: string | null;
 }
 

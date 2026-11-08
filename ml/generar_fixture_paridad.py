@@ -26,18 +26,27 @@ from signy_ml.caracteristicas import ConfigCaracteristicas, caracteristicas  # n
 from signy_ml.consola import consola_utf8  # noqa: E402
 from signy_ml.dataset import expandir_captura  # noqa: E402
 from signy_ml.modelo import OpcionesEntrenamiento, entrenar, probabilidades  # noqa: E402
+from signy_ml.perfil import medir  # noqa: E402
 from signy_ml.sintetico import compactar, dataset_sintetico, generar_captura  # noqa: E402
 from signy_ml.dataset import Dataset, Muestra  # noqa: E402
 
 DESTINO = RAIZ.parent / "signy" / "src" / "app" / "motor-senas" / "testing" / "fixture-clasificador.ts"
 
 
+def _compuesta(rng) -> dict:
+    """HOLA (1 mano) seguida de SEPARAR (2 manos), como en ml/tests/test_pipeline.py."""
+    a = generar_captura("HOLA", rng, duracion_ms=600.0, pausa_antes_ms=100.0, pausa_despues_ms=0.0, dx=0.15)
+    b = generar_captura("SEPARAR", rng, duracion_ms=600.0, pausa_antes_ms=0.0, pausa_despues_ms=100.0)
+    fin = a["frames"][-1]["t"]
+    return {**a, "frames": a["frames"] + [{"t": f["t"] + fin, "manos": f["manos"]} for f in b["frames"]]}
+
+
 def main() -> None:
     crudo = dataset_sintetico(["HOLA", "SI", "L", "SEPARAR"], participantes=3, repeticiones=3, semilla=7)
     ds = Dataset(senas={int(s["id"]): s["palabra"] for s in crudo["senas"]})
-    ds.muestras = [Muestra(m["id"], m["senaId"], m["participante"], expandir_captura(m["captura"])) for m in crudo["muestras"]]
+    ds.muestras = [Muestra(m["id"], m["senaId"], expandir_captura(m["captura"])) for m in crudo["muestras"]]
     op = OpcionesEntrenamiento(config=ConfigCaracteristicas(frames=8, usar_z=True), capas_ocultas=(16,), aumentos_por_muestra=2)
-    modelo, _ = entrenar(ds, op)
+    modelo = entrenar(ds, op).modelo
 
     rng = np.random.default_rng(99)
     casos = []
@@ -49,8 +58,10 @@ def main() -> None:
         ("HOLA", dict(mano_reposo=True)), ("SI", dict(mano_reposo=True, zurda=True, ancho=480, alto=640)),
         # Como se graba de verdad: la mano parte abajo, sube a hacer la seña y vuelve a bajar.
         ("GRACIAS", dict(mano_reposo=True, inicio_abajo=True, pausa_antes_ms=400.0, pausa_despues_ms=400.0)),
+        # Seña compuesta: empieza con 1 mano y pasa a 2 (cuadros con solo la mano que aparece después).
+        ("COMPUESTA", {}),
     ]:
-        compacta = compactar(generar_captura(nombre, rng, **{**corto, **kw}))
+        compacta = compactar(_compuesta(rng) if nombre == "COMPUESTA" else generar_captura(nombre, rng, **{**corto, **kw}))
         captura = expandir_captura(compacta)
         vector = caracteristicas(captura, op.config)
         casos.append({
@@ -58,6 +69,7 @@ def main() -> None:
             "captura": compacta,
             "vector": [round(float(v), 10) for v in vector],
             "probabilidades": [round(float(p), 12) for p in probabilidades(modelo, vector)],
+            "medidas": medir(captura),
         })
 
     contenido = (

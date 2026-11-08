@@ -18,8 +18,9 @@ describe('CachedSrcDirective', () => {
   let cacheSpy: jasmine.SpyObj<ImageCacheService>;
 
   beforeEach(async () => {
-    cacheSpy = jasmine.createSpyObj('ImageCacheService', ['resolve']);
+    cacheSpy = jasmine.createSpyObj('ImageCacheService', ['resolve', 'getSincrono']);
     cacheSpy.resolve.and.callFake((url: string) => Promise.resolve(`blob:cached/${url}`));
+    cacheSpy.getSincrono.and.returnValue(null);
 
     await TestBed.configureTestingModule({
       imports: [HostDeImagen],
@@ -55,5 +56,28 @@ describe('CachedSrcDirective', () => {
     await fixture.whenStable();
 
     expect(cacheSpy.resolve).toHaveBeenCalledWith('https://cdn.signy.app/perro.gif');
+  });
+
+  it('usa la URL ya precargada en memoria sin esperar a resolve', async () => {
+    cacheSpy.getSincrono.and.returnValue('blob:precargado');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(cacheSpy.resolve).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.img.nativeElement.src).toContain('blob:precargado');
+  });
+
+  it('si la URL cambia mientras la anterior se resolvía, gana la última (no se ve la seña anterior)', async () => {
+    let soltarLenta!: (v: string) => void;
+    cacheSpy.resolve.and.callFake((url: string) =>
+      url.includes('gato') ? new Promise<string>((r) => (soltarLenta = r)) : Promise.resolve(`blob:cached/${url}`));
+    fixture.detectChanges(); // empieza a resolver gato (lenta)
+    fixture.componentInstance.url = 'https://cdn.signy.app/perro.gif';
+    fixture.detectChanges();
+    await fixture.whenStable();
+    soltarLenta('blob:cached/gato-tardio');
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.img.nativeElement.src).toContain('blob:cached/https://cdn.signy.app/perro.gif');
   });
 });

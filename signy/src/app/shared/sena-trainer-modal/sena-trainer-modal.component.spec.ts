@@ -3,9 +3,8 @@ import { ModalController } from '@ionic/angular';
 import { SenaTrainerModalComponent } from './sena-trainer-modal.component';
 import { SupabaseService } from '../../services/supabase';
 import { BotonAtrasService } from '../../services/boton-atras';
-import { MediaPipeManosService, VERSION_MOTOR, construirModeloReferencia } from '../../motor-senas';
+import { CapturaCruda, MediaPipeManosService } from '../../motor-senas';
 import { generarCaptura } from '../../motor-senas/testing/manos-sinteticas';
-import { grabarReferenciaAnterior } from '../../motor-senas/testing/motor-anterior';
 import { Sena } from '../../data/db-types';
 
 describe('SenaTrainerModalComponent', () => {
@@ -15,12 +14,12 @@ describe('SenaTrainerModalComponent', () => {
   let modalSpy: jasmine.SpyObj<ModalController>;
   let mediaPipeSpy: jasmine.SpyObj<MediaPipeManosService>;
 
-  const senaBase = (landmarks: unknown = null): Sena => ({
-    id: 7, subnivel_id: 1, palabra: 'hola', descripcion: null, video_url: null, icono: null, landmarks_referencia: landmarks, created_at: null,
+  const senaBase = (): Sena => ({
+    id: 7, subnivel_id: 1, palabra: 'hola', descripcion: null, video_url: null, icono: null, created_at: null,
   });
 
   async function crear(sena: Sena) {
-    supabaseSpy = jasmine.createSpyObj('SupabaseService', ['actualizarSena', 'agregarMuestraSena', 'contarMuestrasPorSena', 'eliminarMuestraSena']);
+    supabaseSpy = jasmine.createSpyObj('SupabaseService', ['agregarMuestraSena', 'contarMuestrasPorSena', 'eliminarMuestraSena']);
     supabaseSpy.contarMuestrasPorSena.and.resolveTo(new Map([[7, 4]]));
     modalSpy = jasmine.createSpyObj('ModalController', ['dismiss']);
     modalSpy.dismiss.and.resolveTo(true);
@@ -53,7 +52,10 @@ describe('SenaTrainerModalComponent', () => {
    * grabado en ms.
    */
   function grabar(nombre: string, opciones = {}): number {
-    const captura = generarCaptura(nombre, { pausaAntesMs: 200, pausaDespuesMs: 200, ...opciones });
+    return grabarCaptura(generarCaptura(nombre, { pausaAntesMs: 200, pausaDespuesMs: 200, ...opciones }));
+  }
+
+  function grabarCaptura(captura: CapturaCruda): number {
     c.estadoGrabacion = 'grabando';
     (c as any).inicioGrabacion = null;
     (c as any).grabador.reiniciar();
@@ -64,6 +66,12 @@ describe('SenaTrainerModalComponent', () => {
       (c as any).procesarFrame({ landmarks: f.manos }, 10000 + f.t, captura.ancho, captura.alto);
     }
     return (c as any).grabador.duracionMs;
+  }
+
+  /** Concatena dos capturas (p. ej. una de 1 mano y otra de 2) para simular una seña compuesta. */
+  function concatenar(a: CapturaCruda, b: CapturaCruda): CapturaCruda {
+    const fin = a.frames[a.frames.length - 1].t;
+    return { ancho: a.ancho, alto: a.alto, frames: [...a.frames, ...b.frames.map((f) => ({ ...f, t: f.t + fin }))] };
   }
 
   it('si MediaPipe no carga muestra el error en vez de quedarse cargando', async () => {
@@ -116,20 +124,6 @@ describe('SenaTrainerModalComponent', () => {
     expect(c.muestrasEnDataset).toBeNull();
   });
 
-  it('una referencia v2 existente se marca como desactualizada pero se puede probar', async () => {
-    const v2 = grabarReferenciaAnterior(generarCaptura('HOLA', { semilla: 1 }), 'dinamica', 1);
-    await crear(senaBase(v2));
-    expect(c.modeloExistente).not.toBeNull();
-    expect(c.modeloDesactualizado).toBeTrue();
-    expect(c.estadoGrabacion).toBe('grabado');
-  });
-
-  it('una referencia v1 (ya no comparable) se marca desactualizada y no se usa', async () => {
-    await crear(senaBase({ version: 1, frames: [[0]] }));
-    expect(c.modeloExistente).toBeNull();
-    expect(c.modeloDesactualizado).toBeTrue();
-  });
-
   describe('grabación', () => {
     beforeEach(async () => await crear(senaBase()));
 
@@ -140,37 +134,24 @@ describe('SenaTrainerModalComponent', () => {
       expect(grabado).toBeLessThan(2100);
       expect(c.estadoGrabacion).toBe('grabado');
       expect(c.esperandoManos).toBeFalse();
-      expect(c.modeloNuevo!.version).toBe(VERSION_MOTOR);
-      expect(c.modeloNuevo!.tipo).toBe('dinamica');
-      expect(c.modoPruebaActivo).toBeTrue();
       expect(c.puedeAgregarAlDataset).toBeTrue();
     });
 
-    it('una seña estática graba 1,5 s y guarda un solo frame', () => {
+    it('una seña estática graba 1,5 s', () => {
       c.tipoSena = 'estatica';
-      grabar('A', { duracionMs: 2000 });
-      expect(c.modeloNuevo!.frames.length).toBe(1);
+      const grabado = grabar('A', { duracionMs: 2000 });
+      expect(grabado).toBeGreaterThanOrEqual(1500);
+      expect(c.estadoGrabacion).toBe('grabado');
+      expect(c.puedeAgregarAlDataset).toBeTrue();
     });
 
-    it('la prueba en vivo reconoce la seña recién grabada y rechaza otra', fakeAsync(() => {
-      grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1800 });
-      const probar = (nombre: string) => {
-        c.activarModoPrueba();
-        const cap = generarCaptura(nombre, { pausaAntesMs: 200, pausaDespuesMs: 200, semilla: 5 });
-        for (const f of cap.frames) (c as any).procesarFrame({ landmarks: f.manos }, 50000 + f.t, cap.ancho, cap.alto);
-        return c.resultadoEnVivo;
-      };
-      expect(probar('HOLA')!.esCoincidente).toBeTrue();
-      expect(probar('SI')?.esCoincidente ?? false).toBeFalse();
-    }));
-
-    it('cancelar a mitad de una re-grabación conserva la referencia anterior', async () => {
+    it('cancelar a mitad de una re-grabación conserva la grabación anterior', async () => {
       grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });
-      const anterior = c.modeloNuevo;
+      const anterior = (c as any).capturaReciente;
       c.iniciarCuentaAtras();
       c.cancelarGrabacion();
       expect(c.estadoGrabacion).toBe('grabado');
-      expect(c.modeloVigente).toBe(anterior);
+      expect((c as any).capturaReciente).toBe(anterior);
     });
 
     it('si nunca aparecen las manos, se cancela sola a los 15 s', fakeAsync(() => {
@@ -184,23 +165,56 @@ describe('SenaTrainerModalComponent', () => {
     }));
   });
 
-  describe('guardar', () => {
+  describe('seña compuesta (cambia de cantidad de manos)', () => {
     beforeEach(async () => await crear(senaBase()));
 
-    it('"Usar como referencia" guarda el modelo v3 y cierra devolviendo la seña', async () => {
-      supabaseSpy.actualizarSena.and.resolveTo({ error: null } as any);
-      grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });
-      const modelo = c.modeloNuevo;
-      await c.guardarModelo();
-      expect(supabaseSpy.actualizarSena).toHaveBeenCalledWith(7, { landmarks_referencia: modelo });
-      expect(c.sena.landmarks_referencia).toBe(modelo);
-      expect(modalSpy.dismiss).toHaveBeenCalledWith(c.sena);
+    it('avisa si la grabación empieza con 1 mano y pasa a 2', () => {
+      const compuesta = concatenar(
+        generarCaptura('HOLA', { pausaAntesMs: 200, duracionMs: 1000, pausaDespuesMs: 0 }),
+        generarCaptura('SEPARAR', { pausaAntesMs: 0, duracionMs: 1000, pausaDespuesMs: 200 })
+      );
+      grabarCaptura(compuesta);
+      expect(c.estadoGrabacion).toBe('grabado');
+      expect(c.avisoSenaCompuesta).toBe(2);
     });
 
-    it('sin grabación nueva no guarda nada', async () => {
-      await c.guardarModelo();
-      expect(supabaseSpy.actualizarSena).not.toHaveBeenCalled();
+    it('no avisa si la cantidad de manos se mantiene durante toda la grabación', () => {
+      grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });
+      expect(c.avisoSenaCompuesta).toBeNull();
     });
+
+    it('se limpia al empezar una grabación nueva', () => {
+      const compuesta = concatenar(
+        generarCaptura('HOLA', { pausaAntesMs: 200, duracionMs: 1000, pausaDespuesMs: 0 }),
+        generarCaptura('SEPARAR', { pausaAntesMs: 0, duracionMs: 1000, pausaDespuesMs: 200 })
+      );
+      grabarCaptura(compuesta);
+      expect(c.avisoSenaCompuesta).not.toBeNull();
+      grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 1500 });
+      expect(c.avisoSenaCompuesta).toBeNull();
+    });
+
+    it('mientras espera para grabar, avisa si lleva un rato viendo otra cantidad de manos', () => {
+      c.manosRequeridas = 2;
+      c.estadoGrabacion = 'grabando';
+      (c as any).inicioGrabacion = null;
+
+      c.manosDetectadasCount = 1;
+      (c as any).procesarFrame({ landmarks: [] }, 20000, 640, 480);
+      expect(c.avisoManosDistintas).toBeFalse(); // recién empieza a esperar
+
+      (c as any).procesarFrame({ landmarks: [] }, 20000 + 700, 640, 480);
+      expect(c.avisoManosDistintas).toBeTrue();
+      expect(c.estadoGrabacion).toBe('grabando'); // sigue esperando: solo es un aviso, no cancela nada
+
+      c.manosDetectadasCount = 2; // aparece la segunda mano: arranca a grabar y se limpia el aviso
+      (c as any).procesarFrame({ landmarks: [] }, 20000 + 800, 640, 480);
+      expect(c.avisoManosDistintas).toBeFalse();
+    });
+  });
+
+  describe('guardar', () => {
+    beforeEach(async () => await crear(senaBase()));
 
     it('"Al dataset" guarda la captura CRUDA compacta y suma al contador', async () => {
       supabaseSpy.agregarMuestraSena.and.resolveTo({ data: { id: 55 }, error: null } as any);
@@ -277,7 +291,6 @@ describe('SenaTrainerModalComponent', () => {
       const f = captura.frames[11];
       (c as any).procesarFrame({ landmarks: f.manos }, 10000 + f.t + 2000, captura.ancho, captura.alto);
       expect(c.estadoGrabacion).toBe('inactivo');
-      expect(c.modeloNuevo).toBeNull();
       expect(c.puedeAgregarAlDataset).toBeFalse();
       expect(c.mensajeDataset).toContain('se interrumpió');
     });
@@ -410,13 +423,6 @@ describe('SenaTrainerModalComponent', () => {
     });
   });
 
-  it('el modelo que construye coincide con construirModeloReferencia (misma lógica que la app)', async () => {
-    await crear(senaBase());
-    grabar('HOLA', { duracionMs: 1200, pausaDespuesMs: 300 });
-    const esperado = construirModeloReferencia((c as any).capturaReciente, { palabra: 'hola', tipo: 'dinamica', manosRequeridas: 1 });
-    expect(c.modeloNuevo).toEqual(esperado);
-  });
-
   describe('botón atrás del teléfono', () => {
     it('se hace cargo mientras el modal está abierto', async () => {
       await crear(senaBase());
@@ -453,9 +459,9 @@ describe('SenaTrainerModalComponent', () => {
       expect(modalSpy.dismiss).not.toHaveBeenCalled();
     });
 
-    it('mientras guarda, espera', async () => {
+    it('mientras guarda una muestra, espera', async () => {
       await crear(senaBase());
-      c.guardando = true;
+      c.guardandoMuestra = true;
       expect(c.alPresionarAtras()).toBeTrue();
       expect(modalSpy.dismiss).not.toHaveBeenCalled();
     });

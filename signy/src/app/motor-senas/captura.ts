@@ -15,16 +15,22 @@ export interface ResultadoManosMediaPipe {
  * procesa 2 a 4 veces: se desperdicia CPU/batería y la secuencia grabada
  * se llena de frames repetidos (una grabación "de 30 frames" duraba medio
  * segundo en un monitor de 60 Hz y un cuarto de segundo en uno de 120 Hz).
- * Solo se procesa cuando el video avanzó (`currentTime` cambió), con una
- * marca de tiempo monótona como pide MediaPipe en modo VIDEO.
+ * Solo se procesa cuando el video avanzó (`currentTime` cambió) y pasó al
+ * menos `intervaloMinMs` desde el último frame procesado, con una marca de
+ * tiempo monótona como pide MediaPipe en modo VIDEO.
  */
 export class ControlFramesVideo {
   private ultimoTiempoVideo = -1;
   private ultimaMarca = 0;
+  private ultimoFrameMs = -Infinity;
 
-  esFrameNuevo(video: { currentTime: number }): boolean {
+  constructor(private readonly intervaloMinMs = 0) {}
+
+  esFrameNuevo(video: { currentTime: number }, ahoraMs = performance.now()): boolean {
     if (video.currentTime === this.ultimoTiempoVideo) return false;
+    if (this.intervaloMinMs > 0 && ahoraMs - this.ultimoFrameMs < this.intervaloMinMs) return false;
     this.ultimoTiempoVideo = video.currentTime;
+    this.ultimoFrameMs = ahoraMs;
     return true;
   }
 
@@ -36,6 +42,7 @@ export class ControlFramesVideo {
 
   reiniciar(): void {
     this.ultimoTiempoVideo = -1;
+    this.ultimoFrameMs = -Infinity;
   }
 }
 

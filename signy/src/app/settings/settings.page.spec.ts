@@ -6,6 +6,7 @@ import { TtsService } from '../services/tts';
 import { ContenidoService } from '../services/contenido';
 import { NotificationsService } from '../services/notifications';
 import { BotonAtrasService } from '../services/boton-atras';
+import { PreferenciasVideoService } from '../services/preferencias-video';
 import { statsDePrueba, perfilDePrueba } from '../../testing/supabase-mock';
 
 describe('SettingsPage', () => {
@@ -16,6 +17,7 @@ describe('SettingsPage', () => {
   let contenidoSpy: jasmine.SpyObj<ContenidoService>;
   let notificationsSpy: jasmine.SpyObj<NotificationsService>;
   let routerSpy: jasmine.SpyObj<Router>;
+  let videoSpy: jasmine.SpyObj<PreferenciasVideoService>;
 
   function prepararCargaExitosa() {
     supabaseSpy.getUser.and.resolveTo({ data: { user: { id: 'user-1', email: 'a@a.com', user_metadata: { full_name: 'Benja' } } }, error: null } as any);
@@ -45,6 +47,9 @@ describe('SettingsPage', () => {
       'pedirPermiso', 'notificacionDePrueba', 'cancelarTodo',
     ]);
     routerSpy = jasmine.createSpyObj('Router', ['navigate']);
+    videoSpy = jasmine.createSpyObj('PreferenciasVideoService', ['animarTodas', 'setAnimarTodas']);
+    videoSpy.animarTodas.and.resolveTo(true);
+    videoSpy.setAnimarTodas.and.resolveTo();
 
     contenidoSpy.fechaHoy.and.returnValue('2026-09-08');
     contenidoSpy.minutosParaProximaVida.and.returnValue(0);
@@ -58,6 +63,7 @@ describe('SettingsPage', () => {
         { provide: ContenidoService, useValue: contenidoSpy },
         { provide: NotificationsService, useValue: notificationsSpy },
         { provide: Router, useValue: routerSpy },
+        { provide: PreferenciasVideoService, useValue: videoSpy },
       ],
     }).compileComponents();
 
@@ -220,6 +226,23 @@ describe('SettingsPage', () => {
       component.vozSeleccionada = 'Mi Voz';
       component.probarTts();
       expect(ttsSpy.hablar).toHaveBeenCalledWith('Así sonará el texto a voz en Signy', 'Mi Voz');
+    });
+  });
+
+  describe('rendimiento (animar todas las señas)', () => {
+    beforeEach(async () => { prepararCargaExitosa(); });
+
+    it('muestra la preferencia guardada en este dispositivo', async () => {
+      videoSpy.animarTodas.and.resolveTo(false);
+      await component.ngOnInit();
+      expect(component.animarTodasLasSenas).toBeFalse();
+    });
+
+    it('al cambiar el interruptor, guarda la preferencia', async () => {
+      await component.ngOnInit();
+      await component.cambiarAnimarTodas({ detail: { checked: false } });
+      expect(component.animarTodasLasSenas).toBeFalse();
+      expect(videoSpy.setAnimarTodas).toHaveBeenCalledWith(false);
     });
   });
 

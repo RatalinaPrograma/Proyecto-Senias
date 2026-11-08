@@ -12,6 +12,7 @@ import { aIsotropico, tamanoMano } from './geometria';
 import { PRESENCIA_MINIMA, PistasPorFrame, ResumenPista, resumirPistas, seguirManos } from './seguimiento';
 import { CapturaCruda, MUNECA, Mano, PUNTOS_POR_MANO } from './tipos';
 import { mediana } from './geometria';
+import type { PerfilSena } from './retroalimentacion';
 
 export const FORMATO_CLASIFICADOR = 'signy-clasificador';
 /** 2: las características ignoran la mano que descansa abajo (manoEnReposo). */
@@ -58,6 +59,8 @@ export interface ModeloClasificadorJson {
   /** Probabilidad mínima recomendada para aceptar la predicción. */
   umbralSugerido?: number;
   metricas?: Record<string, unknown>;
+  /** Cómo se hace cada seña según el dataset (clave: senaId), para la retroalimentación al alumno. */
+  perfiles?: Record<string, PerfilSena>;
 }
 
 export interface Prediccion {
@@ -176,10 +179,16 @@ export function caracteristicasClasificador(captura: CapturaCruda, config: Confi
   const ia = activas[0].indice;
   const ib = activas.length > 1 ? activas[1].indice : null;
 
+  // Un cuadro se guarda si se ve CUALQUIERA de las dos manos, no solo "ia": si la seña
+  // cambia de cantidad de manos a mitad de camino (p. ej. 1 mano y después 2), "ia" puede
+  // ser la pista que aparece más tarde, y antes eso descartaba enteros los cuadros del
+  // tramo inicial (ver seguimiento.ts `cambioDeManos`, que avisa de este caso en la app).
   const frames: FrameAB[] = [];
   pistas.forEach((p, i) => {
-    const a = p[ia];
-    if (a) frames.push({ t: iso[i].t, a, b: ib === null ? null : p[ib] });
+    let a = p[ia];
+    let b = ib === null ? null : p[ib];
+    if (!a && b) [a, b] = [b, null]; // la única mano del cuadro siempre va en la posición A
+    if (a) frames.push({ t: iso[i].t, a, b });
   });
   if (!frames.length) return null;
 
@@ -255,11 +264,13 @@ export class ClasificadorSenas {
   private readonly capas: CapaLista[];
   private readonly media: Float32Array;
   private readonly escala: Float32Array;
+  private readonly idsConocidos: Set<number>;
   readonly umbralSugerido: number;
 
   private constructor(readonly modelo: ModeloClasificadorJson) {
     this.media = decodificarNumeros(modelo.normalizacion.media, 'float32');
     this.escala = decodificarNumeros(modelo.normalizacion.escala, 'float32');
+    this.idsConocidos = new Set(modelo.clases.map((c) => c.senaId));
     this.capas = modelo.capas.map((c) => ({
       entrada: c.entrada,
       salida: c.salida,
@@ -292,8 +303,13 @@ export class ClasificadorSenas {
     return this.modelo.clases;
   }
 
+  /** Perfil de la seña (velocidad, amplitud, manos, forma), si el modelo lo trae. */
+  perfil(senaId: number): PerfilSena | null {
+    return this.modelo.perfiles?.[String(senaId)] ?? null;
+  }
+
   conoce(senaId: number): boolean {
-    return this.modelo.clases.some((c) => c.senaId === senaId);
+    return this.idsConocidos.has(senaId);
   }
 
   /** Probabilidades por clase a partir de un vector de características. */

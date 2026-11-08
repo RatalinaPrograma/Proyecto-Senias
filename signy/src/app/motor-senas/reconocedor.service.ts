@@ -1,52 +1,73 @@
 import { Injectable } from '@angular/core';
 import { Sena } from '../data/db-types';
 import { ClasificadorSenas, Prediccion } from './clasificador';
-import { evaluarCaptura, framesConManos } from './comparacion';
-import { CapturaCruda, ModeloReferenciaSena, ResultadoEvaluacion } from './tipos';
+import { aIsotropico } from './geometria';
+import { Retroalimentacion, medirIntento, retroalimentar } from './retroalimentacion';
+import { seguirManos } from './seguimiento';
+import { CapturaCruda } from './tipos';
 
 /** Ruta del modelo que genera `ml/entrenar.py` (va dentro de la app, funciona sin internet). */
 export const RUTA_MODELO_CLASIFICADOR = 'assets/modelos/clasificador-senas.json';
 
-export type FuenteEvaluacion = 'referencia' | 'clasificador' | 'deteccion';
+export type FuenteEvaluacion = 'clasificador' | 'deteccion';
 
 export interface EvaluacionSena {
   similitudPct: number;
   aprobado: boolean;
-  /** Qué decidió el resultado: el modelo de referencia (DTW), el clasificador entrenado, o solo detección de manos. */
+  /** Qué decidió el resultado: el clasificador entrenado, o solo detección de manos. */
   fuente: FuenteEvaluacion;
   espejo: boolean;
   /** No se vieron las manos lo suficiente para evaluar. */
   sinManos: boolean;
-  referencia?: ResultadoEvaluacion;
   clasificador?: { probabilidad: number; mejores: Prediccion[] };
 }
 
-/** Frames con manos que pide el modo "solo detección" (señas aún sin calibrar). */
-const FRAMES_DETECCION = 8;
+/**
+ * Palabras que en LSCh se dicen con la misma seña (por ejemplo, "Hola" y "Chao"
+ * se hacen igual). El clasificador no puede distinguirlas, así que al practicar
+ * una de ellas también cuenta como correcta la otra.
+ */
+const SENAS_EQUIVALENTES: string[][] = [['hola', 'chao']];
 
-export function modeloDeSena(sena: Pick<Sena, 'landmarks_referencia'> | null | undefined): ModeloReferenciaSena | null {
-  const crudo = sena?.landmarks_referencia;
-  if (!crudo) return null;
-  try {
-    const m = (typeof crudo === 'string' ? JSON.parse(crudo) : crudo) as ModeloReferenciaSena;
-    return m && Array.isArray(m.frames) && m.frames.length && (m.version ?? 1) >= 2 ? m : null;
-  } catch {
-    return null;
-  }
+/** Palabra en minúsculas y sin tildes, para comparar. */
+function clavePalabra(palabra: string): string {
+  return palabra.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 }
 
 /**
- * Punto único para decidir si una persona hizo bien una seña.
- *
- * Combina dos motores:
- *  - Modelo de referencia (DTW contra la grabación del admin): funciona con
- *    UNA grabación por seña.
- *  - Clasificador entrenado (`ml/entrenar.py`): aprende de muchas
- *    grabaciones y personas; se usa si existe el archivo del modelo y conoce
- *    la seña.
- * Se aprueba si cualquiera de los dos reconoce la seña con confianza. En
- * una app para aprender, rechazar una seña bien hecha frustra más que
- * aceptar una casi correcta.
+ * Junta en una sola predicción, la de la seña pedida, las señas que se hacen
+ * igual que ella (sumando sus probabilidades). Las demás quedan como están.
+ */
+export function unirEquivalentes(mejores: Prediccion[], sena: Pick<Sena, 'id' | 'palabra'>): Prediccion[] {
+  const grupo = SENAS_EQUIVALENTES.find((g) => g.includes(clavePalabra(sena.palabra)));
+  if (!grupo) return mejores;
+  const esEquivalente = (p: Prediccion) => p.senaId === sena.id || grupo.includes(clavePalabra(p.palabra));
+  const equivalentes = mejores.filter(esEquivalente);
+  if (!equivalentes.length) return mejores;
+  const probabilidad = equivalentes.reduce((suma, p) => suma + p.probabilidad, 0);
+  return [{ senaId: sena.id, palabra: sena.palabra, probabilidad }, ...mejores.filter((p) => !esEquivalente(p))]
+    .sort((a, b) => b.probabilidad - a.probabilidad);
+}
+
+/**
+ * Seguridad mínima del clasificador para aprobar una seña en la lección (75 %). El umbral que
+ * calcula `ml/entrenar.py` (`umbralSugerido`, cerca de 95 %) sirve para medir el modelo, pero en
+ * la práctica rechazaba señas bien hechas.
+ */
+export const UMBRAL_APROBACION = 0.75;
+
+/** Frames con manos que pide el modo "solo detección" (señas aún sin entrenar). */
+const FRAMES_DETECCION = 8;
+
+/** Cantidad de frames en que se ven las manos requeridas. */
+function framesConManos(captura: CapturaCruda, manosRequeridas: 1 | 2): number {
+  return seguirManos(aIsotropico(captura)).filter((p) => (manosRequeridas === 2 ? p[0] && p[1] : p[0] || p[1])).length;
+}
+
+/**
+ * Punto único para decidir si una persona hizo bien una seña: usa el
+ * clasificador entrenado (`ml/entrenar.py`) si existe y conoce la seña: si
+ * no, solo verifica que se vieron las manos (seña todavía sin entrenar).
  */
 @Injectable({ providedIn: 'root' })
 export class ReconocedorSenasService {
@@ -67,37 +88,43 @@ export class ReconocedorSenasService {
   }
 
   async evaluar(sena: Sena, captura: CapturaCruda): Promise<EvaluacionSena> {
-    const modelo = modeloDeSena(sena);
-    const referencia = modelo ? evaluarCaptura(modelo, captura) : undefined;
-
     const clf = await this.clasificador();
-    let clasificador: EvaluacionSena['clasificador'];
-    let aprobadoPorClasificador = false;
     if (clf?.conoce(sena.id)) {
-      const mejores = clf.predecir(captura);
+      const mejores = unirEquivalentes(clf.predecir(captura), sena);
       const propia = mejores.find((p) => p.senaId === sena.id);
-      clasificador = { probabilidad: propia?.probabilidad ?? 0, mejores: mejores.slice(0, 3) };
-      aprobadoPorClasificador = mejores[0]?.senaId === sena.id && mejores[0].probabilidad >= clf.umbralSugerido;
-    }
-
-    if (referencia || clasificador) {
-      const pctClasificador = Math.round((clasificador?.probabilidad ?? 0) * 100);
-      const usarClasificador = aprobadoPorClasificador && !referencia?.esCoincidente;
-      const sinManos = (!referencia || !!referencia.motivo) && !clasificador?.mejores.length;
+      const clasificador = { probabilidad: propia?.probabilidad ?? 0, mejores: mejores.slice(0, 3) };
+      const aprobado = mejores[0]?.senaId === sena.id && mejores[0].probabilidad >= UMBRAL_APROBACION;
       return {
-        similitudPct: usarClasificador || !referencia ? pctClasificador : referencia.similitudPct,
-        aprobado: !!referencia?.esCoincidente || aprobadoPorClasificador,
-        fuente: usarClasificador || !referencia ? 'clasificador' : 'referencia',
-        espejo: !usarClasificador && !!referencia?.espejo,
-        sinManos,
-        referencia,
+        similitudPct: Math.round(clasificador.probabilidad * 100),
+        aprobado,
+        fuente: 'clasificador',
+        espejo: false,
+        sinManos: !mejores.length,
         clasificador,
       };
     }
 
-    // Seña aún sin calibrar ni entrenar: solo se verifica que se vieron las manos.
+    // Seña aún sin entrenar: solo se verifica que se vieron las manos.
     const vistas = framesConManos(captura, 1);
     const aprobado = vistas >= FRAMES_DETECCION;
     return { similitudPct: aprobado ? 80 : 20, aprobado, fuente: 'deteccion', espejo: false, sinManos: !aprobado };
+  }
+
+  /**
+   * Qué decirle al alumno sobre su intento (ver retroalimentacion.ts): en vez de
+   * "intenta de nuevo", qué cambiar para lograrlo la próxima vez.
+   */
+  async explicar(sena: Sena, captura: CapturaCruda, evaluacion: EvaluacionSena): Promise<Retroalimentacion> {
+    const clf = evaluacion.fuente === 'clasificador' ? await this.clasificador() : null;
+    return retroalimentar({
+      senaId: sena.id,
+      palabra: sena.palabra,
+      aprobado: evaluacion.aprobado,
+      sinModelo: evaluacion.fuente === 'deteccion',
+      medidas: evaluacion.sinManos ? null : medirIntento(captura),
+      perfil: clf?.perfil(sena.id),
+      mejores: evaluacion.clasificador?.mejores,
+      umbral: UMBRAL_APROBACION,
+    });
   }
 }

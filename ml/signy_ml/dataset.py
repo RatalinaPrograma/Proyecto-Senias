@@ -1,4 +1,4 @@
-"""Carga y validación del dataset que exporta Signy AI Studio.
+"""Validación del dataset descargado de Supabase (`supabase_descarga.descargar_dataset`).
 
 Formato (`signy-dataset`, versión 1):
 {
@@ -13,13 +13,12 @@ Formato (`signy-dataset`, versión 1):
 cual las entrega MediaPipe) y `l` su lateralidad (opcional).
 `participante` identifica a la persona que hizo la seña (anónima: p1, p2, …),
 según el campo "Persona" del entrenador o, si quedó vacío, la cuenta que grabó.
+Solo se usa para medir con personas que el modelo no vio: el modelo final se entrena con todas.
 """
 from __future__ import annotations
 
-import json
 from collections import Counter
 from dataclasses import dataclass, field
-from pathlib import Path
 
 import numpy as np
 
@@ -32,8 +31,10 @@ class DatasetInvalido(ValueError):
 class Muestra:
     id: int
     sena_id: int
-    participante: str
     captura: dict  # forma "expandida": manos como np.ndarray (21, 3)
+    participante: str = "desconocido"
+    tipo: str = "dinamica"
+    manos_requeridas: int = 1
 
 
 @dataclass
@@ -47,6 +48,13 @@ class Dataset:
     def participantes(self) -> set[str]:
         return {m.participante for m in self.muestras}
 
+    def personas_por_sena(self) -> dict[int, int]:
+        """Cuántas personas distintas grabaron cada seña."""
+        personas: dict[int, set[str]] = {}
+        for m in self.muestras:
+            personas.setdefault(m.sena_id, set()).add(m.participante)
+        return {sena_id: len(p) for sena_id, p in personas.items()}
+
     def palabras_repetidas(self) -> dict[str, list[int]]:
         """Palabras que aparecen en más de una seña con muestras (p. ej. "hola" en dos subniveles)."""
         por_palabra: dict[str, list[int]] = {}
@@ -58,13 +66,6 @@ class Dataset:
         """Nombre para reportes: la palabra, o "palabra (#id)" si otra seña se llama igual."""
         palabra = self.senas[sena_id]
         return f"{palabra} (#{sena_id})" if palabra.strip().lower() in self.palabras_repetidas() else palabra
-
-    def personas_por_sena(self) -> dict[int, int]:
-        """Cuántas personas distintas grabaron cada seña."""
-        personas: dict[int, set[str]] = {}
-        for m in self.muestras:
-            personas.setdefault(m.sena_id, set()).add(m.participante)
-        return {sena_id: len(p) for sena_id, p in personas.items()}
 
 
 def expandir_captura(compacta: dict) -> dict:
@@ -82,8 +83,7 @@ def expandir_captura(compacta: dict) -> dict:
     return {"ancho": int(compacta["ancho"]), "alto": int(compacta["alto"]), "frames": frames}
 
 
-def cargar_dataset(ruta: str | Path) -> Dataset:
-    datos = json.loads(Path(ruta).read_text(encoding="utf-8"))
+def leer_dataset(datos: dict) -> Dataset:
     if datos.get("formato") != "signy-dataset":
         raise DatasetInvalido("El archivo no es un dataset de Signy (falta formato='signy-dataset').")
     if datos.get("version") != 1:
@@ -95,8 +95,9 @@ def cargar_dataset(ruta: str | Path) -> Dataset:
         if sena_id not in senas:
             raise DatasetInvalido(f"La muestra {m.get('id')} apunta a la seña {sena_id}, que no está en 'senas'.")
         ds.muestras.append(Muestra(
-            id=int(m["id"]), sena_id=sena_id, participante=str(m.get("participante") or "desconocido"),
-            captura=expandir_captura(m["captura"]),
+            id=int(m["id"]), sena_id=sena_id, captura=expandir_captura(m["captura"]),
+            participante=str(m.get("participante") or "desconocido"),
+            tipo=str(m.get("tipo") or "dinamica"), manos_requeridas=int(m.get("manosRequeridas") or 1),
         ))
     if not ds.muestras:
         raise DatasetInvalido("El dataset no tiene muestras.")

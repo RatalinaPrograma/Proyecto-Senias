@@ -509,7 +509,7 @@ describe('LessonPage', () => {
     });
 
     const resultado = (r: Partial<EvaluacionSena>): EvaluacionSena => ({
-      similitudPct: 0, aprobado: false, fuente: 'referencia', espejo: false, sinManos: false, ...r,
+      similitudPct: 0, aprobado: false, fuente: 'deteccion', espejo: false, sinManos: false, ...r,
     });
 
     it('registra el intento con el puntaje real del reconocedor', async () => {
@@ -518,7 +518,7 @@ describe('LessonPage', () => {
       expect(component.camStage).toBe('result');
       expect(component.camPassed).toBeTrue();
       expect(component.camScore).toBe(88);
-      expect(component.camFuente).toBe('referencia');
+      expect(component.camFuente).toBe('deteccion');
       expect(contenidoSpy.registrarIntento).toHaveBeenCalledWith('user-1', component.senaCamara.id, true, 88);
     });
 
@@ -539,6 +539,70 @@ describe('LessonPage', () => {
       evaluar.and.resolveTo(resultado({ similitudPct: 91, aprobado: true, fuente: 'clasificador' }));
       await (component as any).terminarGrabacion();
       expect(component.camFuente).toBe('clasificador');
+    });
+
+    it('si no se aprueba, muestra pistas concretas de qué cambiar (no un "intenta de nuevo")', async () => {
+      evaluar.and.resolveTo(resultado({ sinManos: false, aprobado: false, fuente: 'clasificador', similitudPct: 30 }));
+      spyOn(TestBed.inject(ReconocedorSenasService), 'explicar').and.resolveTo({
+        titulo: 'Casi: se pareció más a «chao»',
+        pistas: [{ codigo: 'rapido', texto: 'Lo hiciste muy rápido: hazla más pausada.' }],
+      });
+      component.fase = 'record';
+      await (component as any).terminarGrabacion();
+      fixture.detectChanges();
+
+      expect(component.camMsg).toBe('Casi: se pareció más a «chao»');
+      const pistas = Array.from(fixture.nativeElement.querySelectorAll('.cam-pistas li')).map((li: any) => li.textContent.trim());
+      expect(pistas).toEqual(['Lo hiciste muy rápido: hazla más pausada.']);
+    });
+
+    it('seña perfecta (100 %): trofeo, felicitación y confeti, sin pistas', async () => {
+      evaluar.and.resolveTo(resultado({ sinManos: false, aprobado: true, fuente: 'clasificador', similitudPct: 100 }));
+      spyOn(TestBed.inject(ReconocedorSenasService), 'explicar').and.resolveTo({
+        titulo: '¡Perfecta! 💯', felicitacion: 'Hiciste «hola» de forma impecable.', nivel: 'perfecta', pistas: [],
+      });
+      component.fase = 'record';
+      await (component as any).terminarGrabacion();
+      fixture.detectChanges();
+
+      const el: HTMLElement = fixture.nativeElement;
+      expect(component.camEmoji).toBe('🏆');
+      expect(el.querySelector('.cam-felicitacion')?.textContent).toContain('impecable');
+      expect(el.querySelector('.cam-frame .confetti')).not.toBeNull();
+      expect(el.querySelectorAll('.cam-pistas li').length).toBe(0);
+    });
+
+    it('si no se aprueba, avisa desde qué porcentaje se aprueba', async () => {
+      evaluar.and.resolveTo(resultado({ sinManos: false, aprobado: false, fuente: 'clasificador', similitudPct: 60 }));
+      component.fase = 'record';
+      await (component as any).terminarGrabacion();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.cam-result-actions')?.previousElementSibling?.textContent).toContain('se aprueba desde 75%');
+    });
+
+    it('si armar las pistas falla, igual muestra un resultado con el mensaje general', async () => {
+      evaluar.and.resolveTo(resultado({ aprobado: false, fuente: 'clasificador' }));
+      spyOn(TestBed.inject(ReconocedorSenasService), 'explicar').and.rejectWith(new Error('modelo raro'));
+      await (component as any).terminarGrabacion();
+      expect(component.camStage).toBe('result');
+      expect(component.camRetro).toBeNull();
+      expect(component.camMsg).toContain('no coincidió');
+    });
+
+    it('el indicador en vivo cambia solo cuando el estado se mantiene unos frames (sin parpadeo)', () => {
+      const actualizar = (v: boolean) => (component as any).actualizarIndicadorManos(v);
+      actualizar(true);
+      actualizar(true);
+      expect(component.camManoVisible).toBeNull();
+      actualizar(true);
+      expect(component.camManoVisible).toBeTrue();
+      actualizar(false);
+      actualizar(true); // un frame suelto no lo cambia
+      expect(component.camManoVisible).toBeTrue();
+      actualizar(false);
+      actualizar(false);
+      actualizar(false);
+      expect(component.camManoVisible).toBeFalse();
     });
 
     it('si falla el registro del intento (sin red), igual muestra el resultado', async () => {

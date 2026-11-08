@@ -55,13 +55,13 @@ export class HomePage {
     if (!this.niveles.length) this.cargando = true;
     this.error = '';
     try {
-      const { data: userData } = await this.supabaseService.getUser();
-      if (!userData?.user) return;
+      const { user } = await this.supabaseService.getUsuarioLocal();
+      if (!user) return;
 
       const [niveles, stats, { data: perfil }] = await Promise.all([
-        this.contenidoService.obtenerMapaDeAprendizaje(userData.user.id),
-        this.contenidoService.getMisStats(userData.user.id),
-        this.supabaseService.getProfile(userData.user.id),
+        this.contenidoService.obtenerMapaDeAprendizaje(user.id),
+        this.contenidoService.getMisStats(user.id),
+        this.supabaseService.getProfile(user.id),
       ]);
       this.niveles = niveles;
       this.stats = stats;
