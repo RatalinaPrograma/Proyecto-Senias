@@ -1,15 +1,25 @@
 # Pruebas unitarias de Signy
 
-Este branch agrega **377 pruebas unitarias** (Jasmine + Karma, el mismo
-stack que ya trae el proyecto de fábrica) sobre el estado actual de `main`.
-No cambia ninguna funcionalidad de la app — es 100% código de tests, salvo
-un ajuste chico y necesario que se explica más abajo.
+La app tiene **663 pruebas unitarias** (Jasmine + Karma, el mismo stack que trae
+Angular de fábrica). Última ejecución: 08/11/2026, rama `v1` — 663 aprobadas,
+1 omitida (`PracticaPage`, en cuarentena), 0 fallidas.
+
+| Cobertura | Valor |
+|---|---|
+| Sentencias | 79,06 % (4114/5203) |
+| Ramas | 64,15 % (1405/2190) |
+| Funciones | 77,23 % (838/1085) |
+| Líneas | 80,85 % (3671/4540) |
+
+Las primeras 377 pruebas llegaron en la rama `pruebas-unitarias`; el resto se
+agregó junto con cada funcionalidad nueva (reconocimiento de señas, AI Studio,
+Dashboard de KPIs, retroalimentación de la cámara, etc.).
 
 ## Cómo correrlas
 
 ```bash
 cd signy
-npm install   # si no lo hiciste después de bajar este branch
+npm install   # si no lo hiciste después de bajar la rama
 npm test
 ```
 
@@ -29,6 +39,9 @@ Se abre una ventana de Chrome real y corre todo. Tarda unos segundos.
 | `LessonPage` | Las 4 fases de una lección completa: flashcards, emparejar, quiz **con repaso**, cámara, celebraciones de racha/nivel |
 | `AdminVocabularioPage` | CRUD de niveles/subniveles/señas con sus reglas de duplicados |
 | Componentes chicos (`RachaCalendar`, `SenaIcon`, `GifTile`, `CachedSrcDirective`) | Lógica visual pura |
+| `motor-senas` | MediaPipe (con respaldo de GPU a CPU), captura y seguimiento de manos, características del clasificador, paridad con Python, retroalimentación al alumno por niveles (aprobación desde 75 %, felicitación al 100 %) y señas equivalentes (Hola y Chao) |
+| `AdminAiStudioPage` | Grabación del dataset, participantes y avatar 3D de referencia |
+| `AdminDashboardPage`, `kpis.ts` | Cálculo y presentación de los KPIs de uso |
 
 Todo esto prueba la **lógica de cada archivo `.ts`** — no lo que se ve en
 pantalla. Ningún test acá abre el HTML y revisa "¿aparece el botón?" — esa
@@ -41,10 +54,6 @@ es una capa distinta (tests de renderizado / e2e) que todavía no existe.
   o sea, ya estaba rota antes de este trabajo. Hay que decidir si se arregla
   o se borra; cuando se decida, se reemplaza el placeholder por una spec de
   verdad.
-- **La heurística de movimiento de la cámara** (`LessonPage.grabar()`): está
-  marcada en el propio código como algo temporal hasta que se conecte
-  MediaPipe de verdad. No vale la pena testear a fondo algo que se va a
-  reemplazar.
 - **Renderizado de HTML / interacción de UI**: como se dijo arriba, es una
   categoría aparte.
 
