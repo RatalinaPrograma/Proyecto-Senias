@@ -1,15 +1,15 @@
 # Pruebas unitarias de Signy
 
-La app tiene **663 pruebas unitarias** (Jasmine + Karma, el mismo stack que trae
-Angular de fábrica). Última ejecución: 08/11/2026, rama `v1` — 663 aprobadas,
+La app tiene **664 pruebas unitarias** (Jasmine + Karma, el mismo stack que trae
+Angular de fábrica). Última ejecución: 08/11/2026, rama `main` — 664 aprobadas,
 1 omitida (`PracticaPage`, en cuarentena), 0 fallidas.
 
 | Cobertura | Valor |
 |---|---|
-| Sentencias | 79,06 % (4114/5203) |
-| Ramas | 64,15 % (1405/2190) |
-| Funciones | 77,23 % (838/1085) |
-| Líneas | 80,85 % (3671/4540) |
+| Sentencias | 79,09 % (4120/5209) |
+| Ramas | 64,12 % (1405/2191) |
+| Funciones | 77,3 % (838/1084) |
+| Líneas | 80,88 % (3678/4547) |
 
 Las primeras 377 pruebas llegaron en la rama `pruebas-unitarias`; el resto se
 agregó junto con cada funcionalidad nueva (reconocimiento de señas, AI Studio,
@@ -32,7 +32,7 @@ Se abre una ventana de Chrome real y corre todo. Tarda unos segundos.
 | `ContenidoService` | Rachas, congeladores, vidas, XP, logros, ranking, avance de nivel — el corazón del negocio |
 | `SupabaseService` | Sesión, perfiles, amigos/follows, subida de avatar, cambio de contraseña, borrado seguro de media |
 | `NotificationsService` | Config, permisos, y los horarios límite de la alerta de racha en riesgo |
-| `TtsService`, `ImageCacheService` | Caché de voz/preferencias, caché de medios en disco |
+| `TtsService`, `ImageCacheService` | Caché de voz/preferencias, caché de medios en disco (con tiempo máximo de precarga) |
 | Guards (`auth`, `guest`, `admin`, `lesson`) | Quién puede entrar a cada ruta |
 | `LoginPage`, `RegisterPage` | Validación de formularios, 2FA |
 | `HomePage`, `ProfilePage`, `SettingsPage`, `FriendsPage`, `OnboardingPage` | Carga de datos, tienda de congeladores, 2FA, eliminar cuenta, debounce de búsqueda |

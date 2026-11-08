@@ -11,6 +11,14 @@ La base tiene **16 tablas propias + `auth.users`**, todas con RLS. `Modelo de da
 | Progreso y gamificación | `user_stats`, `racha_historial`, `progreso_nivel_usuario`, `progreso_subnivel_usuario`, `usuario_logros` |
 | Práctica e IA | `intentos_ejercicio`, `practica_fallos`, `muestras_sena` (dataset: solo puntos de las manos, sin video) |
 
+## Capturas (evidencia)
+
+| Archivo | Qué muestra |
+|---|---|
+| `Capturas/01_supabase_tablas.png` | Las 16 tablas del esquema `public` en el Table Editor |
+| `Capturas/02_supabase_edge_functions.png` | Edge Functions desplegadas: `delete-account` y `password-reset` (las usa la app) y `generate-master-pack` (prueba de la rama `dev`, la versión final no la usa) |
+| `Capturas/03_supabase_storage.png` | Buckets de Storage: `icons`, `avatars` y `senas-media`, con sus políticas |
+
 ## Scripts SQL (12)
 
 | Archivo | Propósito |

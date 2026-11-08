@@ -26,6 +26,11 @@ describe('ImageCacheService', () => {
   });
 
   describe('precargarSubnivel', () => {
+    // Pre-decodificar crea <img>/<video> que sí van a la red: aquí solo se prueba la
+    // descarga y el progreso. (En Windows, resolver un host falso como "cdn" tarda más
+    // que el límite de 5 s de Jasmine.)
+    beforeEach(() => spyOn(service as any, 'precalentarMedia').and.resolveTo());
+
     it('no hace nada con una lista vacía', async () => {
       await service.precargarSubnivel([]);
       expect(window.caches.open).not.toHaveBeenCalled();
@@ -68,6 +73,27 @@ describe('ImageCacheService', () => {
       await service.precargarSubnivel(['https://cdn/rota.gif', 'https://cdn/buena.gif'], (c, t) => progreso.push([c, t]));
 
       expect(progreso.length).toBe(2);
+    });
+  });
+
+  describe('precalentarMedia (imágenes)', () => {
+    it('no deja pegada la carga si una imagen nunca termina de cargar', async () => {
+      const ImagenReal = window.Image;
+      (window as any).Image = class { onload: unknown; onerror: unknown; set src(_v: string) {} };
+      jasmine.clock().install();
+      try {
+        let listo = false;
+        const p = (service as any).precalentarMedia('https://cdn/lenta.gif', 'blob:lenta').then(() => (listo = true));
+        jasmine.clock().tick(1799);
+        await Promise.resolve();
+        expect(listo).toBeFalse();
+        jasmine.clock().tick(1);
+        await p;
+        expect(listo).toBeTrue();
+      } finally {
+        jasmine.clock().uninstall();
+        (window as any).Image = ImagenReal;
+      }
     });
   });
 

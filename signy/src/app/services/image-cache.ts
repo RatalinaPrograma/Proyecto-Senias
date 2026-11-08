@@ -112,14 +112,24 @@ export class ImageCacheService {
 
     return new Promise<void>((resolve) => {
       const img = new Image();
+      // Igual que con el video: una imagen lenta (o una URL que el sistema tarda en
+      // resolver) no puede dejar pegada la barra de carga de la lección.
+      let listo = false;
+      const finalizar = () => {
+        if (listo) return;
+        listo = true;
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(finalizar, 1800);
       img.onload = () => {
         if (typeof img.decode === 'function') {
-          img.decode().catch(() => {}).finally(() => resolve());
+          img.decode().catch(() => {}).finally(finalizar);
         } else {
-          resolve();
+          finalizar();
         }
       };
-      img.onerror = () => resolve();
+      img.onerror = finalizar;
       img.src = blobUrl;
     });
   }
