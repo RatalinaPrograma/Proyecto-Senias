@@ -205,14 +205,20 @@ por seña, medición con personas nuevas y confusiones más frecuentes) queda en
 ## 📱 Cómo lo usa la app
 
 `ReconocedorSenasService` usa el clasificador entrenado (el modelo de este pipeline) si el archivo
-existe y conoce la seña: la aprueba solo si la seña es su primera opción y supera el umbral. Si
+existe y conoce la seña: la aprueba si le asigna al menos **75 % de seguridad** (`UMBRAL_APROBACION` en
+`motor-senas/reconocedor.service.ts`). El umbral que calcula este pipeline (`umbralSugerido`, cercano a 95 %)
+se guarda en el modelo como referencia y se muestra en el reporte, pero en la lección rechazaba señas bien
+hechas, por eso la app usa el suyo. Si
 todavía no la conoce (sin entrenar o sin suficientes muestras), cae a solo verificar que se vieron
 las manos, sin evaluar si la seña está bien hecha — por eso conviene entrenar antes de publicar una
 seña nueva a los alumnos.
 
-Cuando la seña no se aprueba, la lección da una pista concreta para el siguiente intento (no se vio
-la mano, fue muy rápido, faltó la segunda mano, se pareció más a otra seña…): ver
-`motor-senas/retroalimentacion.ts`.
+La retroalimentación depende del resultado (ver `motor-senas/retroalimentacion.ts`):
+- **Menos de 75 %**: no se aprueba y se da una pista concreta para el siguiente intento (no se vio la
+  mano, fue muy rápido, faltó la segunda mano, se pareció más a otra seña…).
+- **75 a 89 %**: se aprueba con hasta dos consejos reales para hacerla mejor.
+- **90 a 99 %**: se aprueba con, como mucho, un consejo opcional.
+- **100 %**: solo felicitación (trofeo y confeti), sin consejos.
 
 ---
 
@@ -227,6 +233,9 @@ la mano, fue muy rápido, faltó la segunda mano, se pareció más a otra seña�
 
 ## Detalle técnico
 
+- **Señas equivalentes**: en LSCh "Hola" y "Chao" se hacen igual. Se entrenan como clases separadas, pero
+  al evaluar la app suma sus probabilidades y acepta cualquiera de las dos (`SENAS_EQUIVALENTES` en
+  `motor-senas/reconocedor.service.ts`). Si aparece otro par así, basta agregarlo a esa lista.
 - **Características** (`caracteristicas.py` = `clasificador.ts`): coordenadas isotrópicas (corrige la
   relación de aspecto de la cámara), seguimiento estable de las dos manos, remuestreo a N frames,
   centrado en la muñeca media y escalado por el tamaño de mano mediano; mano A + mano B (o ceros) +

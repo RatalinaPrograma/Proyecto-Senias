@@ -556,6 +556,30 @@ describe('LessonPage', () => {
       expect(pistas).toEqual(['Lo hiciste muy rápido: hazla más pausada.']);
     });
 
+    it('seña perfecta (100 %): trofeo, felicitación y confeti, sin pistas', async () => {
+      evaluar.and.resolveTo(resultado({ sinManos: false, aprobado: true, fuente: 'clasificador', similitudPct: 100 }));
+      spyOn(TestBed.inject(ReconocedorSenasService), 'explicar').and.resolveTo({
+        titulo: '¡Perfecta! 💯', felicitacion: 'Hiciste «hola» de forma impecable.', nivel: 'perfecta', pistas: [],
+      });
+      component.fase = 'record';
+      await (component as any).terminarGrabacion();
+      fixture.detectChanges();
+
+      const el: HTMLElement = fixture.nativeElement;
+      expect(component.camEmoji).toBe('🏆');
+      expect(el.querySelector('.cam-felicitacion')?.textContent).toContain('impecable');
+      expect(el.querySelector('.cam-frame .confetti')).not.toBeNull();
+      expect(el.querySelectorAll('.cam-pistas li').length).toBe(0);
+    });
+
+    it('si no se aprueba, avisa desde qué porcentaje se aprueba', async () => {
+      evaluar.and.resolveTo(resultado({ sinManos: false, aprobado: false, fuente: 'clasificador', similitudPct: 60 }));
+      component.fase = 'record';
+      await (component as any).terminarGrabacion();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.cam-result-actions')?.previousElementSibling?.textContent).toContain('se aprueba desde 75%');
+    });
+
     it('si armar las pistas falla, igual muestra un resultado con el mensaje general', async () => {
       evaluar.and.resolveTo(resultado({ aprobado: false, fuente: 'clasificador' }));
       spyOn(TestBed.inject(ReconocedorSenasService), 'explicar').and.rejectWith(new Error('modelo raro'));

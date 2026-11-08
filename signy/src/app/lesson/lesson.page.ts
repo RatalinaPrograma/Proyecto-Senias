@@ -23,6 +23,7 @@ import {
   MediaPipeManosService,
   ReconocedorSenasService,
   Retroalimentacion,
+  UMBRAL_APROBACION,
 } from '../motor-senas';
 
 addIcons({
@@ -191,6 +192,17 @@ export class LessonPage implements OnInit, OnDestroy {
   camFuente: 'clasificador' | 'deteccion' = 'deteccion';
   /** Qué cambiar para lograr la seña (pistas concretas, ver motor-senas/retroalimentacion.ts). */
   camRetro: Retroalimentacion | null = null;
+  /** Seguridad mínima (en %) con que se aprueba la seña, para mostrarla al alumno. */
+  readonly pctAprobacion = Math.round(UMBRAL_APROBACION * 100);
+
+  get camEmoji(): string {
+    if (!this.camPassed) return '🤔';
+    switch (this.camRetro?.nivel) {
+      case 'perfecta': return '🏆';
+      case 'excelente': return '🌟';
+      default: return '✅';
+    }
+  }
   /** En vivo, durante la cuenta regresiva y la grabación: si se ve la mano (null = aún no se sabe). */
   camManoVisible: boolean | null = null;
   /** Mostrar otra vez el video de la seña en la pantalla de resultado, para comparar antes de reintentar. */

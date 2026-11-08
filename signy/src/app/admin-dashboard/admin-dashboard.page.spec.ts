@@ -162,7 +162,7 @@ describe('AdminDashboardPage', () => {
     expect(page.modelo).toEqual({
       exactitud: 0.7045,
       personasNuevas: 0.278,
-      umbral: 0.95,
+      umbral: 0.75, // la seguridad con que la app aprueba (UMBRAL_APROBACION), no la del entrenamiento
       senas: 2,
       muestras: 169,
       creado: '2026-10-26T04:17:41+00:00',

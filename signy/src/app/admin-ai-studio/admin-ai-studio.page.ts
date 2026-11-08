@@ -59,6 +59,7 @@ import {
   construirDatasetExportable,
   dibujarManos,
   sincronizarTamanoCanvas,
+  UMBRAL_APROBACION,
 } from '../motor-senas';
 import { expandirCaptura } from '../motor-senas/dataset';
 // Solo el tipo: el renderizador (y three.js) se descarga con import() al abrir la pestaña Avatar.
@@ -508,7 +509,7 @@ export class AdminAiStudioPage implements OnInit, OnDestroy {
     this.ngZone.run(() => {
       this.prediccionesClasificador = predicciones;
       this.mejorPrediccion = top
-        ? { palabra: top.palabra, similitud: Math.round(top.probabilidad * 100), esCoincidente: top.probabilidad >= (clf?.umbralSugerido ?? 0.6) }
+        ? { palabra: top.palabra, similitud: Math.round(top.probabilidad * 100), esCoincidente: top.probabilidad >= UMBRAL_APROBACION }
         : null;
     });
   }

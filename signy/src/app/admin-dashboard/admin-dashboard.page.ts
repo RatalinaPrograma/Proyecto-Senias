@@ -22,7 +22,7 @@ import {
   trophyOutline,
 } from 'ionicons/icons';
 import { SupabaseService } from '../services/supabase';
-import { ReconocedorSenasService } from '../motor-senas';
+import { ReconocedorSenasService, UMBRAL_APROBACION } from '../motor-senas';
 import { BarrasComponent, ItemBarra } from './graficos/barras.component';
 import { GraficoLineaComponent, PuntoSerie } from './graficos/grafico-linea.component';
 import { MapaCalorComponent } from './graficos/mapa-calor.component';
@@ -275,7 +275,7 @@ export class AdminDashboardPage implements OnInit, OnDestroy {
     this.modelo = {
       exactitud: num(m['exactitud']),
       personasNuevas: num(m['exactitudPersonasNuevas']),
-      umbral: clf.umbralSugerido,
+      umbral: UMBRAL_APROBACION,
       // La clase 0 es "ninguna seña", no cuenta como seña reconocida.
       senas: clf.modelo.clases.filter((c) => c.senaId > 0).length,
       muestras: (num(m['muestrasEntrenamiento']) ?? 0) + (num(m['muestrasPrueba']) ?? 0) || null,

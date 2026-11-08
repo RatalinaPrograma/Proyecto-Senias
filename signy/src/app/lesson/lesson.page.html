@@ -277,9 +277,19 @@
           </div>
         </div>
 
+        <div class="confetti" aria-hidden="true" *ngIf="camStage === 'result' && camRetro?.nivel === 'perfecta'">
+          <span
+            *ngFor="let c of confeti"
+            class="confetti-bit"
+            [style.left.%]="c.left"
+            [style.animation-delay]="c.delay"
+            [style.background]="c.color">
+          </span>
+        </div>
         <div class="cam-idle" *ngIf="camStage === 'result'">
-          <span class="cam-emoji">{{ camPassed ? '✅' : '🤔' }}</span>
+          <span class="cam-emoji" [class.cam-emoji-perfecta]="camRetro?.nivel === 'perfecta'">{{ camEmoji }}</span>
           <h3>{{ camMsg }}</h3>
+          <p class="cam-felicitacion" *ngIf="camPassed && camRetro?.felicitacion">{{ camRetro!.felicitacion }}</p>
           <ul class="cam-pistas" *ngIf="camRetro?.pistas?.length">
             <li *ngFor="let pista of camRetro!.pistas">{{ pista.texto }}</li>
           </ul>
@@ -294,6 +304,7 @@
             <ng-container *ngSwitchCase="'clasificador'">Seguridad del reconocimiento:</ng-container>
             <ng-container *ngSwitchDefault>Manos detectadas:</ng-container>
             {{ ' ' }}<strong>{{ camScore }}%</strong>
+            <ng-container *ngIf="camFuente === 'clasificador' && !camPassed"> · se aprueba desde {{ pctAprobacion }}%</ng-container>
           </p>
           <div class="cam-result-actions">
             <ion-button fill="outline" (click)="reintentarCamara()">Reintentar</ion-button>

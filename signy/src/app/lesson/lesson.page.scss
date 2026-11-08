@@ -1196,7 +1196,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .flame-glow, .flame-outer, .flame-inner, .confetti-bit,
+  .flame-glow, .flame-outer, .flame-inner, .confetti-bit, .cam-emoji-perfecta,
   .flame-badge, .racha-numero, .racha-label, .racha-semana,
   .congelador-banner, .racha-mensaje, .racha-cta,
   .leccion-completa .happy-fox, .leccion-completa h2, .leccion-completa p,
@@ -1370,6 +1370,26 @@
   &.ok { border-color: var(--signy-success); }
 }
 
+// Felicitación de una seña aprobada (va antes de las pistas).
+.cam-felicitacion {
+  margin: 6px 0 0;
+  max-width: 330px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--signy-cream);
+}
+
+// Seña perfecta (100 %): el trofeo "salta" una vez.
+.cam-emoji-perfecta {
+  animation: salto-perfecta 0.7s cubic-bezier(.3, 1.6, .5, 1) both;
+}
+
+@keyframes salto-perfecta {
+  from { transform: scale(0.3) rotate(-12deg); opacity: 0; }
+  to { transform: scale(1) rotate(0); opacity: 1; }
+}
+
 // Pistas concretas de qué cambiar para el siguiente intento.
 .cam-pistas {
   list-style: none;
@@ -1393,10 +1413,10 @@
     color: var(--signy-cream);
 
     &::before {
-      content: '→';
+      content: '•';
       position: absolute;
-      left: 11px;
-      top: 9px;
+      left: 12px;
+      top: 8px;
       color: var(--signy-fox);
       font-weight: 800;
     }

@@ -216,11 +216,55 @@ describe('motor-senas / retroalimentación', () => {
       expect(codigos(r)).toEqual(['general']);
     });
 
-    it('aprobada: felicita y, como mucho, una sugerencia', () => {
-      const r = retroalimentar({ ...base, aprobado: true, medidas: medidas({ duracionMs: 300, tamano: 0.05 }), perfil: PERFIL });
+    it('aprobada con 90 a 99 %: excelente y, como mucho, una sugerencia', () => {
+      const r = retroalimentar({
+        ...base, aprobado: true, medidas: medidas({ duracionMs: 300, tamano: 0.05 }), perfil: PERFIL,
+        mejores: [{ senaId: 7, palabra: 'hola', probabilidad: 0.93 }],
+      });
       expect(r.titulo).toBe('¡Excelente! Seña reconocida.');
+      expect(r.nivel).toBe('excelente');
+      expect(r.felicitacion).toContain('«hola»');
       expect(r.pistas.length).toBe(1);
-      expect(r.pistas[0].texto).toMatch(/^Para que salga aún mejor: /);
+      expect(r.pistas[0].texto).toMatch(/^Para que salga perfecta: /);
+    });
+
+    it('aprobada al 100 %: solo felicita, sin pistas aunque haya algo que corregir', () => {
+      const r = retroalimentar({
+        ...base, aprobado: true, medidas: medidas({ duracionMs: 300, tamano: 0.05 }), perfil: PERFIL,
+        mejores: [{ senaId: 7, palabra: 'hola', probabilidad: 0.998 }],
+      });
+      expect(r.titulo).toBe('¡Perfecta! 💯');
+      expect(r.nivel).toBe('perfecta');
+      expect(r.felicitacion).toContain('impecable');
+      expect(r.pistas).toEqual([]);
+    });
+
+    it('aprobada justo (75 a 89 %): reconoce la seña y da hasta dos pistas reales', () => {
+      const r = retroalimentar({
+        ...base, aprobado: true, medidas: medidas({ duracionMs: 300, tamano: 0.05, borde: 0.5 }), perfil: PERFIL,
+        mejores: [{ senaId: 7, palabra: 'hola', probabilidad: 0.8 }],
+      });
+      expect(r.titulo).toBe('¡Bien hecha! Seña reconocida.');
+      expect(r.nivel).toBe('bien');
+      expect(r.felicitacion).toContain('80 %');
+      expect(codigos(r)).toEqual(['lejos', 'borde']);
+    });
+
+    it('aprobada justo y sin nada medible que corregir: dice a qué otra seña se parece', () => {
+      const r = retroalimentar({
+        ...base, aprobado: true, medidas: medidas(), perfil: PERFIL,
+        mejores: [{ senaId: 7, palabra: 'hola', probabilidad: 0.78 }, { senaId: 3, palabra: 'gracias', probabilidad: 0.15 }],
+      });
+      expect(codigos(r)).toEqual(['parecida']);
+      expect(r.pistas[0].texto).toContain('«gracias»');
+    });
+
+    it('aprobada justo y la duda era "ninguna seña": pide un movimiento más marcado', () => {
+      const r = retroalimentar({
+        ...base, aprobado: true, medidas: medidas(), perfil: PERFIL,
+        mejores: [{ senaId: 7, palabra: 'hola', probabilidad: 0.77 }, { senaId: 0, palabra: '(ninguna seña)', probabilidad: 0.2 }],
+      });
+      expect(codigos(r)).toEqual(['marcar']);
     });
 
     it('seña sin entrenar: no inventa una evaluación', () => {

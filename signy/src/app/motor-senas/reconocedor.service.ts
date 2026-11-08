@@ -22,6 +22,40 @@ export interface EvaluacionSena {
   clasificador?: { probabilidad: number; mejores: Prediccion[] };
 }
 
+/**
+ * Palabras que en LSCh se dicen con la misma seña (por ejemplo, "Hola" y "Chao"
+ * se hacen igual). El clasificador no puede distinguirlas, así que al practicar
+ * una de ellas también cuenta como correcta la otra.
+ */
+const SENAS_EQUIVALENTES: string[][] = [['hola', 'chao']];
+
+/** Palabra en minúsculas y sin tildes, para comparar. */
+function clavePalabra(palabra: string): string {
+  return palabra.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+}
+
+/**
+ * Junta en una sola predicción, la de la seña pedida, las señas que se hacen
+ * igual que ella (sumando sus probabilidades). Las demás quedan como están.
+ */
+export function unirEquivalentes(mejores: Prediccion[], sena: Pick<Sena, 'id' | 'palabra'>): Prediccion[] {
+  const grupo = SENAS_EQUIVALENTES.find((g) => g.includes(clavePalabra(sena.palabra)));
+  if (!grupo) return mejores;
+  const esEquivalente = (p: Prediccion) => p.senaId === sena.id || grupo.includes(clavePalabra(p.palabra));
+  const equivalentes = mejores.filter(esEquivalente);
+  if (!equivalentes.length) return mejores;
+  const probabilidad = equivalentes.reduce((suma, p) => suma + p.probabilidad, 0);
+  return [{ senaId: sena.id, palabra: sena.palabra, probabilidad }, ...mejores.filter((p) => !esEquivalente(p))]
+    .sort((a, b) => b.probabilidad - a.probabilidad);
+}
+
+/**
+ * Seguridad mínima del clasificador para aprobar una seña en la lección (75 %). El umbral que
+ * calcula `ml/entrenar.py` (`umbralSugerido`, cerca de 95 %) sirve para medir el modelo, pero en
+ * la práctica rechazaba señas bien hechas.
+ */
+export const UMBRAL_APROBACION = 0.75;
+
 /** Frames con manos que pide el modo "solo detección" (señas aún sin entrenar). */
 const FRAMES_DETECCION = 8;
 
@@ -56,10 +90,10 @@ export class ReconocedorSenasService {
   async evaluar(sena: Sena, captura: CapturaCruda): Promise<EvaluacionSena> {
     const clf = await this.clasificador();
     if (clf?.conoce(sena.id)) {
-      const mejores = clf.predecir(captura);
+      const mejores = unirEquivalentes(clf.predecir(captura), sena);
       const propia = mejores.find((p) => p.senaId === sena.id);
       const clasificador = { probabilidad: propia?.probabilidad ?? 0, mejores: mejores.slice(0, 3) };
-      const aprobado = mejores[0]?.senaId === sena.id && mejores[0].probabilidad >= clf.umbralSugerido;
+      const aprobado = mejores[0]?.senaId === sena.id && mejores[0].probabilidad >= UMBRAL_APROBACION;
       return {
         similitudPct: Math.round(clasificador.probabilidad * 100),
         aprobado,
@@ -90,7 +124,7 @@ export class ReconocedorSenasService {
       medidas: evaluacion.sinManos ? null : medirIntento(captura),
       perfil: clf?.perfil(sena.id),
       mejores: evaluacion.clasificador?.mejores,
-      umbral: clf?.umbralSugerido,
+      umbral: UMBRAL_APROBACION,
     });
   }
 }

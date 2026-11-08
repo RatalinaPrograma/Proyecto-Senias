@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import { Sena } from '../data/db-types';
 import { MediaPipeManosService, URL_WASM_MEDIAPIPE, VERSION_TASKS_VISION } from './mediapipe-manos.service';
-import { ReconocedorSenasService } from './reconocedor.service';
+import { ReconocedorSenasService, UMBRAL_APROBACION, unirEquivalentes } from './reconocedor.service';
 import { generarCaptura } from './testing/manos-sinteticas';
 import { MODELO_PARIDAD } from './testing/fixture-clasificador';
 import { CapturaCruda } from './tipos';
@@ -111,6 +111,16 @@ describe('motor-senas / ReconocedorSenasService', () => {
       expect(r.similitudPct).toBe(Math.round(r.clasificador!.probabilidad * 100));
     });
 
+    it('aprueba desde 75 % de seguridad (UMBRAL_APROBACION) y rechaza por debajo', async () => {
+      expect(UMBRAL_APROBACION).toBe(0.75);
+      const clf = (await servicio.clasificador())!;
+      const predecir = spyOn(clf, 'predecir');
+      predecir.and.returnValue([{ senaId: 1, palabra: 'HOLA', probabilidad: 0.76 }, { senaId: 2, palabra: 'SI', probabilidad: 0.24 }]);
+      expect((await servicio.evaluar(sena(1, 'HOLA'), alumno('HOLA'))).aprobado).toBeTrue();
+      predecir.and.returnValue([{ senaId: 1, palabra: 'HOLA', probabilidad: 0.74 }, { senaId: 2, palabra: 'SI', probabilidad: 0.26 }]);
+      expect((await servicio.evaluar(sena(1, 'HOLA'), alumno('HOLA'))).aprobado).toBeFalse();
+    });
+
     it('rechaza si el clasificador ve otra seña', async () => {
       const r = await servicio.evaluar(sena(1, 'HOLA'), alumno('SI'));
       expect(r.aprobado).toBeFalse();
@@ -122,5 +132,30 @@ describe('motor-senas / ReconocedorSenasService', () => {
       expect(r.clasificador).toBeUndefined();
       expect(r.fuente).toBe('deteccion');
     });
+  });
+});
+
+describe('motor-senas / unirEquivalentes (Hola y Chao son la misma seña)', () => {
+  const mejores = [
+    { senaId: 1, palabra: 'Hola', probabilidad: 0.5 },
+    { senaId: 2, palabra: 'Chao', probabilidad: 0.3 },
+    { senaId: 3, palabra: 'Gracias', probabilidad: 0.2 },
+  ];
+
+  it('al pedir "Chao", la predicción de "Hola" cuenta como la misma seña', () => {
+    const r = unirEquivalentes(mejores, sena(2, 'Chao'));
+    expect(r[0].senaId).toBe(2);
+    expect(r[0].probabilidad).toBeCloseTo(0.8, 5);
+    expect(r.map((p) => p.senaId)).toEqual([2, 3]);
+  });
+
+  it('al pedir "Hola", también suma "Chao" (sin importar mayúsculas)', () => {
+    const r = unirEquivalentes(mejores, sena(1, 'HOLA'));
+    expect(r[0]).toEqual({ senaId: 1, palabra: 'HOLA', probabilidad: jasmine.any(Number) });
+    expect(r[0].probabilidad).toBeCloseTo(0.8, 5);
+  });
+
+  it('las demás señas no cambian', () => {
+    expect(unirEquivalentes(mejores, sena(3, 'Gracias'))).toBe(mejores);
   });
 });

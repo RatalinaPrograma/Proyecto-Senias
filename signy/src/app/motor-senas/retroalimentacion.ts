@@ -207,8 +207,15 @@ export interface Pista {
   texto: string;
 }
 
+/** Qué tan bien salió una seña aprobada (según la seguridad del clasificador). */
+export type NivelLogro = 'perfecta' | 'excelente' | 'bien';
+
 export interface Retroalimentacion {
   titulo: string;
+  /** Mensaje de felicitación cuando se aprueba (va antes de las pistas). */
+  felicitacion?: string;
+  /** Solo en señas aprobadas. */
+  nivel?: NivelLogro;
   pistas: Pista[];
   /** La seña con la que más se confundió el intento, si fue otra. */
   parecidaA?: { palabra: string; probabilidad: number };
@@ -230,6 +237,10 @@ export interface DatosRetroalimentacion {
 const MAX_PISTAS = 3;
 /** Un perfil con menos muestras no es confiable para comparar. */
 const MIN_MUESTRAS_PERFIL = 3;
+/** Con esta seguridad (en %) la seña salió perfecta: solo se felicita, sin pistas. */
+export const PCT_PERFECTA = 100;
+/** Desde esta seguridad (en %) la seña salió excelente: a lo más una sugerencia. */
+export const PCT_EXCELENTE = 90;
 
 function segundos(ms: number): string {
   return `${(ms / 1000).toFixed(1).replace('.', ',')} s`;
@@ -337,6 +348,55 @@ function pistasDePerfil(m: MedidasIntento, p: PerfilSena): Pista[] {
   return pistas;
 }
 
+function enMinuscula(texto: string): string {
+  return texto.charAt(0).toLowerCase() + texto.slice(1);
+}
+
+/**
+ * Seña aprobada: el mensaje depende de qué tan segura estuvo la IA.
+ * - 100 %: felicitación, sin pistas (la seña salió perfecta).
+ * - 90 a 99 %: felicitación y, si hay una diferencia clara, una sugerencia.
+ * - Desde el umbral hasta 89 %: aprobada, pero con hasta dos pistas reales para hacerla mejor.
+ */
+function felicitar(d: DatosRetroalimentacion, propia: Prediccion | undefined, pistas: Pista[], mejores: Prediccion[]): Retroalimentacion {
+  const pct = propia ? Math.round(propia.probabilidad * 100) : PCT_EXCELENTE;
+  if (pct >= PCT_PERFECTA) {
+    return {
+      titulo: '¡Perfecta! 💯',
+      felicitacion: `Hiciste «${d.palabra}» de forma impecable: la IA la reconoció con total seguridad. ¡Así se hace!`,
+      nivel: 'perfecta',
+      pistas: [],
+    };
+  }
+  if (pct >= PCT_EXCELENTE) {
+    return {
+      titulo: '¡Excelente! Seña reconocida.',
+      felicitacion: `Muy bien hecha: la IA reconoció «${d.palabra}» con mucha seguridad.`,
+      nivel: 'excelente',
+      pistas: pistas.slice(0, 1).map((p) => ({ ...p, texto: `Para que salga perfecta: ${enMinuscula(p.texto)}` })),
+    };
+  }
+  // Aprobada justo: siempre se dice qué mejorar, con lo que se midió o con lo que vio la IA.
+  const mejoras = pistas.slice(0, 2);
+  if (!mejoras.length) {
+    const otra = mejores.find((p) => p.senaId !== d.senaId && p.senaId !== 0 && p.probabilidad >= 0.08);
+    const ninguna = mejores.find((p) => p.senaId === 0 && p.probabilidad >= 0.08);
+    if (otra) {
+      mejoras.push({ codigo: 'parecida', texto: `Se parece un poco a «${otra.palabra}»: mira el video y fíjate en lo que las diferencia.` });
+    } else if (ninguna) {
+      mejoras.push({ codigo: 'marcar', texto: 'Haz el movimiento más marcado y completo, de principio a fin, para que se reconozca con más seguridad.' });
+    } else {
+      mejoras.push({ codigo: 'seguridad', texto: 'Repítela mirando el video: fíjate en la forma de la mano, dónde empieza y dónde termina el movimiento.' });
+    }
+  }
+  return {
+    titulo: '¡Bien hecha! Seña reconocida.',
+    felicitacion: `La IA reconoció «${d.palabra}» (${pct} %). Con estos ajustes te saldrá aún mejor:`,
+    nivel: 'bien',
+    pistas: mejoras,
+  };
+}
+
 /** Arma el mensaje para el alumno a partir de lo que se midió y lo que vio el clasificador. */
 export function retroalimentar(d: DatosRetroalimentacion): Retroalimentacion {
   const m = d.medidas;
@@ -367,13 +427,7 @@ export function retroalimentar(d: DatosRetroalimentacion): Retroalimentacion {
   const propia = mejores.find((p) => p.senaId === d.senaId);
   const otra = primera && primera.senaId !== d.senaId && primera.senaId !== 0 && primera.probabilidad >= 0.4 ? primera : undefined;
 
-  if (d.aprobado) {
-    // Aprobada: solo se sugiere algo si hay una diferencia clara (no se llena de "peros").
-    return {
-      titulo: '¡Excelente! Seña reconocida.',
-      pistas: [...grabacion, ...perfil].slice(0, 1).map((p) => ({ ...p, texto: `Para que salga aún mejor: ${p.texto.charAt(0).toLowerCase()}${p.texto.slice(1)}` })),
-    };
-  }
+  if (d.aprobado) return felicitar(d, propia, [...grabacion, ...perfil], mejores);
 
   const pistas = [...grabacion, ...perfil];
   if (otra) {
